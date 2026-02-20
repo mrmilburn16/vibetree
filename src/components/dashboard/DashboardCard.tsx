@@ -28,6 +28,13 @@ const IconArrowRight = () => (
   </svg>
 );
 
+const IconCopy = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+
 const IconApp = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <rect x="4" y="2" width="16" height="20" rx="2.5" />
@@ -40,9 +47,10 @@ const IconApp = () => (
 interface DashboardCardProps {
   project: Project;
   onDelete: (e: React.MouseEvent, id: string) => void;
+  onDuplicate: (e: React.MouseEvent, id: string) => void;
 }
 
-export function DashboardCard({ project, onDelete }: DashboardCardProps) {
+export function DashboardCard({ project, onDelete, onDuplicate }: DashboardCardProps) {
   return (
     <Link
       href={`/editor/${project.id}`}
@@ -59,14 +67,24 @@ export function DashboardCard({ project, onDelete }: DashboardCardProps) {
               Updated {new Date(project.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={(e) => onDelete(e, project.id)}
-            className="shrink-0 rounded-[var(--radius-sm)] p-2 text-[var(--button-destructive-text)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--button-destructive-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--semantic-error)]"
-            aria-label="Delete project"
-          >
-            <IconTrash />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDuplicate(e, project.id); }}
+              className="rounded-[var(--radius-sm)] p-2 text-[var(--text-secondary)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--background-tertiary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--button-primary-bg)]"
+              aria-label="Duplicate project"
+            >
+              <IconCopy />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(e, project.id); }}
+              className="rounded-[var(--radius-sm)] p-2 text-[var(--button-destructive-text)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--button-destructive-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--semantic-error)]"
+              aria-label="Delete project"
+            >
+              <IconTrash />
+            </button>
+          </div>
         </div>
         <div className="mt-auto flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--button-primary-bg)] px-4 py-2.5 text-sm font-medium text-[var(--button-primary-text)] transition-colors group-hover:bg-[var(--button-primary-hover)]">

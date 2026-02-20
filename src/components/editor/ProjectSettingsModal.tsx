@@ -4,6 +4,16 @@ import { useState, useEffect } from "react";
 import { Modal, Button, Input } from "@/components/ui";
 import { updateProject, type Project } from "@/lib/projects";
 
+function DownloadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
 export function ProjectSettingsModal({
   isOpen,
   onClose,
@@ -19,6 +29,7 @@ export function ProjectSettingsModal({
   const [bundleId, setBundleId] = useState(project.bundleId);
   const [nameError, setNameError] = useState("");
   const [bundleError, setBundleError] = useState("");
+  const [exportLoading, setExportLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -52,6 +63,27 @@ export function ProjectSettingsModal({
     updateProject(project.id, { name: name.trim(), bundleId: bundleId.trim() });
     onProjectUpdate({ name: name.trim(), bundleId: bundleId.trim() });
     onClose();
+  }
+
+  async function handleDownloadSource() {
+    setExportLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/export`);
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Vibetree-${project.id.slice(0, 20)}.swift`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // silent fail or toast in future
+    } finally {
+      setExportLoading(false);
+    }
   }
 
   return (
@@ -106,6 +138,14 @@ export function ProjectSettingsModal({
         <div>
           <span className="text-body-muted text-sm">App icon</span>
           <p className="text-caption mt-1">Generate with AI (coming soon) or upload an image.</p>
+        </div>
+        <div className="border-t border-[var(--border-default)] pt-4">
+          <span className="text-body-muted text-sm">Export</span>
+          <p className="text-caption mt-1 mb-2">Download your project&apos;s source code as a Swift file. Builds trust and lets you open the project in Xcode.</p>
+          <Button type="button" variant="secondary" onClick={handleDownloadSource} disabled={exportLoading} className="gap-2">
+            <DownloadIcon />
+            {exportLoading ? "Preparing…" : "Download source"}
+          </Button>
         </div>
       </form>
     </Modal>

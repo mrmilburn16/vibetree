@@ -53,3 +53,10 @@ export function deleteProject(id: string): void {
   const projects = getProjects().filter((p) => p.id !== id);
   saveProjects(projects);
 }
+
+export function duplicateProject(id: string): Project | undefined {
+  const project = getProject(id);
+  if (!project) return undefined;
+  const copy = createProject(`${project.name} (copy)`);
+  return getProject(copy.id);
+}

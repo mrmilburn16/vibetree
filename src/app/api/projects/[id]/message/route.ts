@@ -1,41 +1,61 @@
 import { NextResponse } from "next/server";
+import { getProject } from "@/lib/projectStore";
+import { mockGetResponse } from "@/lib/llm/mockAdapter";
 
-const MOCK_RESPONSES = [
-  {
-    content: "Created a fitness tracking app with activity rings.",
-    editedFiles: ["Models/Workout.swift", "Models/Exercise.swift", "Views/ActivityRingsView.swift", "ContentView.swift"],
-  },
-  {
-    content: "I've added a todo list with categories and due dates.",
-    editedFiles: ["Models/TodoItem.swift", "Views/TodoListView.swift", "ContentView.swift"],
-  },
-  {
-    content: "Built a simple habit tracker with daily check-ins.",
-    editedFiles: ["Models/Habit.swift", "Views/HabitListView.swift", "ContentView.swift"],
-  },
-];
+const MAX_MESSAGE_LENGTH = 4000;
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
-  const body = await request.json().catch(() => ({}));
-  const message = typeof body.message === "string" ? body.message.trim() : "";
-  if (!message) {
-    return NextResponse.json({ error: "Message is required" }, { status: 400 });
+
+  const project = getProject(projectId);
+  if (!project) {
+    return NextResponse.json(
+      { error: "Project not found" },
+      { status: 404 }
+    );
   }
 
-  // Mock: delay then return assistant message + build success
-  await new Promise((r) => setTimeout(r, 1200 + Math.random() * 1200));
+  const body = await request.json().catch(() => ({}));
+  const message = typeof body.message === "string" ? body.message.trim() : "";
 
-  const mock = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
+  if (!message) {
+    return NextResponse.json(
+      { error: "Message is required" },
+      { status: 400 }
+    );
+  }
+
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return NextResponse.json(
+      { error: `Message must be at most ${MAX_MESSAGE_LENGTH} characters` },
+      { status: 400 }
+    );
+  }
+
+  const useRealLLM = body.useRealLLM === true;
+  const hasApiKey = Boolean(process.env.ANTHROPIC_API_KEY);
+
+  if (useRealLLM && !hasApiKey) {
+    return NextResponse.json(
+      { error: "AI service not configured" },
+      { status: 503 }
+    );
+  }
+
+  const { content, editedFiles } = await mockGetResponse(
+    message,
+    typeof body.model === "string" ? body.model : undefined
+  );
+
   return NextResponse.json({
     assistantMessage: {
       id: `assistant-${Date.now()}`,
       role: "assistant",
-      content: mock.content,
-      editedFiles: mock.editedFiles,
+      content,
+      editedFiles,
     },
     buildStatus: "live" as const,
   });

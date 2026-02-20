@@ -45,10 +45,10 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
         aria-hidden="true"
       />
       <div
-        className="relative z-10 w-full max-w-lg rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] shadow-xl"
+        className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[var(--border-default)] px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border-default)] px-6 py-4">
           {title ? (
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">
               {title}
@@ -60,7 +60,7 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
             Close
           </Button>
         </div>
-        <div className="px-6 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{children}</div>
         {footer && (
           <div className="flex justify-end gap-2 border-t border-[var(--border-default)] px-6 py-4">
             {footer}

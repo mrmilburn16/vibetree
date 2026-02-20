@@ -74,8 +74,10 @@ export function EditorLayout({ project }: { project: Project }) {
         <aside className="flex w-[380px] shrink-0 flex-col border-r border-[var(--border-default)] md:w-[420px]">
           <ChatPanel
             projectId={project.id}
+            projectName={projectName}
             onBuildStatusChange={setBuildStatus}
             onOutOfCredits={() => setToast({ message: "You're out of credits. Buy more to continue.", variant: "warning" })}
+            onError={(message) => setToast({ message, variant: "error" })}
           />
         </aside>
         <main className="min-w-0 flex-1">
@@ -99,7 +101,7 @@ export function EditorLayout({ project }: { project: Project }) {
           if (updates.name) setProjectName(updates.name);
         }}
       />
-      <RunOnDeviceModal isOpen={runOnDeviceOpen} onClose={() => setRunOnDeviceOpen(false)} />
+      <RunOnDeviceModal isOpen={runOnDeviceOpen} onClose={() => setRunOnDeviceOpen(false)} projectId={project.id} />
       <PublishModal isOpen={publishOpen} onClose={() => setPublishOpen(false)} />
     </div>
   );

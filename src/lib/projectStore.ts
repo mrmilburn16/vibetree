@@ -11,6 +11,16 @@ export function getProject(id: string): ProjectRecord | undefined {
   return store.get(id);
 }
 
+/** Ensure a project exists in the store (e.g. client created it in localStorage only). Returns the project. */
+export function ensureProject(id: string, name = "Untitled app"): ProjectRecord {
+  const existing = store.get(id);
+  if (existing) return existing;
+  const bundleId = `com.vibetree.${id.replace("proj_", "").replace(/[^a-z0-9]/gi, "")}`.slice(0, 60);
+  const project: ProjectRecord = { id, name, bundleId, updatedAt: Date.now() };
+  store.set(id, project);
+  return project;
+}
+
 export function listProjects(): ProjectRecord[] {
   return Array.from(store.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }

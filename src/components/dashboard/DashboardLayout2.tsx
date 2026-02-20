@@ -14,6 +14,13 @@ const IconApp = () => (
   </svg>
 );
 
+const IconCopy = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+
 const IconTrash = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M3 6h18" />
@@ -88,9 +95,10 @@ interface DashboardLayout2Props {
   projects: Project[];
   onNewApp: () => void;
   onDelete: (e: React.MouseEvent, id: string) => void;
+  onDuplicate: (e: React.MouseEvent, id: string) => void;
 }
 
-export function DashboardLayout2({ projects, onNewApp, onDelete }: DashboardLayout2Props) {
+export function DashboardLayout2({ projects, onNewApp, onDelete, onDuplicate }: DashboardLayout2Props) {
   const { balance } = useCredits();
   return (
     <div className="flex min-h-screen bg-[var(--background-primary)]">
@@ -146,6 +154,14 @@ export function DashboardLayout2({ projects, onNewApp, onDelete }: DashboardLayo
                       >
                         Open
                       </Link>
+                      <button
+                        type="button"
+                        onClick={(e) => onDuplicate(e, project.id)}
+                        className="rounded-[var(--radius-sm)] p-2 text-[var(--text-secondary)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--background-tertiary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--button-primary-bg)]"
+                        aria-label="Duplicate project"
+                      >
+                        <IconCopy />
+                      </button>
                       <button
                         type="button"
                         onClick={(e) => onDelete(e, project.id)}

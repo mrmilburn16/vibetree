@@ -44,7 +44,7 @@ export default function WaitlistPage() {
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [tasks, setTasks] = useState<Record<TaskId, boolean>>({});
+  const [tasks, setTasks] = useState<Record<TaskId, boolean>>({} as Record<TaskId, boolean>);
   const [mounted, setMounted] = useState(false);
   const [copied, setCopied] = useState(false);
 

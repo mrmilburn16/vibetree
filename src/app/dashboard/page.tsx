@@ -7,7 +7,7 @@ import { Button, BetaBadge } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { FontSwitcher } from "@/components/FontSwitcher";
-import { getProjects, createProject, deleteProject, type Project } from "@/lib/projects";
+import { getProjects, createProject, deleteProject, duplicateProject, type Project } from "@/lib/projects";
 import { DashboardCard, NewAppCard } from "@/components/dashboard/DashboardCard";
 import { DashboardLayout2 } from "@/components/dashboard/DashboardLayout2";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
@@ -103,6 +103,16 @@ export default function DashboardPage() {
     }
   }
 
+  function handleDuplicate(e: React.MouseEvent, id: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    const copy = duplicateProject(id);
+    if (copy) {
+      setProjects(getProjects());
+      router.push(`/editor/${copy.id}`);
+    }
+  }
+
   if (!mounted) {
     return (
       <div className="min-h-screen bg-[var(--background-primary)]">
@@ -195,6 +205,7 @@ export default function DashboardPage() {
           projects={projects}
           onNewApp={handleNewApp}
           onDelete={handleDeleteClick}
+          onDuplicate={handleDuplicate}
         />
       ) : (
       <main className="relative mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -225,7 +236,7 @@ export default function DashboardPage() {
                   className="animate-stagger-in opacity-0"
                   style={{ animationDelay: `${(index + 1) * 60}ms` }}
                 >
-                  <DashboardCard project={project} onDelete={handleDeleteClick} />
+                  <DashboardCard project={project} onDelete={handleDeleteClick} onDuplicate={handleDuplicate} />
                 </div>
               ))}
             </div>

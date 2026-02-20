@@ -22,12 +22,16 @@ const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
 
 export function ChatPanel({
   projectId,
+  projectName,
   onBuildStatusChange,
   onOutOfCredits,
+  onError,
 }: {
   projectId: string;
+  projectName?: string;
   onBuildStatusChange: (status: "idle" | "building" | "live" | "failed") => void;
   onOutOfCredits?: () => void;
+  onError?: (message: string) => void;
 }) {
   const [llm, setLlm] = useState(DEFAULT_LLM);
   const { hasCreditsForMessage, deduct } = useCredits();
@@ -52,7 +56,7 @@ export function ChatPanel({
     setInput,
     canSend,
     maxMessageLength,
-  } = useChat(projectId);
+  } = useChat(projectId, { onError, projectName });
 
   useEffect(() => {
     onBuildStatusChange(buildStatus);
@@ -73,12 +77,12 @@ export function ChatPanel({
         onOutOfCredits?.();
         return;
       }
-      sendMessage(text);
+      sendMessage(text, llm);
       setInput("");
       setJustSent(true);
       setTimeout(() => setJustSent(false), 80);
     },
-    [input, canSend, sendMessage, hasCreditsForMessage, deduct, onOutOfCredits]
+    [input, canSend, sendMessage, llm, hasCreditsForMessage, deduct, onOutOfCredits]
   );
 
   const canSendWithCredits = canSend && hasCreditsForMessage;

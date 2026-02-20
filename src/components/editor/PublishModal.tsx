@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Modal, Button, Input } from "@/components/ui";
 
 type PublishStep = "form" | "archiving" | "uploading" | "processing" | "done" | "error";
+
+type CommunityAverage = { averageDays: number; sampleSize: number } | null;
 
 export function PublishModal({
   isOpen,
@@ -18,6 +20,15 @@ export function PublishModal({
   const [whatsNew, setWhatsNew] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [signedIn, setSignedIn] = useState(false);
+  const [communityAverage, setCommunityAverage] = useState<CommunityAverage>(null);
+
+  useEffect(() => {
+    if (!isOpen || !signedIn) return;
+    fetch("/api/publish/community-average")
+      .then((res) => res.json())
+      .then((data) => setCommunityAverage({ averageDays: data.averageDays ?? 2, sampleSize: data.sampleSize ?? 0 }))
+      .catch(() => setCommunityAverage({ averageDays: 2, sampleSize: 0 }));
+  }, [isOpen, signedIn]);
 
   async function handleSignIn() {
     setSignedIn(true);
@@ -97,6 +108,15 @@ export function PublishModal({
               {errorMessage && (
                 <p className="text-sm text-[var(--semantic-error)]">{errorMessage}</p>
               )}
+              {communityAverage && (
+                <p className="text-body-muted text-sm">
+                  {communityAverage.sampleSize > 0 ? (
+                    <>Our users&apos; apps typically go live within <strong>{communityAverage.averageDays} {communityAverage.averageDays === 1 ? "day" : "days"}</strong> of submitting.</>
+                  ) : (
+                    <>Apple review usually takes 24–48 hours.</>
+                  )}
+                </p>
+              )}
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="secondary" onClick={handleClose}>
                   Cancel
@@ -121,6 +141,15 @@ export function PublishModal({
           {step === "done" && (
             <div className="space-y-4 py-4">
               <p className="text-sm text-[var(--semantic-success)]">Build uploaded successfully.</p>
+              {communityAverage && (
+                <p className="text-body-muted text-sm">
+                  Your app is in review. {communityAverage.sampleSize > 0 ? (
+                    <>Vibetree users typically see their app live within <strong>{communityAverage.averageDays} {communityAverage.averageDays === 1 ? "day" : "days"}</strong>.</>
+                  ) : (
+                    <>Apple review usually takes 24–48 hours.</>
+                  )}
+                </p>
+              )}
               <a
                 href="https://appstoreconnect.apple.com"
                 target="_blank"
