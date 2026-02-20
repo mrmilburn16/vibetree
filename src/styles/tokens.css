@@ -1,0 +1,93 @@
+/**
+ * Twilight Violet — design tokens (single source of truth)
+ * Use ONLY these variables in components. No raw hex in UI code.
+ * See docs/THEME.md for theme name and dropdown rules.
+ */
+
+:root {
+  /* Backgrounds */
+  --background-primary: #0A0A0B;
+  --background-secondary: #141416;
+  --background-tertiary: #1C1C1E;
+
+  /* Text */
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #71717A;
+
+  /* Borders */
+  --border-default: #27272A;
+  --border-subtle: #3F3F46;
+
+  /* Buttons — primary */
+  --button-primary-bg: #6366F1;
+  --button-primary-hover: #818CF8;
+  --button-primary-text: #FFFFFF;
+
+  /* Buttons — secondary (also use for Cancel/Close/Exit) */
+  --button-secondary-bg: #27272A;
+  --button-secondary-hover: #3F3F46;
+  --button-secondary-text: #FAFAFA;
+
+  /* Buttons — ghost */
+  --button-ghost-text: #A1A1AA;
+
+  /* Buttons — destructive (bg same as secondary; red text for Delete/Sign out) */
+  --button-destructive-bg: #27272A;
+  --button-destructive-text: #F87171;
+
+  /* Links */
+  --link-default: #818CF8;
+  --link-hover: #A5B4FC;
+
+  /* Inputs */
+  --input-bg: #18181B;
+  --input-border: #27272A;
+  --input-text: #FAFAFA;
+  --input-placeholder: #71717A;
+
+  /* Badges */
+  --badge-live: #22C55E;
+  --badge-building: #EAB308;
+  --badge-error: #EF4444;
+  --badge-neutral: #71717A;
+
+  /* Semantic */
+  --semantic-success: #22C55E;
+  --semantic-warning: #EAB308;
+  --semantic-error: #EF4444;
+  --semantic-info: #6366F1;
+
+  /* Typography scale (px) */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-4xl: 40px;
+  --text-5xl: 56px;
+
+  /* Spacing (4px base unit) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  /* Transitions */
+  --transition-fast: 150ms;
+  --transition-normal: 200ms;
+  --transition-slow: 300ms;
+}

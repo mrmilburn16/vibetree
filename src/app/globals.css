@@ -1,26 +1,293 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@import "../styles/tokens.css";
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* Map tokens to Tailwind utilities — use only these in components */
+  --color-background-primary: var(--background-primary);
+  --color-background-secondary: var(--background-secondary);
+  --color-background-tertiary: var(--background-tertiary);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-border-default: var(--border-default);
+  --color-border-subtle: var(--border-subtle);
+  --color-button-primary: var(--button-primary-bg);
+  --color-button-primary-hover: var(--button-primary-hover);
+  --color-button-secondary: var(--button-secondary-bg);
+  --color-button-secondary-hover: var(--button-secondary-hover);
+  --color-button-destructive-text: var(--button-destructive-text);
+  --color-link-default: var(--link-default);
+  --color-link-hover: var(--link-hover);
+  --color-input-bg: var(--input-bg);
+  --color-input-border: var(--input-border);
+  --color-input-placeholder: var(--input-placeholder);
+  --color-badge-live: var(--badge-live);
+  --color-badge-building: var(--badge-building);
+  --color-badge-error: var(--badge-error);
+  --color-badge-neutral: var(--badge-neutral);
+  --color-semantic-success: var(--semantic-success);
+  --color-semantic-warning: var(--semantic-warning);
+  --color-semantic-error: var(--semantic-error);
+  --color-semantic-info: var(--semantic-info);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+body {
+  background: var(--background-primary);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Type scale — use these classes for consistent hierarchy */
+.text-heading-hero {
+  font-size: var(--text-5xl);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+.text-heading-section {
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.text-heading-card {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.text-body {
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+.text-body-muted {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.text-caption {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+/* Terms / long-form: readable width and in-article links */
+.prose-terms a {
+  color: var(--link-default);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+.prose-terms a:hover {
+  color: var(--link-hover);
+}
+
+/* Docs: prose and code blocks */
+.prose-docs {
+  max-width: 65ch;
+}
+.prose-docs a {
+  color: var(--link-default);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+.prose-docs a:hover {
+  color: var(--link-hover);
+}
+.prose-docs ul, .prose-docs ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+.prose-docs li {
+  margin: 0.25rem 0;
+}
+.prose-docs code {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.9em;
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm);
+  background: var(--background-tertiary);
+  color: var(--text-primary);
+}
+.prose-docs pre {
+  margin: 1rem 0;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  background: var(--background-tertiary);
+  border: 1px solid var(--border-default);
+  overflow-x: auto;
+}
+.prose-docs pre code {
+  padding: 0;
+  background: none;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.animate-fade-in {
+  animation: fade-in var(--transition-slow) ease-out forwards;
+}
+
+/* LIVE badge soft glow — professional pulse */
+@keyframes live-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 12px 2px rgba(34, 197, 94, 0.2);
+  }
+}
+
+.animate-live-glow {
+  animation: live-glow 2s ease-in-out infinite;
+}
+
+/* Very subtle screen shimmer when "streaming" (optional) */
+@keyframes screen-shine {
+  0% { opacity: 0.03; }
+  50% { opacity: 0.06; }
+  100% { opacity: 0.03; }
+}
+
+.animate-screen-shine {
+  animation: screen-shine 3s ease-in-out infinite;
+}
+
+/* Dashboard: card hover lift + shadow */
+@keyframes card-lift {
+  to {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-subtle);
+  }
+}
+
+.dashboard-card-hover {
+  transition: transform var(--transition-normal) ease-out, box-shadow var(--transition-normal) ease-out, border-color var(--transition-fast);
+}
+.dashboard-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-subtle);
+  border-color: var(--border-subtle);
+}
+
+/* Dashboard: project card left accent */
+.dashboard-card-accent {
+  border-left: 3px solid transparent;
+  transition: border-left-color var(--transition-fast);
+}
+.dashboard-card-accent:hover {
+  border-left-color: var(--button-primary-bg);
+}
+
+/* Dashboard: New app card subtle glow pulse */
+@keyframes new-app-glow {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2); }
+}
+.dashboard-new-app-card {
+  animation: new-app-glow 2.5s ease-in-out infinite;
+}
+
+/* Dashboard: staggered list entrance */
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-stagger-in {
+  animation: stagger-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Dashboard: subtle CTA pulse (empty state) */
+@keyframes cta-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.25); }
+  50% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); }
+}
+
+.animate-cta-pulse {
+  animation: cta-pulse 2s ease-in-out infinite;
+}
+
+/* Dashboard: skeleton loading */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.animate-skeleton {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* Contact: success checkmark */
+@keyframes success-scale {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-success-check {
+  animation: success-scale 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Landing: full-page scroll snap (slide-like) */
+.landing-scroll-container {
+  scroll-behavior: smooth;
+  scroll-snap-type: y mandatory;
+}
+.landing-section {
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
+}
+
+/* Landing: staggered word reveal in hero */
+@keyframes word-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(0.4em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-word-reveal {
+  opacity: 0;
+  animation: word-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  display: inline-block;
+}
+
+/* Landing: gradient text shimmer on hero highlight word */
+@keyframes gradient-text-shine {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.gradient-text-hero {
+  background: linear-gradient(
+    90deg,
+    var(--text-primary) 0%,
+    var(--link-default) 25%,
+    var(--link-hover) 50%,
+    var(--link-default) 75%,
+    var(--text-primary) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-text-shine 4s ease-in-out infinite;
 }

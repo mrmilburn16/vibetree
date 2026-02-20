@@ -1,0 +1,20 @@
+---
+description: Twilight Violet theme and dropdown usage — use themed DropdownSelect, never native select
+alwaysApply: true
+---
+
+# Twilight Violet theme and dropdowns
+
+## Theme name
+
+The app theme is named **Twilight Violet**: dark backgrounds, light text, purple accent (primary buttons, focus rings, links). All UI must use design tokens from `src/styles/tokens.css`; no raw hex in components.
+
+## Dropdowns (mandatory)
+
+All dropdowns must use the **themed** custom component, not the computer-default native `<select>`.
+
+- Use **`DropdownSelect`** from `@/components/ui` for every dropdown (contact Subject, editor LLM selector, settings, etc.).
+- Do **not** use the native HTML `<select>` element in user-facing UI; it ignores our theme and looks like the OS default.
+- The `Select` component (native `<select>` styled with tokens) only styles the trigger; the open list is browser-default. Prefer `DropdownSelect` for a fully themed open state (dark panel, purple hover/selected).
+
+When adding new forms or settings that need a picker, use `DropdownSelect` with `options: SelectOption[]`, `value`, and `onChange`.

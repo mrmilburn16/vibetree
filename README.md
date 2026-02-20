@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Vibetree
 
-## Getting Started
+Build real iOS apps in your browser. Describe your app in plain language; AI writes Swift, you preview live, and ship to your iPhone or the App Store.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router), **TypeScript**, **Tailwind CSS v4**
+- Design tokens in `src/styles/tokens.css` (no raw hex in UI)
+- Mock-first: chat, build status, and project CRUD work without LLM or Mac
+
+## Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). Sign up or sign in (mock session), create a project, and use the editor: send a message to see mock assistant replies and build status.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project layout
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `src/app/` — Routes: `/`, `/pricing`, `/sign-in`, `/sign-up`, `/dashboard`, `/editor/[id]`
+- `src/app/api/projects/` — Project CRUD and `POST [id]/message` (mock agent)
+- `src/components/ui/` — Button, Card, Input, Badge, Modal, Toast (design tokens only)
+- `src/components/landing/` — Landing nav, hero, how it works, features, footer
+- `src/components/editor/` — Editor layout, chat panel, preview pane, modals (settings, run on device, publish)
+- `src/lib/` — `projects.ts` (client localStorage), `projectStore.ts` (server in-memory), `featureFlags.ts`
 
-## Learn More
+## Pricing
 
-To learn more about Next.js, take a look at the following resources:
+The app includes a **credit system** and **three plans** (Creator, Pro, Team) with monthly and annual billing and a 14-day free trial for Pro and Team. See the [Pricing](http://localhost:3000/pricing) page in the app and [docs/PRICING.md](docs/PRICING.md) for the credit breakdown and plan details.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Feature flags
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `NEXT_PUBLIC_USE_REAL_LLM=true` — Use real LLM for chat (default: mock)
+- `NEXT_PUBLIC_USE_REAL_MAC=true` — Use real Mac fleet for build/streaming (default: mock)
 
-## Deploy on Vercel
+## Next steps (Phase C/D)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Real LLM:** Replace mock in `useChat` or API `message` route with Claude/OpenAI; parse edits, run xcodebuild on Mac.
+- **Real streaming:** Mac runner + WebRTC or VNC to stream Simulator to the preview pane.
+- **Device install:** Desktop agent (Mac) or TestFlight link.
+- **App Store submit:** Apple Developer OAuth, store credentials, run upload from backend.
