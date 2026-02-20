@@ -3,25 +3,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui";
+import { Button, BetaBadge } from "@/components/ui";
+import { Modal } from "@/components/ui/Modal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { getProjects, createProject, deleteProject, type Project } from "@/lib/projects";
 import { DashboardCard, NewAppCard } from "@/components/dashboard/DashboardCard";
+import { DashboardLayout2 } from "@/components/dashboard/DashboardLayout2";
+import { CreditsWidget } from "@/components/credits/CreditsWidget";
+import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+
+const LAYOUT_STORAGE_KEY = "vibetree-dashboard-layout";
 
 const IconPlus = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M5 12h14" />
     <path d="M12 5v14" />
-  </svg>
-);
-
-const LightbulbIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.8 1.3 1.5 1.5 2.5" />
-    <path d="M9 18h6" />
-    <path d="M10 22h4" />
   </svg>
 );
 
@@ -51,10 +49,15 @@ function DashboardSkeleton() {
   );
 }
 
+const CONFIRM_DELETE_TEXT = "DELETE";
+
 export default function DashboardPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [mounted, setMounted] = useState(false);
+  const [layoutVersion, setLayoutVersion] = useState<"1" | "2">("1");
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -64,8 +67,15 @@ export default function DashboardPage() {
       return;
     }
     setProjects(getProjects());
+    const stored = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    if (stored === "1" || stored === "2") setLayoutVersion(stored);
     setMounted(true);
   }, [router]);
+
+  function setLayoutAndPersist(value: "1" | "2") {
+    setLayoutVersion(value);
+    if (typeof window !== "undefined") localStorage.setItem(LAYOUT_STORAGE_KEY, value);
+  }
 
   function handleNewApp() {
     const project = createProject();
@@ -73,12 +83,23 @@ export default function DashboardPage() {
     router.push(`/editor/${project.id}`);
   }
 
-  function handleDelete(e: React.MouseEvent, id: string) {
+  function handleDeleteClick(e: React.MouseEvent, id: string) {
     e.preventDefault();
     e.stopPropagation();
-    if (typeof window !== "undefined" && window.confirm("Delete this project?")) {
-      deleteProject(id);
+    setDeleteTargetId(id);
+    setDeleteConfirmInput("");
+  }
+
+  function closeDeleteModal() {
+    setDeleteTargetId(null);
+    setDeleteConfirmInput("");
+  }
+
+  function handleDeleteConfirm() {
+    if (deleteTargetId && deleteConfirmInput === CONFIRM_DELETE_TEXT) {
+      deleteProject(deleteTargetId);
       setProjects(getProjects());
+      closeDeleteModal();
     }
   }
 
@@ -105,24 +126,57 @@ export default function DashboardPage() {
 
   return (
     <div className="relative min-h-screen bg-[var(--background-primary)]">
-      {/* Theme-aware gradient — depth without noise */}
-      <div
-        className="pointer-events-none fixed inset-0 opacity-25"
-        style={{
-          background: "radial-gradient(ellipse 90% 60% at 50% -15%, rgba(var(--accent-rgb), 0.4), transparent 55%)",
-        }}
-      />
+      {layoutVersion === "1" && (
+        <div
+          className="pointer-events-none fixed inset-0 opacity-25"
+          style={{
+            background: "radial-gradient(ellipse 90% 60% at 50% -15%, rgba(var(--accent-rgb), 0.4), transparent 55%)",
+          }}
+        />
+      )}
       <header className="sticky top-0 z-10 border-b border-[var(--border-default)] bg-[var(--background-primary)]/80 px-4 py-4 backdrop-blur-md sm:px-6">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <Link
-            href="/"
-            className="text-xl font-semibold text-[var(--text-primary)] transition-opacity hover:opacity-90"
-          >
-            Vibetree
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/"
+              className="text-xl font-semibold text-[var(--text-primary)] transition-opacity hover:opacity-90"
+            >
+              Vibetree
+            </Link>
+            <BetaBadge />
+          </div>
           <div className="flex items-center gap-3">
             <FontSwitcher />
             <ThemeSwitcher />
+            <div
+              className="flex rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-0.5"
+              role="group"
+              aria-label="Dashboard layout"
+            >
+              <button
+                type="button"
+                onClick={() => setLayoutAndPersist("1")}
+                className={`rounded-[var(--radius-sm)] px-3 py-1.5 text-sm font-medium transition-colors ${
+                  layoutVersion === "1"
+                    ? "bg-[var(--button-primary-bg)] text-[var(--button-primary-text)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                1.0
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayoutAndPersist("2")}
+                className={`rounded-[var(--radius-sm)] px-3 py-1.5 text-sm font-medium transition-colors ${
+                  layoutVersion === "2"
+                    ? "bg-[var(--button-primary-bg)] text-[var(--button-primary-text)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                2.0
+              </button>
+            </div>
+            <CreditsWidget />
             <Button variant="primary" onClick={handleNewApp} className="gap-2">
               <IconPlus />
               New app
@@ -134,6 +188,15 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      <LowCreditBanner />
+
+      {layoutVersion === "2" ? (
+        <DashboardLayout2
+          projects={projects}
+          onNewApp={handleNewApp}
+          onDelete={handleDeleteClick}
+        />
+      ) : (
       <main className="relative mx-auto max-w-5xl px-4 py-8 sm:px-6">
         {/* Hero strip */}
         <div className="animate-fade-in mb-8">
@@ -162,22 +225,13 @@ export default function DashboardPage() {
                   className="animate-stagger-in opacity-0"
                   style={{ animationDelay: `${(index + 1) * 60}ms` }}
                 >
-                  <DashboardCard project={project} onDelete={handleDelete} />
+                  <DashboardCard project={project} onDelete={handleDeleteClick} />
                 </div>
               ))}
             </div>
 
-            {/* Quick links + tip — theme accent and icon */}
-            <div className="mt-16 flex flex-col gap-8 border-t border-[var(--border-default)] pt-12 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex gap-3 rounded-[var(--radius-lg)] border-l-4 border-l-[var(--button-primary-bg)]/60 bg-[var(--button-primary-bg)]/5 px-4 py-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--button-primary-bg)]/15 text-[var(--link-default)]" aria-hidden>
-                  <LightbulbIcon />
-                </span>
-                <p className="text-caption text-[var(--text-secondary)]">
-                  <span className="font-medium text-[var(--text-primary)]">Tip:</span> Describe your app in plain language in chat—AI writes Swift and you preview live.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
+            {/* Quick links */}
+            <div className="mt-16 flex flex-wrap gap-3 border-t border-[var(--border-default)] pt-12">
                 <Link
                   href="/docs"
                   className="rounded-full border border-[var(--border-default)] bg-[var(--background-secondary)] px-4 py-2 text-sm text-[var(--text-secondary)] transition-colors hover:border-[var(--button-primary-bg)]/40 hover:bg-[var(--button-primary-bg)]/10 hover:text-[var(--link-default)]"
@@ -196,11 +250,47 @@ export default function DashboardPage() {
                 >
                   Contact
                 </Link>
-              </div>
             </div>
           </>
         )}
       </main>
+      )}
+
+      <Modal
+        isOpen={deleteTargetId !== null}
+        onClose={closeDeleteModal}
+        title="Delete app"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeDeleteModal}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deleteConfirmInput !== CONFIRM_DELETE_TEXT}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[var(--text-secondary)] mb-4">
+          This will permanently delete this app and its data. This cannot be undone.
+        </p>
+        <p className="text-sm text-[var(--text-tertiary)] mb-2">
+          Type <strong className="text-[var(--text-primary)] font-mono">{CONFIRM_DELETE_TEXT}</strong> to confirm:
+        </p>
+        <input
+          type="text"
+          value={deleteConfirmInput}
+          onChange={(e) => setDeleteConfirmInput(e.target.value)}
+          placeholder={CONFIRM_DELETE_TEXT}
+          className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-primary)] px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--button-primary-bg)] focus:outline-none focus:ring-1 focus:ring-[var(--button-primary-bg)]"
+          aria-label="Type DELETE to confirm"
+          autoComplete="off"
+        />
+      </Modal>
     </div>
   );
 }

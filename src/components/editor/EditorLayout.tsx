@@ -3,7 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Smartphone, Share2, Upload } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Button, BetaBadge, Toast } from "@/components/ui";
+import { CreditsWidget } from "@/components/credits/CreditsWidget";
+import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
 import type { Project } from "@/lib/projects";
 import { ChatPanel } from "./ChatPanel";
 import { PreviewPane } from "./PreviewPane";
@@ -17,12 +19,15 @@ export function EditorLayout({ project }: { project: Project }) {
   const [runOnDeviceOpen, setRunOnDeviceOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [buildStatus, setBuildStatus] = useState<"idle" | "building" | "live" | "failed">("idle");
+  const [toast, setToast] = useState<{ message: string; variant: "success" | "warning" | "error" | "info" } | null>(null);
 
   return (
     <div className="flex h-screen flex-col bg-[var(--background-primary)]">
+      <LowCreditBanner />
       {/* Top bar */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--border-default)] pl-5 pr-8 sm:pl-6 sm:pr-10">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b-2 border-[var(--border-default)] px-5 sm:px-6">
         <div className="flex items-center gap-4">
+          <BetaBadge />
           <Link
             href="/dashboard"
             className="text-sm text-[var(--text-secondary)] hover:text-[var(--link-default)]"
@@ -38,6 +43,7 @@ export function EditorLayout({ project }: { project: Project }) {
           </button>
         </div>
         <div className="flex items-center gap-2">
+          <CreditsWidget />
           <Button
             variant="secondary"
             className="gap-1.5 text-xs"
@@ -69,12 +75,21 @@ export function EditorLayout({ project }: { project: Project }) {
           <ChatPanel
             projectId={project.id}
             onBuildStatusChange={setBuildStatus}
+            onOutOfCredits={() => setToast({ message: "You're out of credits. Buy more to continue.", variant: "warning" })}
           />
         </aside>
         <main className="min-w-0 flex-1">
           <PreviewPane buildStatus={buildStatus} />
         </main>
       </div>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          variant={toast.variant}
+          onClose={() => setToast(null)}
+        />
+      )}
 
       <ProjectSettingsModal
         isOpen={settingsOpen}

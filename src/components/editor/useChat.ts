@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 export type MessageRole = "user" | "assistant";
 
@@ -34,12 +34,25 @@ export function useChat(projectId: string) {
   const [canSend, setCanSend] = useState(true);
 
   const MAX_MESSAGE_LENGTH = 4000;
+  const timeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    return () => {
+      timeoutIdsRef.current.forEach((id) => clearTimeout(id));
+      timeoutIdsRef.current = [];
+      setCanSend(true);
+      setIsTyping(false);
+    };
+  }, []);
 
   const sendMessage = useCallback(
     (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || !canSend) return;
       if (trimmed.length > MAX_MESSAGE_LENGTH) return;
+
+      timeoutIdsRef.current.forEach((id) => clearTimeout(id));
+      timeoutIdsRef.current = [];
 
       setCanSend(false);
       setIsTyping(true);
@@ -53,10 +66,9 @@ export function useChat(projectId: string) {
 
       const mock = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
 
-      setTimeout(() => setBuildStatus("building"), 400);
+      const t1 = setTimeout(() => setBuildStatus("building"), 400);
+      timeoutIdsRef.current.push(t1);
 
-      // Each step is its own message from the agent (~7s total). Typical LLM/agent steps:
-      // Reading files, Exploring codebase, Grepping/searching, Analyzing, Planning next moves, Writing/editing code
       const stepMessages = [
         "Reading files.",
         "Explored.",
@@ -65,23 +77,25 @@ export function useChat(projectId: string) {
         "Planning next moves…",
         "Writing code…",
       ];
-      stepMessages.forEach((text, i) => {
-        setTimeout(() => {
+      stepMessages.forEach((stepText, i) => {
+        const t = setTimeout(() => {
           setMessages((prev) => [
             ...prev,
-            { id: `assistant-${Date.now()}-${i}`, role: "assistant" as const, content: text },
+            { id: `assistant-${Date.now()}-${i}`, role: "assistant" as const, content: stepText },
           ]);
         }, 1000 + i * 1000);
+        timeoutIdsRef.current.push(t);
       });
 
-      setTimeout(() => {
+      const tSummary = setTimeout(() => {
         setMessages((prev) => [
           ...prev,
           { id: `assistant-${Date.now()}-summary`, role: "assistant" as const, content: mock.content },
         ]);
       }, 7000);
+      timeoutIdsRef.current.push(tSummary);
 
-      setTimeout(() => {
+      const tFiles = setTimeout(() => {
         setMessages((prev) => [
           ...prev,
           {
@@ -94,8 +108,10 @@ export function useChat(projectId: string) {
         setIsTyping(false);
         setCanSend(true);
       }, 7500);
+      timeoutIdsRef.current.push(tFiles);
 
-      setTimeout(() => setBuildStatus("live"), 8000);
+      const tLive = setTimeout(() => setBuildStatus("live"), 8000);
+      timeoutIdsRef.current.push(tLive);
     },
     [canSend]
   );

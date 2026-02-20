@@ -139,6 +139,10 @@ body {
   animation: fade-in var(--transition-slow) ease-out forwards;
 }
 
+.animate-fade-in-fast {
+  animation: fade-in 200ms ease-out forwards;
+}
+
 /* LIVE badge soft glow — professional pulse */
 @keyframes live-glow {
   0%, 100% {
@@ -256,6 +260,38 @@ body {
   animation: success-scale 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+/* Editor: Ready/LIVE badge one-time pop when build goes live */
+.animate-ready-pop {
+  animation: success-scale 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Chat: typing cursor blink (block style) — slow, readable pace */
+@keyframes cursor-blink {
+  0%, 45% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.animate-cursor-blink {
+  animation: cursor-blink 1.2s step-end infinite;
+}
+
+/* Chat: message row entrance — opacity only, no translate (no double bounce) */
+@keyframes chat-message-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-chat-message-in {
+  animation: chat-message-in 0.2s ease-out forwards;
+}
+
+/* Chat: per-word reveal when streaming — smooth fade, no bounce */
+@keyframes chat-word-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-chat-word-in {
+  animation: chat-word-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 /* Landing: full-page scroll snap (slide-like) */
 .landing-scroll-container {
   scroll-behavior: smooth;
@@ -302,4 +338,39 @@ body {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: gradient-text-shine 4s ease-in-out infinite;
+}
+
+/* Respect prefers-reduced-motion: disable non-essential animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-fade-in-fast,
+  .animate-word-reveal,
+  .animate-stagger-in,
+  .animate-building-glow,
+  .animate-cta-pulse,
+  .animate-success-check,
+  .animate-ready-pop,
+  .animate-cursor-blink,
+  .animate-chat-message-in,
+  .animate-chat-word-in,
+  .animate-live-glow,
+  .animate-screen-shine,
+  .dashboard-new-app-card,
+  .animate-skeleton,
+  .gradient-text-hero {
+    animation: none !important;
+  }
+  .animate-fade-in,
+  .animate-fade-in-fast,
+  .animate-word-reveal,
+  .animate-success-check,
+  .animate-ready-pop,
+  .animate-chat-message-in,
+  .animate-chat-word-in {
+    opacity: 1;
+    transform: none;
+  }
+  .dashboard-card-hover:hover {
+    transform: none;
+  }
 }

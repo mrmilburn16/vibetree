@@ -23,3 +23,8 @@
 [data-font="dm-sans"] {
   --font-sans: var(--font-dm-sans);
 }
+
+/* Obvious test: serif — if you see serif text, the switcher is working */
+[data-font="playfair"] {
+  --font-sans: var(--font-playfair-display);
+}

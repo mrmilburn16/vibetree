@@ -9,6 +9,7 @@ export { DropdownSelect } from "./DropdownSelect";
 export type { InputProps, TextareaProps } from "./Input";
 export { Badge } from "./Badge";
 export type { BadgeProps, BadgeVariant } from "./Badge";
+export { BetaBadge } from "./BetaBadge";
 export { Modal } from "./Modal";
 export type { ModalProps } from "./Modal";
 export { Toast } from "./Toast";

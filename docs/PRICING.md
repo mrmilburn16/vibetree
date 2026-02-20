@@ -12,8 +12,11 @@
 | 1 Run on device (TestFlight or desktop agent install) | 10 |
 | 1 App Store publish submission | 25 |
 
-- **Refresh:** Credits reset each billing period (monthly or annual). No rollover in the current design.
-- **Overage:** When credits run out, AI and builds are blocked until the next period (or upgrade). Future: optional add-on packs.
+- **Refresh:** Credits reset each billing period. Reset rule TBD: **30-day rolling** (e.g. reset 30 days after subscription start) or **calendar 1st** (reset on the 1st of each month). No rollover of included credits in the current design.
+- **Overage:** When credits run out, AI and builds are blocked until the next period, upgrade, or **purchase of additional credits**.
+- **Buy additional credits:** Users can prepay for credit packs (e.g. 100, 250, 500 credits) as one-time purchases. Purchased credits are added to balance immediately; they do not reset with the plan period (or use a long expiry, e.g. 12 months). Product must expose "Buy credits" / "Add credits" when balance is low or zero (e.g. header, account/billing page, or out-of-credits modal) and a checkout flow (Stripe or similar) for credit packs.
+
+**KPI:** Track **% of users who don’t use all their credits** per period (e.g. % of Pro users with leftover credits at reset). Use it to tune included amounts and to spot churn or under-use.
 
 ---
 

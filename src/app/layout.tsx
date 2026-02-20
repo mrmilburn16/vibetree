@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter, Plus_Jakarta_Sans, Outfit, DM_Sans } from "next/font/google";
+import { Geist, Geist_Mono, Inter, Plus_Jakarta_Sans, Outfit, DM_Sans, Playfair_Display } from "next/font/google";
+import { CreditsProvider } from "@/contexts/CreditsContext";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -32,6 +33,11 @@ const dmSans = DM_Sans({
   subsets: ["latin"],
 });
 
+const playfairDisplay = Playfair_Display({
+  variable: "--font-playfair-display",
+  subsets: ["latin"],
+});
+
 /** All font variables must be on the document so [data-font] can switch --font-sans */
 const fontVariableClasses = [
   geistSans.variable,
@@ -40,6 +46,7 @@ const fontVariableClasses = [
   plusJakartaSans.variable,
   outfit.variable,
   dmSans.variable,
+  playfairDisplay.variable,
 ].join(" ");
 
 export const metadata: Metadata = {
@@ -53,14 +60,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${fontVariableClasses} antialiased`}>
+    <html lang="en" className={fontVariableClasses} suppressHydrationWarning>
+      <body className="antialiased">
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var t=document.documentElement;var th=localStorage.getItem('vibetree-theme');if(th){t.setAttribute('data-theme',th);}var f=localStorage.getItem('vibetree-font');if(f){t.setAttribute('data-font',f);}})();`,
           }}
         />
-        {children}
+        <CreditsProvider>
+          {children}
+        </CreditsProvider>
       </body>
     </html>
   );

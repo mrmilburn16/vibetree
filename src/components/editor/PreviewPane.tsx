@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { Badge } from "@/components/ui";
 import { BuildingIndicator } from "./BuildingIndicator";
 import { ReadyIndicator } from "./ReadyIndicator";
+import { FailedIndicator } from "./FailedIndicator";
 
 type BuildStatus = "idle" | "building" | "live" | "failed";
 
@@ -45,12 +45,10 @@ export function PreviewPane({
             <BuildingIndicator className="animate-fade-in" />
           )}
           {buildStatus === "live" && (
-            <ReadyIndicator label="LIVE" className="animate-fade-in" />
+            <ReadyIndicator label="LIVE" className="animate-ready-pop" />
           )}
           {buildStatus === "failed" && (
-            <Badge variant="error" className="animate-fade-in shadow-lg">
-              Build failed
-            </Badge>
+            <FailedIndicator className="animate-fade-in" />
           )}
         </div>
       </div>

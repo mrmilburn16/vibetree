@@ -8,6 +8,7 @@ const FONTS = [
   { value: "plus-jakarta", label: "Plus Jakarta Sans", variable: "var(--font-plus-jakarta-sans)" },
   { value: "outfit", label: "Outfit", variable: "var(--font-outfit)" },
   { value: "dm-sans", label: "DM Sans", variable: "var(--font-dm-sans)" },
+  { value: "playfair", label: "Playfair (serif — test)", variable: "var(--font-playfair-display)" },
 ] as const;
 
 const STORAGE_KEY = "vibetree-font";
