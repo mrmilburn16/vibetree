@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { FontSwitcher } from "@/components/FontSwitcher";
 
 export function Nav() {
   return (
@@ -13,15 +15,17 @@ export function Nav() {
         >
           Vibetree
         </Link>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 sm:gap-6">
+          <FontSwitcher />
+          <ThemeSwitcher />
           <Link
-            href="#features"
+            href="/#features"
             className="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--link-default)]"
           >
             Features
           </Link>
           <Link
-            href="#how-it-works"
+            href="/#how-it-works"
             className="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--link-default)]"
           >
             How it works

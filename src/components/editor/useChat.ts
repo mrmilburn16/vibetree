@@ -53,25 +53,49 @@ export function useChat(projectId: string) {
 
       const mock = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
 
-      setTimeout(() => {
-        setBuildStatus("building");
-      }, 400);
+      setTimeout(() => setBuildStatus("building"), 400);
+
+      // Each step is its own message from the agent (~7s total). Typical LLM/agent steps:
+      // Reading files, Exploring codebase, Grepping/searching, Analyzing, Planning next moves, Writing/editing code
+      const stepMessages = [
+        "Reading files.",
+        "Explored.",
+        "Grepped.",
+        "Analyzed.",
+        "Planning next moves…",
+        "Writing code…",
+      ];
+      stepMessages.forEach((text, i) => {
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            { id: `assistant-${Date.now()}-${i}`, role: "assistant" as const, content: text },
+          ]);
+        }, 1000 + i * 1000);
+      });
 
       setTimeout(() => {
-        const assistantMsg: ChatMessage = {
-          id: `assistant-${Date.now()}`,
-          role: "assistant",
-          content: mock.content,
-          editedFiles: mock.editedFiles,
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
+        setMessages((prev) => [
+          ...prev,
+          { id: `assistant-${Date.now()}-summary`, role: "assistant" as const, content: mock.content },
+        ]);
+      }, 7000);
+
+      setTimeout(() => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}-files`,
+            role: "assistant" as const,
+            content: "",
+            editedFiles: mock.editedFiles,
+          },
+        ]);
         setIsTyping(false);
         setCanSend(true);
-      }, 1500 + Math.random() * 1500);
+      }, 7500);
 
-      setTimeout(() => {
-        setBuildStatus("live");
-      }, 2500 + Math.random() * 1000);
+      setTimeout(() => setBuildStatus("live"), 8000);
     },
     [canSend]
   );

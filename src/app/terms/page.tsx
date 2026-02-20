@@ -78,9 +78,9 @@ export default function TermsPage() {
         </section>
 
         <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10 lg:flex-row lg:gap-12 lg:px-6 lg:py-14">
-          {/* Sticky TOC */}
+          {/* Sticky TOC — left for nav-then-content pattern */}
           <aside
-            className="lg:sticky lg:top-24 lg:order-2 lg:w-52 lg:shrink-0"
+            className="lg:sticky lg:top-24 lg:order-1 lg:w-52 lg:shrink-0"
             aria-label="On this page"
           >
             <nav className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
@@ -109,9 +109,9 @@ export default function TermsPage() {
             </nav>
           </aside>
 
-          {/* Article */}
+          {/* Article — content column with comfortable reading width */}
           <article
-            className="min-w-0 flex-1 lg:order-1"
+            className="min-w-0 flex-1 lg:order-2"
             style={{ scrollMarginTop: "6rem" }}
           >
             <div className="prose-terms mx-auto max-w-[65ch]">

@@ -17,25 +17,15 @@ export function Hero() {
       />
       <div className="relative mx-auto max-w-3xl text-center">
         <h1 className="text-heading-hero mb-6 flex flex-wrap justify-center gap-x-2 gap-y-1">
-          {HERO_WORDS.map((word, i) =>
-            word === "browser" ? (
-              <span
-                key={word}
-                className="gradient-text-hero animate-word-reveal inline-block"
-                style={{ animationDelay: `${i * 90}ms` }}
-              >
-                {word}
-              </span>
-            ) : (
-              <span
-                key={word}
-                className="animate-word-reveal inline-block text-[var(--text-primary)]"
-                style={{ animationDelay: `${i * 90}ms` }}
-              >
-                {word}{" "}
-              </span>
-            )
-          )}
+          {HERO_WORDS.map((word, i) => (
+            <span
+              key={word}
+              className={`animate-word-reveal inline-block ${word === "browser" ? "text-[var(--link-default)]" : "text-[var(--text-primary)]"}`}
+              style={{ animationDelay: `${i * 80}ms` }}
+            >
+              {word}{word === "browser" ? "" : " "}
+            </span>
+          ))}
         </h1>
         <p className="text-body-muted animate-fade-in mx-auto mb-8 max-w-xl text-lg" style={{ animationDelay: "400ms" }}>
           Describe your app in plain language. AI writes Swift, you preview live, and ship to your

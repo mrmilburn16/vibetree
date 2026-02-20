@@ -32,7 +32,8 @@ export function ProjectSettingsModal({
   const isValidBundleId = (value: string) =>
     /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/i.test(value);
 
-  function handleSave() {
+  function handleSave(e?: React.FormEvent) {
+    e?.preventDefault();
     let valid = true;
     if (!name.trim()) {
       setNameError("Project name is required.");
@@ -60,16 +61,20 @@ export function ProjectSettingsModal({
       title="Project settings"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleSave}>
+          <Button type="submit" form="project-settings-form" variant="primary">
             Save
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <form
+        id="project-settings-form"
+        onSubmit={handleSave}
+        className="space-y-4"
+      >
         <div>
           <label htmlFor="project-name" className="text-body-muted mb-1.5 block text-sm">
             Project name
@@ -102,7 +107,7 @@ export function ProjectSettingsModal({
           <span className="text-body-muted text-sm">App icon</span>
           <p className="text-caption mt-1">Generate with AI (coming soon) or upload an image.</p>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

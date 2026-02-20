@@ -21,7 +21,7 @@ export function EditorLayout({ project }: { project: Project }) {
   return (
     <div className="flex h-screen flex-col bg-[var(--background-primary)]">
       {/* Top bar */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--border-default)] px-4">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--border-default)] pl-5 pr-8 sm:pl-6 sm:pr-10">
         <div className="flex items-center gap-4">
           <Link
             href="/dashboard"
@@ -72,11 +72,7 @@ export function EditorLayout({ project }: { project: Project }) {
           />
         </aside>
         <main className="min-w-0 flex-1">
-          <PreviewPane
-            buildStatus={buildStatus}
-            onRunOnDevice={() => setRunOnDeviceOpen(true)}
-            onPublish={() => setPublishOpen(true)}
-          />
+          <PreviewPane buildStatus={buildStatus} />
         </main>
       </div>
 

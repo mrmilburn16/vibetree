@@ -1,8 +1,9 @@
 "use client";
 
-import { Smartphone, Share2, Upload } from "lucide-react";
 import Image from "next/image";
-import { Badge, Button } from "@/components/ui";
+import { Badge } from "@/components/ui";
+import { BuildingIndicator } from "./BuildingIndicator";
+import { ReadyIndicator } from "./ReadyIndicator";
 
 type BuildStatus = "idle" | "building" | "live" | "failed";
 
@@ -14,8 +15,6 @@ const SCREEN_INSET = { top: 7.5, right: 5, bottom: 7.5, left: 5 };
 
 export function PreviewPane({
   buildStatus,
-  onRunOnDevice,
-  onPublish,
 }: {
   buildStatus: BuildStatus;
   onRunOnDevice?: () => void;
@@ -25,35 +24,13 @@ export function PreviewPane({
 
   return (
     <div
-      className="flex h-full flex-col items-center justify-center p-6"
+      className="flex h-full flex-col items-center justify-center p-8 sm:p-10"
       style={{
         background:
-          "radial-gradient(ellipse 80% 70% at 50% 50%, var(--background-secondary) 0%, transparent 70%), var(--background-primary)",
+          "radial-gradient(ellipse 90% 80% at 50% 45%, rgba(var(--accent-rgb), 0.06) 0%, transparent 55%), radial-gradient(ellipse 80% 70% at 50% 50%, var(--background-secondary) 0%, transparent 70%), var(--background-primary)",
       }}
     >
-      <div className="relative pb-8">
-        {/* Status overlay — above the device */}
-        <div className="absolute -top-2 left-1/2 z-20 -translate-x-1/2">
-          {buildStatus === "building" && (
-            <Badge variant="building" className="animate-fade-in shadow-lg">
-              Building…
-            </Badge>
-          )}
-          {buildStatus === "live" && (
-            <Badge
-              variant="live"
-              className="animate-live-glow animate-fade-in rounded-full px-3 py-1 shadow-lg"
-            >
-              LIVE
-            </Badge>
-          )}
-          {buildStatus === "failed" && (
-            <Badge variant="error" className="animate-fade-in shadow-lg">
-              Build failed
-            </Badge>
-          )}
-        </div>
-
+      <div className="flex flex-col items-center">
         {useImageFrame ? (
           <RealisticImageFrame
             buildStatus={buildStatus}
@@ -62,43 +39,20 @@ export function PreviewPane({
         ) : (
           <CSSDeviceFrame buildStatus={buildStatus} />
         )}
-
-        {/* Status bar overlay — below the device, pill style */}
-        <div
-          className="absolute bottom-0 left-1/2 z-10 w-[260px] -translate-x-1/2 translate-y-1/2 rounded-full border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-1.5 text-center shadow-lg"
-        >
-          <span className="text-caption">
-            {buildStatus === "idle" && "Send a message to preview"}
-            {buildStatus === "building" && "Connecting…"}
-            {buildStatus === "live" && "Streaming"}
-            {buildStatus === "failed" && "Tap to retry"}
-          </span>
+        {/* Status below the device — no overlap */}
+        <div className="mt-5 flex justify-center">
+          {buildStatus === "building" && (
+            <BuildingIndicator className="animate-fade-in" />
+          )}
+          {buildStatus === "live" && (
+            <ReadyIndicator label="LIVE" className="animate-fade-in" />
+          )}
+          {buildStatus === "failed" && (
+            <Badge variant="error" className="animate-fade-in shadow-lg">
+              Build failed
+            </Badge>
+          )}
         </div>
-      </div>
-
-      <div className="mt-10 flex gap-2">
-        <Button
-          variant="secondary"
-          className="gap-1.5 text-xs"
-          onClick={onRunOnDevice}
-          title="Run on your iPhone"
-        >
-          <Smartphone className="h-3.5 w-3.5" aria-hidden />
-          Run on device
-        </Button>
-        <Button variant="secondary" className="gap-1.5 text-xs" title="Share">
-          <Share2 className="h-3.5 w-3.5" aria-hidden />
-          Share
-        </Button>
-        <Button
-          variant="secondary"
-          className="gap-1.5 text-xs"
-          onClick={onPublish}
-          title="Publish to App Store"
-        >
-          <Upload className="h-3.5 w-3.5" aria-hidden />
-          Publish
-        </Button>
       </div>
     </div>
   );
@@ -130,9 +84,14 @@ function CSSDeviceFrame({ buildStatus }: { buildStatus: BuildStatus }) {
         />
         <div className="flex h-full w-full flex-col items-center justify-center px-5 pt-12 pb-8">
           {buildStatus === "idle" && (
-            <p className="text-body-muted text-center text-sm leading-relaxed">
-              Your app preview will appear here after you send a message.
-            </p>
+            <div className="flex flex-col items-center gap-2 text-center">
+              <p className="text-sm font-medium text-[var(--text-secondary)]">
+                Your preview lives here
+              </p>
+              <p className="text-body-muted max-w-[200px] text-xs leading-relaxed">
+                Describe your app in the chat, then watch it appear in this frame.
+              </p>
+            </div>
           )}
           {buildStatus === "building" && (
             <div className="h-9 w-9 animate-spin rounded-full border-2 border-[var(--badge-building)] border-t-transparent" />

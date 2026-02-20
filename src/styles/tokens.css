@@ -58,6 +58,9 @@
   --semantic-error: #EF4444;
   --semantic-info: #6366F1;
 
+  /* Accent RGB for theme-aware glows (rgba(var(--accent-rgb), 0.25)) */
+  --accent-rgb: 99, 102, 241;
+
   /* Typography scale (px) */
   --text-xs: 12px;
   --text-sm: 14px;

@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 
 import type { SelectOption } from "./Select";
+
+const DROPDOWN_MAX_HEIGHT = 280;
+const SPACE_BUFFER = 16;
 
 export interface DropdownSelectProps {
   options: SelectOption[];
@@ -37,6 +40,7 @@ export function DropdownSelect({
   "aria-label": ariaLabel,
 }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((o) => o.value === value) ?? options[0];
@@ -59,6 +63,14 @@ export function DropdownSelect({
     };
   }, [open]);
 
+  // When opening, measure space below and open upward if there isn't enough room (before paint)
+  useLayoutEffect(() => {
+    if (!open || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - SPACE_BUFFER;
+    setOpenUpward(spaceBelow < DROPDOWN_MAX_HEIGHT);
+  }, [open]);
+
   return (
     <div ref={containerRef} className={`relative inline-block ${className}`}>
       <button
@@ -78,7 +90,12 @@ export function DropdownSelect({
           ${open ? "border-[var(--button-primary-bg)] ring-2 ring-[var(--button-primary-bg)]/30" : "border-[var(--input-border)]"}
         `}
       >
-        <span className="truncate">{selectedOption.label}</span>
+        {selectedOption.icon && (
+          <span className="flex shrink-0 items-center text-[var(--text-secondary)] [&_svg]:text-current">
+            {selectedOption.icon}
+          </span>
+        )}
+        <span className="min-w-0 flex-1 truncate">{selectedOption.label}</span>
         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]">
           <ChevronDown />
         </span>
@@ -88,11 +105,12 @@ export function DropdownSelect({
         <ul
           role="listbox"
           aria-label={ariaLabel}
-          className="
-            absolute left-0 top-full z-50 mt-1 max-h-[280px] min-w-[200px] overflow-auto
-            rounded-[var(--radius-md)] border border-[var(--border-default)]
-            bg-[var(--background-secondary)] py-1 shadow-lg
-          "
+          className={
+            "absolute left-0 z-50 max-h-[280px] min-w-[200px] overflow-auto " +
+            "rounded-[var(--radius-md)] border border-[var(--border-default)] " +
+            "bg-[var(--background-secondary)] py-1 shadow-lg " +
+            (openUpward ? "bottom-full mb-1" : "top-full mt-1")
+          }
         >
           {options.map((opt) => (
             <li
@@ -104,12 +122,17 @@ export function DropdownSelect({
                 setOpen(false);
               }}
               className={`
-                cursor-pointer px-3 py-2 text-sm text-[var(--text-primary)]
+                flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)]
                 transition-colors duration-[var(--transition-fast)]
                 hover:bg-[var(--button-primary-bg)]/20 hover:text-[var(--text-primary)]
                 ${opt.value === value ? "bg-[var(--button-primary-bg)]/15 text-[var(--link-default)]" : ""}
               `}
             >
+              {opt.icon && (
+                <span className="flex shrink-0 items-center text-[var(--text-secondary)] [&_svg]:text-current">
+                  {opt.icon}
+                </span>
+              )}
               {opt.label}
             </li>
           ))}

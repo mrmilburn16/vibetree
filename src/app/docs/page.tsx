@@ -29,10 +29,26 @@ function ChevronUpIcon() {
 }
 
 function CodeBlock({ children }: { children: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(children).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
   return (
-    <pre>
-      <code>{children}</code>
-    </pre>
+    <div className="relative group">
+      <pre>
+        <code>{children}</code>
+      </pre>
+      <button
+        type="button"
+        onClick={copy}
+        className="absolute right-2 top-2 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--background-secondary)] px-2 py-1 text-xs text-[var(--text-secondary)] opacity-0 transition-opacity hover:bg-[var(--background-primary)] hover:text-[var(--text-primary)] group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--button-primary-bg)]"
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
   );
 }
 
@@ -87,6 +103,11 @@ export default function DocsPage() {
             }}
           />
           <div className="relative mx-auto max-w-3xl">
+            <nav className="text-caption mb-3 font-medium uppercase tracking-wider text-[var(--text-tertiary)]" aria-label="Breadcrumb">
+              <Link href="/" className="text-[var(--link-default)] hover:text-[var(--link-hover)]">Home</Link>
+              <span className="mx-2" aria-hidden>/</span>
+              <span>Documentation</span>
+            </nav>
             <h1 className="text-heading-hero animate-fade-in mb-3">Documentation</h1>
             <p className="text-body-muted text-lg">
               Everything you need to build and ship iOS apps with Vibetree—from your first app to the App Store.
@@ -95,7 +116,8 @@ export default function DocsPage() {
         </section>
 
         <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10 lg:flex-row lg:gap-12 lg:px-6 lg:py-14">
-          <aside className="lg:sticky lg:top-24 lg:order-2 lg:w-56 lg:shrink-0" aria-label="On this page">
+          {/* Sticky TOC — left for nav-then-content (docs pattern) */}
+          <aside className="lg:sticky lg:top-24 lg:order-1 lg:w-56 lg:shrink-0" aria-label="On this page">
             <nav className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
               <p className="text-caption mb-3 font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
                 On this page
@@ -120,7 +142,8 @@ export default function DocsPage() {
             </nav>
           </aside>
 
-          <article className="min-w-0 flex-1 lg:order-1">
+          {/* Article — content column; prose max-width keeps line length comfortable */}
+          <article className="min-w-0 flex-1 lg:order-2">
             <DocSection id="introduction" title="Introduction">
               <p>
                 Vibetree is a web-based iOS app builder. You describe your app in plain language; AI generates native Swift and SwiftUI code. You preview the app live in your browser, then run it on your iPhone or publish to the App Store—no Xcode required to get started.

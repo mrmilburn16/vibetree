@@ -37,15 +37,15 @@ export function EmptyState({ onCreateFirst }: EmptyStateProps) {
         </p>
         <ol className="text-body-muted mb-8 flex flex-wrap justify-center gap-6 text-left text-sm">
           <li className="flex items-center gap-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--background-tertiary)] text-xs font-semibold text-[var(--text-primary)]">1</span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--button-primary-bg)]/15 text-xs font-semibold text-[var(--link-default)]">1</span>
             Create an app
           </li>
           <li className="flex items-center gap-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--background-tertiary)] text-xs font-semibold text-[var(--text-primary)]">2</span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--button-primary-bg)]/15 text-xs font-semibold text-[var(--link-default)]">2</span>
             Describe in chat
           </li>
           <li className="flex items-center gap-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--background-tertiary)] text-xs font-semibold text-[var(--text-primary)]">3</span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--button-primary-bg)]/15 text-xs font-semibold text-[var(--link-default)]">3</span>
             Ship to device or App Store
           </li>
         </ol>

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
+@import "../styles/themes.css";
+@import "../styles/fonts.css";
 
 @theme inline {
   /* Map tokens to Tailwind utilities — use only these in components */
@@ -30,14 +32,14 @@
   --color-semantic-error: var(--semantic-error);
   --color-semantic-info: var(--semantic-info);
 
-  --font-sans: var(--font-geist-sans);
+  /* --font-sans is set by fonts.css from data-font so the switcher can change it */
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background-primary);
   color: var(--text-primary);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
 
 /* Type scale — use these classes for consistent hierarchy */
@@ -191,7 +193,7 @@ body {
 /* Dashboard: New app card subtle glow pulse */
 @keyframes new-app-glow {
   0%, 100% { box-shadow: none; }
-  50% { box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2); }
+  50% { box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.2); }
 }
 .dashboard-new-app-card {
   animation: new-app-glow 2.5s ease-in-out infinite;
@@ -215,12 +217,22 @@ body {
 
 /* Dashboard: subtle CTA pulse (empty state) */
 @keyframes cta-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.25); }
-  50% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.25); }
+  50% { box-shadow: 0 0 0 12px rgba(var(--accent-rgb), 0); }
 }
 
 .animate-cta-pulse {
   animation: cta-pulse 2s ease-in-out infinite;
+}
+
+/* Editor: building indicator glow (theme accent) */
+@keyframes building-glow {
+  0%, 100% { box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.15), 0 0 0 1px rgba(var(--accent-rgb), 0.2); }
+  50% { box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.25), 0 0 0 1px rgba(var(--accent-rgb), 0.35); }
+}
+
+.animate-building-glow {
+  animation: building-glow 2s ease-in-out infinite;
 }
 
 /* Dashboard: skeleton loading */
@@ -250,7 +262,7 @@ body {
   scroll-snap-type: y mandatory;
 }
 .landing-section {
-  scroll-snap-align: start;
+  scroll-snap-align: center;
   scroll-snap-stop: normal;
 }
 

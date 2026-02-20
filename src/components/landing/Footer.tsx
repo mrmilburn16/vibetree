@@ -3,7 +3,7 @@ import { SocialIcons } from "./SocialIcons";
 
 export function Footer() {
   return (
-    <footer className="landing-section flex min-h-full flex-col justify-center border-t border-[var(--border-default)] px-4 py-12 sm:px-6">
+    <footer className="landing-section border-t border-[var(--border-default)] px-4 py-12 sm:px-6">
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 sm:flex-row sm:justify-between">
         <span className="text-caption text-[var(--text-tertiary)]">
           © {new Date().getFullYear()} Vibetree. All rights reserved.

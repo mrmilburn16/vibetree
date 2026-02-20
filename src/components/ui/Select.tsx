@@ -5,6 +5,8 @@ import { forwardRef, type SelectHTMLAttributes } from "react";
 export interface SelectOption {
   value: string;
   label: string;
+  /** Optional icon (e.g. logo) shown to the left of the label in dropdowns */
+  icon?: React.ReactNode;
 }
 
 export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {

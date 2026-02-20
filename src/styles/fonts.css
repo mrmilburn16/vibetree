@@ -1,0 +1,25 @@
+/**
+ * Font switcher: set data-font on <html> to change the UI font.
+ * Default (no attribute) = geist.
+ */
+
+:root,
+[data-font="geist"] {
+  --font-sans: var(--font-geist-sans);
+}
+
+[data-font="inter"] {
+  --font-sans: var(--font-inter);
+}
+
+[data-font="plus-jakarta"] {
+  --font-sans: var(--font-plus-jakarta-sans);
+}
+
+[data-font="outfit"] {
+  --font-sans: var(--font-outfit);
+}
+
+[data-font="dm-sans"] {
+  --font-sans: var(--font-dm-sans);
+}
