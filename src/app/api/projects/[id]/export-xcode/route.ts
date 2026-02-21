@@ -173,9 +173,10 @@ struct AppLiveActivityWidget: Widget {
   }
 
   const bytes = await zip.generateAsync({ type: "uint8array" });
-  // JSZip's typings use Uint8Array<ArrayBufferLike> (can be backed by SharedArrayBuffer),
-  // but BodyInit expects a BufferSource backed by a plain ArrayBuffer.
-  const body = new Uint8Array(bytes);
+  // JSZip's typings use Uint8Array<ArrayBufferLike> (can be backed by SharedArrayBuffer).
+  // Create a brand-new Uint8Array backed by a plain ArrayBuffer and copy into it.
+  const body = new Uint8Array(bytes.byteLength);
+  body.set(bytes);
 
   // NOTE: Use the standard Web Response here (not NextResponse) because some Vercel/Next typings
   // make NextResponse's constructor overly strict about BodyInit.
