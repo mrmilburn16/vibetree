@@ -8,7 +8,7 @@ const DROPDOWN_MAX_HEIGHT = 280;
 const SPACE_BUFFER = 16;
 
 export interface DropdownSelectProps {
-  options: SelectOption[];
+  options: readonly SelectOption[];
   value: string;
   onChange: (value: string) => void;
   className?: string;
