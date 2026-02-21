@@ -173,10 +173,10 @@ struct AppLiveActivityWidget: Widget {
   }
 
   const bytes = await zip.generateAsync({ type: "uint8array" });
-  // NextResponse BodyInit typing on some deployments doesn't accept Uint8Array; use an ArrayBuffer slice.
-  const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
-  return new NextResponse(body, {
+  // NOTE: Use the standard Web Response here (not NextResponse) because some Vercel/Next typings
+  // make NextResponse's constructor overly strict about BodyInit.
+  return new Response(bytes, {
     status: 200,
     headers: {
       "Content-Type": "application/zip",
