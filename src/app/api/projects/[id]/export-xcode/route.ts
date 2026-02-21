@@ -46,7 +46,7 @@ async function buildZipFromSwiftFiles(
   filesArr: SwiftFile[],
   filenameId: string,
   options: { projectName: string; bundleId: string; developmentTeam?: string }
-): Promise<NextResponse> {
+): Promise<Response> {
   const swiftFilesRaw = filesArr.filter((f) => typeof f?.path === "string" && f.path.endsWith(".swift"));
   const swiftFiles = fixSwiftCommonIssues(swiftFilesRaw);
   if (swiftFiles.length === 0) {
