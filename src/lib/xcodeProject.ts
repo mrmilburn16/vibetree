@@ -65,7 +65,8 @@ export function buildPbxproj(
     paths.includes(widget!.infoPlistPath);
 
   const widgetName = usesWidgetTarget ? widget!.name : "";
-  const widgetBundleId = usesWidgetTarget ? widget!.bundleId : "";
+  // Embedded extension bundle ID must be prefixed with the parent app's bundle ID (Apple requirement).
+  const widgetBundleId = usesWidgetTarget ? `${bundleId}.widget` : "";
   const widgetInfoPlistPath = usesWidgetTarget ? widget!.infoPlistPath : "";
   // INFOPLIST_FILE is resolved relative to project root (next to the .xcodeproj),
   // while our exported sources live under `${projectName}/...`.

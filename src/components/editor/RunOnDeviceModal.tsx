@@ -42,6 +42,7 @@ export function RunOnDeviceModal({
   const [validateAttempt, setValidateAttempt] = useState(1);
   const [validateMaxAttempts, setValidateMaxAttempts] = useState(3);
   const [validateFixing, setValidateFixing] = useState(false);
+  const [validateHadCompilerErrors, setValidateHadCompilerErrors] = useState(false);
 
   const projectType =
     projectTypeProp ??
@@ -122,6 +123,9 @@ export function RunOnDeviceModal({
         setValidateStatus(status);
         const logs = Array.isArray(job.logs) ? job.logs.filter((x: any) => typeof x === "string") : [];
         setValidateLogTail(logs.slice(-10));
+        if (status === "failed") {
+          setValidateHadCompilerErrors((Array.isArray(job.compilerErrors) ? job.compilerErrors.length : 0) > 0);
+        }
 
         if (status === "succeeded" || status === "failed") {
           return;
@@ -277,6 +281,7 @@ export function RunOnDeviceModal({
       setValidateAttempt(1);
       setValidateMaxAttempts(3);
       setValidateFixing(false);
+      setValidateHadCompilerErrors(false);
       setValidateLogTail([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Validation failed. Try again.");
@@ -391,6 +396,11 @@ export function RunOnDeviceModal({
                   <pre className="mt-2 max-h-[160px] overflow-auto rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
                     {validateLogTail.join("\n")}
                   </pre>
+                )}
+                {validateStatus === "failed" && !validateHadCompilerErrors && (
+                  <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+                    Auto-fix only runs for Swift compiler errors. This failure (e.g. ValidateEmbeddedBinary) may be due to signing or project setup—check the log above.
+                  </p>
                 )}
                 {(validateStatus === "queued" || validateStatus === "running" || validateStatus === "fixing") && (
                   <p className="mt-2 text-xs text-[var(--text-tertiary)]">

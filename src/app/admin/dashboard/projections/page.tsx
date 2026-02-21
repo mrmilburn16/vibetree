@@ -549,7 +549,7 @@ export default function ProjectionsPage() {
                     />
                     <Tooltip
                       content={<ThemedTooltipContent />}
-                      formatter={(value: number | undefined, name: string) => [
+                      formatter={(value: number | undefined, name: string | undefined) => [
                         value != null ? `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—",
                         name === "Revenue" || name === "revenue" ? "Revenue" : "API cost",
                       ]}
@@ -610,9 +610,9 @@ export default function ProjectionsPage() {
                     </Pie>
                     <Tooltip
                       content={<ThemedTooltipContent />}
-                      formatter={(value: number | undefined, name: string) => [
+                      formatter={(value: number | undefined, name: string | undefined) => [
                         value != null ? `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—",
-                        name,
+                        name ?? "—",
                       ]}
                     />
                     <Legend
