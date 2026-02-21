@@ -28,7 +28,7 @@ Open [http://localhost:3000](http://localhost:3000). Sign up or sign in (mock se
 
 ## Pricing
 
-The app includes a **credit system** and **three plans** (Creator, Pro, Team) with monthly and annual billing and a 14-day free trial for Pro and Team. See the [Pricing](http://localhost:3000/pricing) page in the app and [docs/PRICING.md](docs/PRICING.md) for the credit breakdown and plan details.
+The app includes a **credit system** and **three plans** (Creator, Pro, Team) with monthly and annual billing and a 14-day free trial for Pro and Team. See the [Pricing](http://localhost:3000/pricing) page in the app and [PRICING.plan.md](PRICING.plan.md) for the credit breakdown and plan details.
 
 ## Feature flags
 

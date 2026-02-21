@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { Maximize2 } from "lucide-react";
 import { QRCode } from "@/components/ui";
-import { BuildingIndicator } from "./BuildingIndicator";
 import { ReadyIndicator } from "./ReadyIndicator";
 import { FailedIndicator } from "./FailedIndicator";
 
@@ -45,9 +44,6 @@ export function PreviewPane({
             <CSSDeviceFrame buildStatus={buildStatus} />
           )}
           <div className="mt-5 flex justify-center">
-            {buildStatus === "building" && (
-              <BuildingIndicator className="animate-fade-in" />
-            )}
             {buildStatus === "live" && (
               <ReadyIndicator label="LIVE" className="animate-ready-pop" />
             )}
@@ -132,7 +128,7 @@ function CSSDeviceFrame({ buildStatus }: { buildStatus: BuildStatus }) {
             </div>
           )}
           {buildStatus === "building" && (
-            <div className="h-9 w-9 animate-spin rounded-full border-2 border-[var(--spinner-preview)] border-t-transparent" />
+            <div className="h-9 w-9 animate-spin-preview rounded-full border-2 border-[var(--spinner-preview)] border-t-transparent" />
           )}
           {buildStatus === "live" && (
             <>
@@ -194,7 +190,7 @@ function RealisticImageFrame({
             </p>
           )}
           {buildStatus === "building" && (
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--spinner-preview)] border-t-transparent" />
+            <div className="h-8 w-8 animate-spin-preview rounded-full border-2 border-[var(--spinner-preview)] border-t-transparent" />
           )}
           {buildStatus === "live" && (
             <p className="text-body-muted text-center text-xs">Streaming…</p>

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AlertTriangle, AlertCircle, CheckCircle, Info } from "lucide-react";
+import { ThemedTooltipContent } from "@/components/admin/ChartTooltip";
 import {
   LineChart,
   Line,
@@ -15,16 +17,63 @@ import {
   Legend,
   PieChart,
   Pie,
-  Cell,
 } from "recharts";
+import { Button, DropdownSelect } from "@/components/ui";
+import type { SelectOption } from "@/components/ui";
 
-const RANGES = [
+const RANGES: SelectOption[] = [
   { value: "7d", label: "Last 7 days" },
   { value: "30d", label: "Last 30 days" },
   { value: "90d", label: "Last 90 days" },
   { value: "this_month", label: "This month" },
   { value: "last_month", label: "Last month" },
+];
+
+/** Chart palette aligned with Twilight Violet tokens (4 colors for pies with 4 segments) */
+const CHART_COLORS = [
+  "var(--button-primary-bg)",   // #6366F1
+  "var(--link-default)",        // #818CF8
+  "var(--link-hover)",          // #A5B4FC
+  "var(--semantic-info)",       // distinct 4th for donuts
+];
+
+
+/** Mock distribution of which model users pick for prompts (sums to 100%) */
+const PROMPT_MODEL_PREFERENCE = [
+  { id: "auto", label: "Auto", percent: 38, description: "Let the app choose" },
+  { id: "claude-opus", label: "Claude Opus 4.6", percent: 28, description: "Most capable" },
+  { id: "claude-sonnet", label: "Claude Sonnet 4.6", percent: 22, description: "Balanced" },
+  { id: "gpt", label: "GPT 5.2", percent: 12, description: "Alternative" },
 ] as const;
+
+/** Format YYYY-MM-DD for chart axis (e.g. "Feb 21") */
+function formatChartDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr + "Z");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
+/** High-contrast label for pie segments (readable on dark theme) */
+function PieLabel(props: { name?: string; percent?: number; x?: number; y?: number }) {
+  const { name = "", percent = 0, x = 0, y = 0 } = props;
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="var(--text-primary)"
+      textAnchor="middle"
+      dominantBaseline="middle"
+      fontSize={11}
+      className="font-medium"
+    >
+      {name} {((percent ?? 0) * 100).toFixed(0)}%
+    </text>
+  );
+}
+
 
 interface AdminAlert {
   id: string;
@@ -66,24 +115,33 @@ function KpiCard({
           : status === "info"
             ? "var(--semantic-info)"
             : undefined;
+  const trendPositive = trend !== undefined && trend >= 0 === trendUpGood;
+  const trendLabel =
+    trend !== undefined
+      ? `${trend >= 0 ? "Up" : "Down"} ${Math.abs(trend).toFixed(1)}% vs previous period`
+      : undefined;
   return (
-    <div
-      className="rounded-xl border border-[var(--border-default)] bg-[var(--background-secondary)] p-5 transition hover:border-[var(--border-subtle)]"
+    <article
+      className="cursor-default rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-5 transition-[border-color,box-shadow] duration-[var(--transition-fast)] hover:border-[var(--border-subtle)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
       style={statusColor ? { borderLeftWidth: 4, borderLeftColor: statusColor } : undefined}
     >
-      <p className="text-caption text-[var(--text-tertiary)]">{title}</p>
-      <p className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">
+      <p className="text-caption text-[var(--text-secondary)]" id={`kpi-${title.replace(/\s+/g, "-")}`}>
+        {title}
+      </p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--text-primary)]">
         {value}
       </p>
       {sub && <p className="text-body-muted mt-0.5 text-sm">{sub}</p>}
       {trend !== undefined && (
         <p
-          className={`text-caption mt-1 ${trend >= 0 === trendUpGood ? "text-[var(--semantic-success)]" : "text-[var(--semantic-error)]"}`}
+          className={`text-caption mt-1 tabular-nums ${trendPositive ? "text-[var(--semantic-success)]" : "text-[var(--semantic-error)]"}`}
+          role="status"
+          aria-label={trendLabel}
         >
           {trend >= 0 ? "↑" : "↓"} {Math.abs(trend).toFixed(1)}% vs previous period
         </p>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -105,26 +163,39 @@ export default function AdminDashboardPage() {
 
   if (loading && !stats) {
     return (
-      <div className="min-h-screen bg-[var(--background-primary)] p-6">
-        <div className="mx-auto max-w-7xl">
-          <div className="h-8 w-48 animate-pulse rounded bg-[var(--background-tertiary)]" />
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="h-28 animate-pulse rounded-xl bg-[var(--background-secondary)]"
-              />
-            ))}
+      <div className="min-h-screen bg-[var(--background-primary)]" role="status" aria-live="polite" aria-label="Loading dashboard">
+        <header className="sticky top-0 z-10 border-b border-[var(--border-default)] bg-[var(--background-primary)]/95 backdrop-blur">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+            <div className="h-6 w-32 animate-pulse rounded bg-[var(--background-tertiary)]" />
+            <div className="h-9 w-24 animate-pulse rounded-[var(--radius-md)] bg-[var(--background-tertiary)]" />
           </div>
-        </div>
+        </header>
+        <main className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6">
+          <section className="space-y-4">
+            <div className="h-6 w-40 animate-pulse rounded bg-[var(--background-tertiary)]" />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="h-28 animate-pulse rounded-[var(--radius-lg)] bg-[var(--background-secondary)]"
+                />
+              ))}
+            </div>
+            <div className="h-72 animate-pulse rounded-[var(--radius-lg)] bg-[var(--background-secondary)]" />
+          </section>
+        </main>
       </div>
     );
   }
 
   if (error || !stats) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--background-primary)]">
-        <p className="text-[var(--semantic-error)]">{error || "No data"}</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-[var(--background-primary)] px-4" role="alert">
+        <p className="text-center text-sm text-[var(--text-secondary)]">We couldn’t load the dashboard.</p>
+        <p className="text-center text-[var(--semantic-error)]">{error || "No data"}</p>
+        <Button variant="secondary" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
       </div>
     );
   }
@@ -134,15 +205,10 @@ export default function AdminDashboardPage() {
   const costTrend = prev ? ((stats.cost.total - prev.cost) / prev.cost) * 100 : 0;
   const marginTrend = prev ? stats.profit.marginPct - prev.marginPct : 0;
 
-  const costByModelData = Object.entries(stats.cost.byModel).map(([name, value]) => ({
+  const costByModelData = Object.entries(stats.cost.byModel).map(([name, value], i) => ({
     name: name.replace("Claude ", "").replace("GPT-5.2", "GPT 5.2"),
     value,
-    fill:
-      name === "Claude Opus 4.6"
-        ? "#6366F1"
-        : name === "Claude Sonnet 4.6"
-          ? "#818CF8"
-          : "#A5B4FC",
+    fill: CHART_COLORS[i % CHART_COLORS.length],
   }));
 
   const alertColors = {
@@ -152,32 +218,42 @@ export default function AdminDashboardPage() {
     info: "var(--semantic-info)",
   };
 
+  const rangeLabel = RANGES.find((r) => r.value === range)?.label ?? range;
+
   return (
     <div className="min-h-screen bg-[var(--background-primary)]">
-      <header className="sticky top-0 z-10 border-b border-[var(--border-default)] bg-[var(--background-primary)]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-4">
+      <header className="sticky top-0 z-10 border-b border-[var(--border-default)] bg-[var(--background-primary)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--background-primary)]/90">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <Link
               href="/dashboard"
-              className="text-body-muted hover:text-primary text-sm"
+              className="text-body-muted shrink-0 text-sm transition-colors hover:text-[var(--link-default)]"
             >
               ← App
             </Link>
-            <h1 className="text-heading-card">Admin dashboard</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <select
-              value={range}
-              onChange={(e) => setRange(e.target.value)}
-              className="rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--button-primary-bg)]"
+            <span className="text-[var(--text-tertiary)]" aria-hidden>·</span>
+            <Link
+              href="/admin/dashboard/projections"
+              className="text-body-muted shrink-0 text-sm transition-colors hover:text-[var(--link-default)]"
             >
-              {RANGES.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-            <button
+              Projections
+            </Link>
+            <div className="min-w-0">
+              <h1 id="admin-dashboard-title" className="text-heading-card truncate">Admin dashboard</h1>
+              <p className="text-caption text-[var(--text-secondary)]" aria-live="polite">
+                Period: {rangeLabel}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <DropdownSelect
+              options={RANGES}
+              value={range}
+              onChange={setRange}
+              aria-label="Time range"
+            />
+            <Button
+              variant="destructive"
               type="button"
               onClick={() => {
                 fetch("/api/admin/auth", {
@@ -186,56 +262,82 @@ export default function AdminDashboardPage() {
                   body: JSON.stringify({ action: "logout" }),
                 }).then(() => { window.location.href = "/admin"; });
               }}
-              className="rounded-lg border border-[var(--border-default)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--background-secondary)]"
             >
               Sign out
-            </button>
+            </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6">
+      <main className="mx-auto max-w-7xl space-y-10 px-4 py-8 sm:px-6" aria-labelledby="admin-dashboard-title">
         {/* Alerts */}
         {stats.alerts.filter((a: AdminAlert) => !dismissedAlerts.has(a.id)).length > 0 && (
-          <section>
-            <h2 className="text-heading-card mb-3">Alerts</h2>
+          <section aria-labelledby="alerts-heading" className="space-y-3">
+            <h2 id="alerts-heading" className="text-heading-card">Alerts</h2>
             <div className="space-y-2">
               {stats.alerts
                 .filter((a: AdminAlert) => !dismissedAlerts.has(a.id))
-                .map((a: AdminAlert) => (
+                .map((a: AdminAlert) => {
+                  const AlertIcon =
+                    a.type === "warning"
+                      ? AlertTriangle
+                      : a.type === "error"
+                        ? AlertCircle
+                        : a.type === "success"
+                          ? CheckCircle
+                          : Info;
+                  return (
                   <div
                     key={a.id}
-                    className="flex items-start justify-between gap-4 rounded-xl border border-[var(--border-default)] bg-[var(--background-secondary)] p-4"
+                    role="status"
+                    className="flex items-start justify-between gap-4 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4 transition-opacity"
                     style={{
                       borderLeftWidth: 4,
                       borderLeftColor: alertColors[a.type as keyof typeof alertColors] || alertColors.info,
                     }}
                   >
-                    <div>
-                      <p className="font-medium text-[var(--text-primary)]">{a.title}</p>
-                      <p className="text-body-muted mt-0.5 text-sm">{a.message}</p>
+                    <div className="flex min-w-0 flex-1 gap-3">
+                      <AlertIcon
+                        className="mt-0.5 shrink-0 size-4"
+                        style={{ color: alertColors[a.type as keyof typeof alertColors] || alertColors.info }}
+                        aria-hidden
+                      />
+                      <div className="min-w-0">
+                        <p className="font-medium text-[var(--text-primary)]">{a.title}</p>
+                        <p className="text-body-muted mt-0.5 text-sm">{a.message}</p>
+                      </div>
                     </div>
-                    <button
+                    <Button
+                      variant="ghost"
                       type="button"
                       onClick={() => setDismissedAlerts((s) => new Set(s).add(a.id))}
-                      className="text-caption text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                      className="shrink-0 text-sm text-[var(--text-secondary)]"
+                      aria-label={`Dismiss alert: ${a.title}`}
                     >
                       Dismiss
-                    </button>
+                    </Button>
                   </div>
-                ))}
+                  );
+                })}
             </div>
           </section>
         )}
 
         {/* 1. Revenue & cost */}
-        <section>
-          <h2 className="text-heading-section mb-4">Revenue & cost</h2>
+        <section aria-labelledby="revenue-heading" className="space-y-6">
+          <div className="space-y-2">
+            <h2 id="revenue-heading" className="text-heading-section">Revenue & cost</h2>
+            <div className="h-0.5 w-10 rounded-full bg-[var(--link-default)]/50" aria-hidden />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
               title="Total revenue"
               value={`$${(stats.revenue.total / 1000).toFixed(1)}k`}
-              sub={`MRR $${(stats.revenue.mrr / 1000).toFixed(1)}k + one-time $${stats.revenue.oneTime}`}
+              sub={
+                stats.revenue.oneTime > 0
+                  ? `MRR $${(stats.revenue.mrr / 1000).toFixed(1)}k + one-time $${stats.revenue.oneTime}`
+                  : `MRR $${(stats.revenue.mrr / 1000).toFixed(1)}k`
+              }
               trend={revenueTrend}
               trendUpGood={true}
             />
@@ -270,65 +372,60 @@ export default function AdminDashboardPage() {
               }
             />
           </div>
-          <div className="mt-6 h-72 rounded-xl border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
+          <div>
+            <p className="mb-2 text-sm font-medium text-[var(--text-secondary)]">Revenue and cost over time</p>
+            <figure className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4" style={{ height: 288 }}>
+              <figcaption className="sr-only">Revenue and cost over time for the selected period</figcaption>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={stats.revenue.byDay.map((d: { date: string; value: number }, i: number) => ({
                   ...d,
                   cost: stats.cost.byDay[i]?.value ?? 0,
                 }))}
-                margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
+                margin={{ top: 16, right: 16, left: 16, bottom: 16 }}
+                aria-label="Revenue and cost line chart"
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                <XAxis dataKey="date" stroke="var(--text-tertiary)" fontSize={11} />
-                <YAxis stroke="var(--text-tertiary)" fontSize={11} tickFormatter={(v) => `$${v}`} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--background-secondary)",
-                    border: "1px solid var(--border-default)",
-                    borderRadius: "var(--radius-md)",
-                  }}
-                  labelStyle={{ color: "var(--text-primary)" }}
-                  formatter={(value: number | undefined) => [value != null ? `$${value}` : "", ""]}
-                />
-                <Legend />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={true} horizontal={true} />
+                <XAxis dataKey="date" stroke="var(--text-secondary)" fontSize={12} tick={{ fill: "var(--text-secondary)" }} tickFormatter={formatChartDate} />
+                <YAxis stroke="var(--text-secondary)" fontSize={12} tick={{ fill: "var(--text-secondary)" }} tickFormatter={(v) => `$${v}`} />
+                <Tooltip content={<ThemedTooltipContent />} formatter={(value: number | undefined) => [value != null ? `$${value}` : "", ""]} />
+                <Legend wrapperStyle={{ paddingTop: 8 }} iconType="line" iconSize={10} style={{ fontSize: 12 }} formatter={(value) => <span style={{ color: "var(--text-secondary)" }}>{value}</span>} />
                 <Line type="monotone" dataKey="value" name="Revenue" stroke="var(--semantic-success)" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="cost" name="Cost" stroke="var(--semantic-error)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
+          </figure>
           </div>
-          <div className="mt-4">
-            <p className="text-body-muted mb-2 text-sm">Cost by model</p>
-            <div className="h-56 rounded-xl border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
+          <div>
+            <p className="mb-2 text-sm font-medium text-[var(--text-secondary)]">Cost by model</p>
+            <figure className="h-56 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
+              <figcaption className="sr-only">Cost breakdown by LLM model</figcaption>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={costByModelData} layout="vertical" margin={{ top: 8, right: 24, left: 80, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                  <XAxis type="number" stroke="var(--text-tertiary)" fontSize={11} tickFormatter={(v) => `$${v}`} />
-                  <YAxis type="category" dataKey="name" stroke="var(--text-tertiary)" fontSize={11} width={76} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--background-secondary)",
-                      border: "1px solid var(--border-default)",
-                      borderRadius: "var(--radius-md)",
-                    }}
-                    formatter={(value: number | undefined) => [value != null ? `$${value}` : "", "Cost"]}
-                  />
+                <BarChart data={costByModelData} layout="vertical" margin={{ top: 12, right: 24, left: 88, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" horizontal={true} vertical={false} />
+                  <XAxis type="number" stroke="var(--text-secondary)" fontSize={12} tick={{ fill: "var(--text-secondary)" }} tickFormatter={(v) => `$${v}`} />
+                  <YAxis type="category" dataKey="name" stroke="var(--text-secondary)" fontSize={12} tick={{ fill: "var(--text-secondary)" }} width={84} />
+                  <Tooltip content={<ThemedTooltipContent />} formatter={(value: number | undefined) => [value != null ? `$${value}` : "", "Cost"]} />
                   <Bar dataKey="value" name="Cost" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            </figure>
           </div>
         </section>
 
         {/* 2. Usage & credits */}
-        <section>
-          <h2 className="text-heading-section mb-4">Usage & credits</h2>
+        <section aria-labelledby="usage-heading" className="space-y-6">
+          <div className="space-y-2">
+            <h2 id="usage-heading" className="text-heading-section">Usage & credits</h2>
+            <div className="h-0.5 w-10 rounded-full bg-[var(--link-default)]/50" aria-hidden />
+          </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <KpiCard title="Credits consumed" value={stats.credits.consumed.toLocaleString()} />
             <KpiCard title="Credits granted" value={stats.credits.granted.toLocaleString()} />
             <KpiCard
               title="Usage rate"
               value={`${stats.credits.usageRatePct.toFixed(1)}%`}
+              sub="Consumed ÷ granted"
               status={
                 stats.credits.usageRatePct > 90
                   ? "warning"
@@ -338,14 +435,17 @@ export default function AdminDashboardPage() {
               }
             />
           </div>
-          <div className="mt-4 h-56 rounded-xl border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+          <div>
+            <p className="mb-2 text-sm font-medium text-[var(--text-secondary)]">Credits consumed by model</p>
+            <figure className="h-56 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
+              <figcaption className="sr-only">Credits consumed by model</figcaption>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart aria-label="Credits by model pie chart">
                 <Pie
                   data={Object.entries(stats.credits.byModel).map(([name, value], i) => ({
                     name: name.replace("Claude ", "").replace("GPT-5.2", "GPT 5.2"),
                     value,
-                    fill: ["#6366F1", "#818CF8", "#A5B4FC"][i] as string,
+                    fill: CHART_COLORS[i % CHART_COLORS.length],
                   }))}
                   cx="50%"
                   cy="50%"
@@ -353,24 +453,97 @@ export default function AdminDashboardPage() {
                   outerRadius={80}
                   paddingAngle={2}
                   dataKey="value"
-                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                  stroke="var(--background-secondary)"
+                  strokeWidth={1.5}
+                  label={(props) => <PieLabel {...props} />}
+                  labelLine={{ stroke: "var(--text-tertiary)" }}
                 />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--background-secondary)",
-                    border: "1px solid var(--border-default)",
-                    borderRadius: "var(--radius-md)",
-                  }}
-                    formatter={(value: number | undefined) => [value != null ? value.toLocaleString() : "", "Credits"]}
-                />
+                <Tooltip content={<ThemedTooltipContent />} formatter={(value: number | undefined) => [value != null ? value.toLocaleString() : "", "Credits"]} />
               </PieChart>
             </ResponsiveContainer>
+          </figure>
+          </div>
+
+          {/* Prompt model preference — which model users are most likely to use */}
+          <div className="mt-8 space-y-4">
+            <h3 id="prompt-model-preference-heading" className="text-heading-card">
+              Prompt model preference
+            </h3>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Share of prompts sent with each model in the selected period (which model someone is most likely to use).
+            </p>
+            <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+              <figure className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4" style={{ minHeight: 260 }}>
+                <figcaption className="sr-only">Distribution of prompt model choices, totaling 100%</figcaption>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart aria-label="Prompt model preference donut chart">
+                    <Pie
+                      data={PROMPT_MODEL_PREFERENCE.map((row, i) => ({
+                        name: row.label,
+                        value: row.percent,
+                        fill: CHART_COLORS[i % CHART_COLORS.length],
+                      }))}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={95}
+                      paddingAngle={3}
+                      dataKey="value"
+                      stroke="var(--background-secondary)"
+                      strokeWidth={1.5}
+                      label={(props) => <PieLabel {...props} />}
+                      labelLine={{ stroke: "var(--text-tertiary)" }}
+                    />
+                    <Tooltip content={<ThemedTooltipContent />} formatter={(value: number | undefined) => [value != null ? `${value}%` : "", "Share"]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </figure>
+              <div className="space-y-4">
+                <div
+                  className="relative rounded-[var(--radius-lg)] border-2 border-[var(--button-primary-bg)] bg-[var(--background-tertiary)] p-4"
+                  style={{ boxShadow: "0 0 20px rgba(var(--accent-rgb), 0.15)" }}
+                >
+                  <span className="absolute right-3 top-3 rounded bg-[var(--button-primary-bg)]/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--link-default)]">
+                    #1
+                  </span>
+                  <p className="text-caption font-medium uppercase tracking-wider text-[var(--text-secondary)]">Most likely to use</p>
+                  <p className="mt-1 text-xl font-semibold text-[var(--text-primary)]">
+                    {PROMPT_MODEL_PREFERENCE[0].label}
+                  </p>
+                  <p className="text-body-muted mt-0.5 text-sm">{PROMPT_MODEL_PREFERENCE[0].description}</p>
+                  <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--link-default)]">
+                    {PROMPT_MODEL_PREFERENCE[0].percent}%
+                  </p>
+                </div>
+                <ul className="space-y-2" aria-label="Model share breakdown">
+                  {PROMPT_MODEL_PREFERENCE.map((row, i) => (
+                    <li
+                      key={row.id}
+                      className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 transition-colors hover:border-[var(--border-default)]"
+                    >
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1 text-sm text-[var(--text-primary)]">{row.label}</span>
+                      <span className="shrink-0 tabular-nums font-medium text-[var(--text-secondary)]">
+                        {row.percent}%
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           </div>
         </section>
 
         {/* 3. Subscriptions */}
-        <section>
-          <h2 className="text-heading-section mb-4">Subscriptions & pipeline</h2>
+        <section aria-labelledby="subscriptions-heading" className="space-y-6">
+          <div className="space-y-2">
+            <h2 id="subscriptions-heading" className="text-heading-section">Subscriptions & pipeline</h2>
+            <div className="h-0.5 w-10 rounded-full bg-[var(--link-default)]/50" aria-hidden />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
             <KpiCard title="Active subscriptions" value={stats.subscriptions.active} />
             <KpiCard title="Upcoming renewals" value={stats.subscriptions.upcomingRenewals} />
@@ -386,16 +559,20 @@ export default function AdminDashboardPage() {
         </section>
 
         {/* 4. Growth */}
-        <section>
-          <h2 className="text-heading-section mb-4">Growth & cohorts</h2>
+        <section aria-labelledby="growth-heading" className="space-y-6">
+          <div className="space-y-2">
+            <h2 id="growth-heading" className="text-heading-section">Growth & cohorts</h2>
+            <div className="h-0.5 w-10 rounded-full bg-[var(--link-default)]/50" aria-hidden />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
             <KpiCard title="Visitor → signup %" value={`${stats.growth.conversionVisitorSignup}%`} />
             <KpiCard title="Signup → paid %" value={`${stats.growth.conversionSignupPaid}%`} />
-            <KpiCard title="CAC" value={`$${stats.growth.cac}`} />
-            <KpiCard title="LTV" value={`$${stats.growth.ltv}`} />
+            <KpiCard title="CAC" value={`$${stats.growth.cac}`} sub="Customer acquisition cost" />
+            <KpiCard title="LTV" value={`$${stats.growth.ltv}`} sub="Lifetime value" />
             <KpiCard
               title="LTV:CAC"
               value={stats.growth.ltvCac.toFixed(1)}
+              sub="Lifetime value ÷ CAC"
               status={
                 stats.growth.ltvCac >= 3
                   ? "success"
@@ -409,35 +586,45 @@ export default function AdminDashboardPage() {
         </section>
 
         {/* 5. Fraud & suspicious usage */}
-        <section>
-          <h2 className="text-heading-section mb-4">Fraud & suspicious usage</h2>
+        <section aria-labelledby="fraud-heading" className="space-y-6">
+          <div className="space-y-2">
+            <h2 id="fraud-heading" className="text-heading-section">Fraud & suspicious usage</h2>
+            <div className="h-0.5 w-10 rounded-full bg-[var(--link-default)]/50" aria-hidden />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <KpiCard
               title="Flagged events (period)"
               value={stats.fraud.suspiciousCount}
               status={stats.fraud.suspiciousCount > 5 ? "warning" : stats.fraud.suspiciousCount > 0 ? "info" : undefined}
             />
-            <div className="rounded-xl border border-[var(--border-default)] bg-[var(--background-secondary)] p-5">
-              <p className="text-caption text-[var(--text-tertiary)]">Top suspicious</p>
-              <ul className="mt-2 space-y-2">
-                {stats.fraud.flaggedUsers.map((u: { id: string; ip: string; reason: string; score: number }) => (
-                  <li
-                    key={u.id}
-                    className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm"
-                  >
-                    <span className="text-[var(--text-secondary)]">{u.ip}</span>
-                    <span className="text-caption text-[var(--text-tertiary)]">Score {u.score}</span>
-                    <span className="text-caption max-w-[180px] truncate" title={u.reason}>{u.reason}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-5">
+              <p className="text-caption font-medium uppercase tracking-wider text-[var(--text-secondary)]">Top suspicious</p>
+              {stats.fraud.flaggedUsers.length === 0 ? (
+                <p className="text-body-muted mt-3 text-sm">No flagged users in this period.</p>
+              ) : (
+                <ul className="mt-2 space-y-2" aria-label="Flagged users">
+                  {stats.fraud.flaggedUsers.map((u: { id: string; ip: string; reason: string; score: number }) => (
+                    <li
+                      key={u.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm transition-colors hover:border-[var(--border-default)] hover:bg-[var(--background-tertiary)]/80"
+                    >
+                      <span className="tabular-nums text-[var(--text-primary)]">{u.ip}</span>
+                      <span className="text-caption tabular-nums text-[var(--text-secondary)]">Score {u.score}</span>
+                      <span className="text-caption max-w-[180px] truncate text-[var(--text-secondary)]" title={u.reason}>{u.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </section>
 
-        {/* 6. Forecasting & alerts */}
-        <section>
-          <h2 className="text-heading-section mb-4">Forecasting</h2>
+        {/* 6. Forecasting */}
+        <section aria-labelledby="forecasting-heading" className="space-y-6">
+          <div className="space-y-2">
+            <h2 id="forecasting-heading" className="text-heading-section">Forecasting</h2>
+            <div className="h-0.5 w-10 rounded-full bg-[var(--link-default)]/50" aria-hidden />
+          </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <KpiCard
               title="Projected cost (month)"
@@ -456,13 +643,14 @@ export default function AdminDashboardPage() {
               }
             />
           </div>
-          <div className="mt-4 rounded-xl border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
-            <p className="text-body-muted mb-2 text-sm">Profit margin by model</p>
-            <div className="flex flex-wrap gap-4">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
+            <p className="mb-2 text-sm font-medium text-[var(--text-secondary)]">Profit margin by model</p>
+            <div className="flex flex-wrap gap-4" role="list">
               {(Object.entries(stats.profit.byModel) as [string, number][]).map(([model, pct]) => (
                 <div
                   key={model}
-                  className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] px-4 py-2"
+                  role="listitem"
+                  className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-subtle)] px-4 py-2 tabular-nums transition-colors hover:border-[var(--border-default)]"
                   style={{
                     borderLeftWidth: 4,
                     borderLeftColor:
@@ -470,7 +658,7 @@ export default function AdminDashboardPage() {
                   }}
                 >
                   <span className="text-[var(--text-primary)]">{model.replace("Claude ", "").replace("GPT-5.2", "GPT 5.2")}</span>
-                  <span className="font-medium">{pct.toFixed(1)}%</span>
+                  <span className="font-medium text-[var(--text-primary)]">{pct.toFixed(1)}%</span>
                 </div>
               ))}
             </div>

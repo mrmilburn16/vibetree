@@ -4,13 +4,14 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCredits } from "@/contexts/CreditsContext";
-import { Button } from "@/components/ui";
-import { CREDIT_PACKS, CREDITS_PER_DOLLAR } from "@/lib/credits";
+import { Button, Input } from "@/components/ui";
+import { CREDIT_PACKS, PRICE_PER_CREDIT_USD } from "@/lib/credits";
 
 export default function CreditsPage() {
   const router = useRouter();
-  const { balance, add } = useCredits();
+  const { balance, add, setBalance } = useCredits();
   const [purchased, setPurchased] = useState<string | null>(null);
+  const [testBalance, setTestBalance] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -34,7 +35,7 @@ export default function CreditsPage() {
             Back to dashboard
           </Link>
           <span className="text-sm font-medium text-[var(--text-primary)]">
-            Balance: <strong>{balance} credits</strong>
+            Balance: <strong>{balance} {balance === 1 ? "credit" : "credits"}</strong>
           </span>
         </div>
       </header>
@@ -44,8 +45,11 @@ export default function CreditsPage() {
           Buy credits
         </h1>
         <p className="mt-2 text-[var(--text-secondary)]">
-          Simple pricing: <strong className="text-[var(--text-primary)]">{CREDITS_PER_DOLLAR} credits = $1</strong>.
-          Each AI message uses 1 credit. Purchased credits don&apos;t expire.
+          <strong className="text-[var(--text-primary)]">1 credit = ${PRICE_PER_CREDIT_USD.toFixed(2)}</strong>.
+          Each message uses 1 credit. Purchased credits don&apos;t expire.
+        </p>
+        <p className="mt-1 text-[var(--text-secondary)]">
+          Same price per credit, no matter how many you buy.
         </p>
 
         {purchased && (
@@ -65,9 +69,6 @@ export default function CreditsPage() {
             >
               <p className="text-2xl font-bold text-[var(--text-primary)]">{pack.label}</p>
               <p className="mt-1 text-3xl font-bold text-[var(--link-default)]">${pack.priceUsd}</p>
-              <p className="text-caption mt-2 text-xs text-[var(--text-tertiary)]">
-                {pack.credits / pack.priceUsd} credits per $1
-              </p>
               <div className="mt-6 flex-1" />
               <Button
                 variant="primary"
@@ -83,6 +84,37 @@ export default function CreditsPage() {
         <p className="mt-10 text-center text-sm text-[var(--text-tertiary)]">
           Need a different amount? <Link href="/contact" className="text-[var(--link-default)] hover:underline">Contact us</Link>.
         </p>
+
+        <section className="mt-14 border-t border-[var(--border-default)] pt-10">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">Testing</h2>
+          <p className="mt-1 text-sm text-[var(--text-tertiary)]">
+            Set your balance to simulate low or out of credits (e.g. 0 or 5).
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              placeholder={String(balance)}
+              value={testBalance}
+              onChange={(e) => setTestBalance(e.target.value)}
+              className="w-24"
+              aria-label="Balance for testing"
+            />
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const n = parseInt(testBalance, 10);
+                if (!Number.isNaN(n) && n >= 0) {
+                  setBalance(n);
+                  setTestBalance("");
+                }
+              }}
+            >
+              Set balance
+            </Button>
+          </div>
+        </section>
       </main>
     </div>
   );

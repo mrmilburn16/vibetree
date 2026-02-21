@@ -130,50 +130,55 @@ export function ChatPanel({
         <label htmlFor="chat-input" className="sr-only">
           Describe your app
         </label>
-        <div className="flex gap-2 items-center">
-          <Textarea
-            ref={textareaRef}
-            id="chat-input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={CHAT_PLACEHOLDERS[placeholderIndex]}
-            className="min-h-[44px] max-h-[120px] min-w-0 flex-1 resize-none rounded-[24px] py-3 px-4 overflow-y-auto"
-            rows={1}
-            maxLength={maxMessageLength + 500}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
-              }
-            }}
-          />
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={!canSendWithCredits || !input.trim() || input.length > maxMessageLength}
-            className={`shrink-0 p-2.5 transition-transform duration-75 ${justSent ? "scale-95" : "scale-100"}`}
-            aria-label={sendButtonTitle}
-            title={sendButtonTitle}
+        <div className="min-w-0 flex flex-col">
+          <div
+            className="flex min-h-[44px] items-center rounded-[24px] border-2 border-[var(--input-border)] bg-[var(--input-bg)] py-1 pr-1 pl-4 ring-0 transition-colors duration-[var(--transition-fast)] focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/30"
           >
-            {canSend ? (
-              <Send className="h-4 w-4" aria-hidden />
-            ) : (
-              <span className="inline-block h-4 w-4 rounded-sm bg-current opacity-90" aria-hidden />
-            )}
-          </Button>
+            <Textarea
+              ref={textareaRef}
+              id="chat-input"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={CHAT_PLACEHOLDERS[placeholderIndex]}
+              className="!border-0 !min-h-[38px] max-h-[112px] w-full resize-none bg-transparent pt-2 pb-3 pr-2 text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none"
+              rows={1}
+              maxLength={maxMessageLength + 500}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!canSendWithCredits || !input.trim() || input.length > maxMessageLength}
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 transition-transform duration-75 ${justSent ? "scale-95" : "scale-100"}`}
+              aria-label={sendButtonTitle}
+              title={sendButtonTitle}
+            >
+              {canSend ? (
+                <Send className="h-4 w-4" aria-hidden />
+              ) : (
+                <span className="inline-block h-4 w-4 rounded-sm bg-current opacity-90" aria-hidden />
+              )}
+            </Button>
+          </div>
+          {showCharCount && (
+<p className="mt-1.5 overflow-x-auto px-4 text-caption text-[var(--text-tertiary)]" role="status" aria-live="polite">
+                {input.length > maxMessageLength ? (
+                  <span className="whitespace-nowrap text-[var(--semantic-error)]">
+                    Message too long (max {maxMessageLength.toLocaleString()} characters) — {input.length.toLocaleString()} / {maxMessageLength.toLocaleString()}
+                  </span>
+              ) : (
+                <span className="block text-right">
+                  {input.length.toLocaleString()} / {maxMessageLength.toLocaleString()}
+                </span>
+              )}
+            </p>
+          )}
         </div>
-        {showCharCount && (
-          <p className="mt-1.5 text-right text-caption text-[var(--text-tertiary)]" role="status" aria-live="polite">
-            <span className={input.length > maxMessageLength ? "text-[var(--semantic-error)]" : ""}>
-              {input.length.toLocaleString()} / {maxMessageLength.toLocaleString()}
-            </span>
-          </p>
-        )}
-        {input.length > maxMessageLength && (
-          <p className="mt-2 text-caption text-[var(--semantic-error)]" role="status" aria-live="polite">
-            Message too long (max {maxMessageLength} characters)
-          </p>
-        )}
         {!hasCreditsForMessage && (
           <p className="mt-2 text-caption text-[var(--semantic-warning)]" role="status" aria-live="polite">
             You&apos;re out of credits. <Link href="/credits" className="text-[var(--link-default)] hover:underline">Buy more</Link> to send messages.

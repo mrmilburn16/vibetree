@@ -9,6 +9,10 @@ const STORAGE_KEY = "vibetree-credits";
 /** 10 credits per dollar — easy to compute (e.g. 100 credits = $10). */
 export const CREDITS_PER_DOLLAR = 10;
 
+/** Price per credit in USD for display (e.g. "1 credit = $0.10"). Single source of truth. */
+export const PRICE_PER_CREDIT_USD = 1 / CREDITS_PER_DOLLAR;
+
+/** Show "low on credits" banner and widget styling below this. ~1 session of messages (5–10) so users have time to buy. */
 export const LOW_CREDIT_THRESHOLD = 10;
 
 export interface CreditState {
@@ -92,6 +96,16 @@ export function deduct(amount: number): boolean {
 export function add(amount: number): void {
   const state = getCreditState();
   const next: CreditState = { ...state, balance: state.balance + amount };
+  saveState(next);
+}
+
+/**
+ * Set balance to a specific value (for testing, e.g. simulate out of credits).
+ * Clamps to 0 minimum. Does not change includedPerPeriod or periodStart.
+ */
+export function setBalance(amount: number): void {
+  const state = getCreditState();
+  const next: CreditState = { ...state, balance: Math.max(0, Math.floor(amount)) };
   saveState(next);
 }
 

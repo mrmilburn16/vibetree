@@ -80,7 +80,13 @@ export async function createAdminSession(): Promise<string> {
   return signToken();
 }
 
+/** When true, admin routes are open without secret (local dev only). */
+export const ADMIN_DEV_BYPASS =
+  process.env.NODE_ENV === "development" &&
+  (process.env.ADMIN_DEV_BYPASS !== "0" && process.env.ADMIN_DEV_BYPASS !== "false");
+
 export async function getAdminSession(): Promise<string | null> {
+  if (ADMIN_DEV_BYPASS) return "dev-bypass";
   const c = await cookies();
   const token = c.get(ADMIN_COOKIE)?.value;
   if (!token || !(await verifyToken(token))) return null;

@@ -52,8 +52,8 @@
   --badge-error: #EF4444;
   --badge-neutral: #71717A;
 
-  /* Loading spinner in preview/device frame — UX decision: keep building yellow or use theme accent (e.g. --button-primary-bg, --link-default) */
-  --spinner-preview: var(--badge-building);
+  /* Loading spinner in preview/device frame — theme accent for Twilight Violet consistency */
+  --spinner-preview: var(--button-primary-bg);
 
   /* User message bubble in chat — theme tint so "your" messages feel on-brand. Set to var(--background-secondary) for neutral. */
   --chat-bubble-user-bg: color-mix(in srgb, var(--button-primary-bg) 14%, var(--background-secondary));

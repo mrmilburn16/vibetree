@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getProject } from "@/lib/projectStore";
 import { mockGetResponse } from "@/lib/llm/mockAdapter";
+import { getClaudeResponse } from "@/lib/llm/claudeAdapter";
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -37,6 +38,7 @@ export async function POST(
 
   const useRealLLM = body.useRealLLM === true;
   const hasApiKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  const model = typeof body.model === "string" ? body.model : undefined;
 
   if (useRealLLM && !hasApiKey) {
     return NextResponse.json(
@@ -45,10 +47,27 @@ export async function POST(
     );
   }
 
-  const { content, editedFiles } = await mockGetResponse(
-    message,
-    typeof body.model === "string" ? body.model : undefined
-  );
+  let content: string;
+  let editedFiles: string[];
+
+  if (useRealLLM && hasApiKey) {
+    try {
+      const result = await getClaudeResponse(message, model);
+      content = result.content;
+      editedFiles = result.editedFiles;
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "AI request failed";
+      return NextResponse.json(
+        { error: errorMessage },
+        { status: 503 }
+      );
+    }
+  } else {
+    const result = await mockGetResponse(message, model);
+    content = result.content;
+    editedFiles = result.editedFiles;
+  }
 
   return NextResponse.json({
     assistantMessage: {

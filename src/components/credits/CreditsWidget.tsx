@@ -50,14 +50,14 @@ export function CreditsWidget() {
         className={`
           flex items-center gap-2 rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium
           transition-colors
-          ${isLow ? "border-[var(--semantic-warning)]/50 bg-[var(--semantic-warning)]/10 text-[var(--semantic-warning)]" : "border-[var(--border-default)] bg-[var(--background-secondary)] text-[var(--text-primary)] hover:bg-[var(--background-tertiary)]"}
+          ${isLow ? "border-[var(--link-default)]/50 bg-[color-mix(in_srgb,var(--button-primary-bg)_12%,var(--background-secondary))] text-[var(--link-default)]" : "border-[var(--border-default)] bg-[var(--background-secondary)] text-[var(--text-primary)] hover:bg-[var(--background-tertiary)]"}
         `}
       >
         <span className="flex items-center text-[var(--text-secondary)]" aria-hidden>
           <IconCoins />
         </span>
         <span>{balance}</span>
-        <span className="text-[var(--text-tertiary)]">credits</span>
+        <span className={isLow ? "text-[var(--link-default)]/80" : "text-[var(--text-tertiary)]"}>{balance === 1 ? "credit" : "credits"}</span>
         <span
           className={`inline-flex text-[var(--text-tertiary)] transition-transform duration-200 ease-out ${open ? "rotate-180" : ""}`}
           aria-hidden
@@ -77,14 +77,16 @@ export function CreditsWidget() {
       >
           <div className="border-b border-[var(--border-default)] px-4 py-3">
             <p className="text-caption text-[var(--text-tertiary)]">Balance</p>
-            <p className="text-xl font-semibold text-[var(--text-primary)]">{balance} credits</p>
+            <p className="text-xl font-semibold text-[var(--text-primary)]">{balance} {balance === 1 ? "credit" : "credits"}</p>
             <p className="text-caption mt-0.5 text-xs text-[var(--text-tertiary)]">
-              1 message = 1 credit · Resets monthly
+              1 message = 1 credit
+              <br />
+              Resets monthly
             </p>
           </div>
           {isLow && (
             <div className="border-b border-[var(--border-default)] px-4 py-2">
-              <p className="text-sm text-[var(--semantic-warning)]">Running low on credits</p>
+              <p className="text-sm text-[var(--link-default)]">Running low on credits</p>
               <p className="text-caption text-xs text-[var(--text-tertiary)]">Buy more to keep building</p>
             </div>
           )}

@@ -42,6 +42,21 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+/* Override browser autofill/autocomplete so inputs stay themed (no white background) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+textarea:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 100vmax var(--input-bg) inset !important;
+  box-shadow: 0 0 0 100vmax var(--input-bg) inset !important;
+  -webkit-text-fill-color: var(--input-text) !important;
+  caret-color: var(--input-text);
+}
+
 /* Type scale — use these classes for consistent hierarchy */
 .text-heading-hero {
   font-size: var(--text-5xl);
@@ -229,6 +244,15 @@ body {
   animation: cta-pulse 2s ease-in-out infinite;
 }
 
+/* Editor: preview pane spinner — 15% slower than default for calmer feel */
+@keyframes spin-preview {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-preview {
+  animation: spin-preview 1.15s linear infinite;
+}
+
 /* Editor: building indicator glow (theme accent) */
 @keyframes building-glow {
   0%, 100% { box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.15), 0 0 0 1px rgba(var(--accent-rgb), 0.2); }
@@ -353,6 +377,54 @@ body {
   animation: gradient-text-shine 4s ease-in-out infinite;
 }
 
+/* Sign-in: loading screen */
+@keyframes signin-loading-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes signin-loading-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+@keyframes signin-loading-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+.sign-in-loading-enter {
+  animation: signin-loading-fade 0.2s ease-out forwards;
+}
+.sign-in-loading-bar {
+  animation: signin-loading-bar 1.4s ease-in-out infinite;
+}
+.sign-in-loading-glow {
+  animation: signin-loading-glow 2s ease-in-out infinite;
+}
+@keyframes signin-typewriter-letter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes signin-cursor-blink {
+  0%, 45% { opacity: 1; }
+  50%, 95% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.sign-in-typewriter-letter {
+  animation: signin-typewriter-letter 0.28s ease-out forwards;
+  opacity: 0;
+}
+.sign-in-cursor-blink {
+  animation: signin-cursor-blink 2.2s step-end infinite;
+}
+
+/* Sign-in: subtle floating bubbles (option 3 background) */
+@keyframes bubble-float {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.2; }
+  50% { transform: translate(14%, -10%) scale(1.06); opacity: 0.35; }
+}
+.animate-bubble-float {
+  animation: bubble-float 12s ease-in-out infinite;
+}
+
 /* Respect prefers-reduced-motion: disable non-essential animations */
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
@@ -370,9 +442,41 @@ body {
   .animate-screen-shine,
   .dashboard-new-app-card,
   .animate-skeleton,
-  .gradient-text-hero {
+  .gradient-text-hero,
+  .animate-bubble-float,
+  .sign-in-loading-enter,
+  .sign-in-loading-bar,
+  .sign-in-loading-glow,
+  .sign-in-typewriter-letter,
+  .sign-in-cursor-blink {
     animation: none !important;
   }
+  .sign-in-typewriter-letter { opacity: 1; }
+  .sign-in-cursor-blink { opacity: 1; }
+  .sign-in-loading-enter { opacity: 1; }
+}
+
+/* Admin / projections — premium card and chart containers */
+.card-premium {
+  background: var(--background-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    0 12px 28px -8px rgba(0, 0, 0, 0.35);
+}
+.chart-card-premium {
+  background: var(--background-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    0 12px 28px -8px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
   .animate-fade-in-fast,
   .animate-word-reveal,

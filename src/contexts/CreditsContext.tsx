@@ -5,6 +5,8 @@ import {
   getCreditState,
   deduct as storeDeduct,
   add as storeAdd,
+  setBalance as storeSetBalance,
+  LOW_CREDIT_THRESHOLD,
   type CreditState,
 } from "@/lib/credits";
 
@@ -14,6 +16,7 @@ interface CreditsContextValue {
   hasCreditsForMessage: boolean;
   deduct: (amount: number) => boolean;
   add: (amount: number) => void;
+  setBalance: (amount: number) => void;
   refresh: () => void;
 }
 
@@ -48,6 +51,14 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
     [refresh]
   );
 
+  const setBalance = useCallback(
+    (amount: number) => {
+      storeSetBalance(amount);
+      refresh();
+    },
+    [refresh]
+  );
+
   const value: CreditsContextValue =
     state === null
       ? {
@@ -56,14 +67,16 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
           hasCreditsForMessage: false,
           deduct: () => false,
           add,
+          setBalance,
           refresh,
         }
       : {
           balance: state.balance,
-          isLow: state.balance < 10,
+          isLow: state.balance < LOW_CREDIT_THRESHOLD,
           hasCreditsForMessage: state.balance >= 1,
           deduct,
           add,
+          setBalance,
           refresh,
         };
 
@@ -79,6 +92,7 @@ export function useCredits(): CreditsContextValue {
       hasCreditsForMessage: false,
       deduct: () => false,
       add: () => {},
+      setBalance: () => {},
       refresh: () => {},
     };
   }
