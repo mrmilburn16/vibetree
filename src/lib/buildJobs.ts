@@ -4,13 +4,12 @@ export type BuildJobCreateRequest = {
   projectId: string;
   projectName: string;
   bundleId: string;
-  /**
-   * Optional: provide files so validation works even if server memory is cleared.
-   * Shape matches the export-xcode POST body.
-   */
   files?: Array<{ path: string; content: string }>;
-  /** Optional: forwarded to export-xcode to embed DEVELOPMENT_TEAM in pbxproj. */
   developmentTeam?: string;
+  autoFix?: boolean;
+  attempt?: number;
+  maxAttempts?: number;
+  parentJobId?: string;
 };
 
 export type BuildJobRecord = {
@@ -21,16 +20,22 @@ export type BuildJobRecord = {
   status: BuildJobStatus;
   runnerId?: string;
   request: BuildJobCreateRequest;
-  /** Last N log lines from the runner. */
   logs: string[];
   exitCode?: number;
   error?: string;
+  compilerErrors?: string[];
+  /** Points to the retry job created by auto-fix. */
+  nextJobId?: string;
 };
 
 const MAX_LOG_LINES = 1500;
 
-const jobs = new Map<string, BuildJobRecord>();
-const queue: string[] = [];
+// Use globalThis so the store survives Next.js hot-reloads and is shared across all routes.
+const g = globalThis as unknown as { __buildJobs?: Map<string, BuildJobRecord>; __buildQueue?: string[] };
+if (!g.__buildJobs) g.__buildJobs = new Map();
+if (!g.__buildQueue) g.__buildQueue = [];
+const jobs = g.__buildJobs;
+const queue = g.__buildQueue;
 
 function jobId(): string {
   return `job_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -74,10 +79,20 @@ export function setBuildJobStatus(
   jobs.set(id, rec);
 }
 
-/**
- * Claim the next queued job. Returns undefined if none.
- * Intended for a single runner or best-effort multi-runner.
- */
+export function setBuildJobCompilerErrors(id: string, errors: string[]): void {
+  const rec = jobs.get(id);
+  if (!rec) return;
+  rec.compilerErrors = errors;
+  jobs.set(id, rec);
+}
+
+export function setBuildJobNextJob(failedId: string, nextId: string): void {
+  const rec = jobs.get(failedId);
+  if (!rec) return;
+  rec.nextJobId = nextId;
+  jobs.set(failedId, rec);
+}
+
 export function claimNextBuildJob(runnerId: string): BuildJobRecord | undefined {
   while (queue.length > 0) {
     const id = queue.shift()!;

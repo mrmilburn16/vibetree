@@ -36,6 +36,12 @@ export function RunOnDeviceModal({
   const [validateJobId, setValidateJobId] = useState<string | null>(null);
   const [validateStatus, setValidateStatus] = useState<string | null>(null);
   const [validateLogTail, setValidateLogTail] = useState<string[]>([]);
+  const [copyFeedback, setCopyFeedback] = useState(false);
+  const [validateStartedAt, setValidateStartedAt] = useState<number | null>(null);
+  const [validateElapsed, setValidateElapsed] = useState(0);
+  const [validateAttempt, setValidateAttempt] = useState(1);
+  const [validateMaxAttempts, setValidateMaxAttempts] = useState(3);
+  const [validateFixing, setValidateFixing] = useState(false);
 
   const projectType =
     projectTypeProp ??
@@ -84,17 +90,39 @@ export function RunOnDeviceModal({
     if (!isOpen) return;
     if (!validateJobId) return;
     let cancelled = false;
+    let currentJobId = validateJobId;
+
     const poll = async () => {
       try {
-        const res = await fetch(`/api/build-jobs/${validateJobId}`);
+        const res = await fetch(`/api/build-jobs/${currentJobId}`);
         if (!res.ok) return;
         const data = await res.json().catch(() => ({}));
         const job = data?.job;
         if (!job || cancelled) return;
+
         const status = typeof job.status === "string" ? job.status : null;
+        const attempt = typeof job.request?.attempt === "number" ? job.request.attempt : 1;
+        const maxAttempts = typeof job.request?.maxAttempts === "number" ? job.request.maxAttempts : 3;
+        const nextJobId = typeof job.nextJobId === "string" ? job.nextJobId : null;
+
+        setValidateAttempt(attempt);
+        setValidateMaxAttempts(maxAttempts);
+
+        if (status === "failed" && nextJobId) {
+          setValidateFixing(true);
+          setValidateStatus("fixing");
+          setValidateLogTail([`Auto-fixing Swift errors (attempt ${attempt + 1}/${maxAttempts})…`]);
+          currentJobId = nextJobId;
+          setValidateJobId(nextJobId);
+          setTimeout(poll, 2000);
+          return;
+        }
+
+        setValidateFixing(false);
         setValidateStatus(status);
         const logs = Array.isArray(job.logs) ? job.logs.filter((x: any) => typeof x === "string") : [];
         setValidateLogTail(logs.slice(-10));
+
         if (status === "succeeded" || status === "failed") {
           return;
         }
@@ -108,6 +136,15 @@ export function RunOnDeviceModal({
       cancelled = true;
     };
   }, [isOpen, validateJobId]);
+
+  useEffect(() => {
+    if (!validateStartedAt || !validateStatus) return;
+    if (validateStatus === "succeeded" || validateStatus === "failed") return;
+    const iv = setInterval(() => {
+      setValidateElapsed(Math.floor((Date.now() - validateStartedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [validateStartedAt, validateStatus, validateFixing]);
 
   async function handleDownloadForXcode() {
     setDownloadLoading(true);
@@ -235,7 +272,12 @@ export function RunOnDeviceModal({
       if (!jobId) throw new Error("No job id returned");
       setValidateJobId(jobId);
       setValidateStatus("queued");
-      setValidateLogTail([`Queued build validation job ${jobId}`]);
+      setValidateStartedAt(Date.now());
+      setValidateElapsed(0);
+      setValidateAttempt(1);
+      setValidateMaxAttempts(3);
+      setValidateFixing(false);
+      setValidateLogTail([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Validation failed. Try again.");
       setValidateStatus("failed");
@@ -306,22 +348,58 @@ export function RunOnDeviceModal({
             </Button>
             {validateStatus && (
               <div className="rounded border border-[var(--border-default)] bg-[var(--background-default)] p-3">
-                <p className="text-xs text-[var(--text-tertiary)]">
-                  Build validation status:{" "}
-                  <span className="text-[var(--text-secondary)]">{validateStatus}</span>
-                  {validateJobId ? (
-                    <span className="text-[var(--text-tertiary)]"> · job {validateJobId}</span>
-                  ) : null}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+                    {(validateStatus === "queued" || validateStatus === "running" || validateStatus === "fixing") && (
+                      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--primary-default)]" />
+                    )}
+                    {validateStatus === "succeeded" && (
+                      <span className="text-green-400">&#10003;</span>
+                    )}
+                    {validateStatus === "failed" && (
+                      <span className="text-red-400">&#10007;</span>
+                    )}
+                    <span>
+                      {validateStatus === "queued" && `Waiting for runner… (${validateElapsed}s)`}
+                      {validateStatus === "running" && `Building with xcodebuild… (${validateElapsed}s)${validateAttempt > 1 ? ` — Attempt ${validateAttempt}/${validateMaxAttempts}` : ""}`}
+                      {validateStatus === "fixing" && `Auto-fixing Swift errors… (${validateElapsed}s) — Attempt ${validateAttempt + 1}/${validateMaxAttempts}`}
+                      {validateStatus === "succeeded" && (validateAttempt > 1 ? `Build succeeded on attempt ${validateAttempt}/${validateMaxAttempts}` : "Build succeeded")}
+                      {validateStatus === "failed" && (validateAttempt > 1 ? `Build failed after ${validateAttempt} attempt${validateAttempt > 1 ? "s" : ""}` : "Build failed")}
+                      {validateStatus !== "queued" && validateStatus !== "running" && validateStatus !== "fixing" && validateStatus !== "succeeded" && validateStatus !== "failed" && validateStatus}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const statusLine = `Build validation status: ${validateStatus}${validateJobId ? ` · job ${validateJobId}` : ""}`;
+                      const logBlock = validateLogTail.length > 0 ? `\n${validateLogTail.join("\n")}` : "";
+                      const text = `${statusLine}${logBlock}`;
+                      try {
+                        await navigator.clipboard.writeText(text);
+                        setCopyFeedback(true);
+                        setTimeout(() => setCopyFeedback(false), 2000);
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    className="shrink-0 rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--background-tertiary)] hover:text-[var(--text-default)]"
+                  >
+                    {copyFeedback ? "Copied!" : "Copy"}
+                  </button>
+                </div>
                 {validateLogTail.length > 0 && (
                   <pre className="mt-2 max-h-[160px] overflow-auto rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
                     {validateLogTail.join("\n")}
                   </pre>
                 )}
-                <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-                  Requires a Mac runner with Xcode. Run <span className="font-mono">npm run mac-runner</span> on your Mac with{" "}
-                  <span className="font-mono">MAC_RUNNER_TOKEN</span> set.
-                </p>
+                {(validateStatus === "queued" || validateStatus === "running" || validateStatus === "fixing") && (
+                  <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+                    {validateStatus === "fixing"
+                      ? "Sending compiler errors to LLM for auto-fix…"
+                      : <>Requires a Mac runner with Xcode. Run <span className="font-mono">npm run mac-runner</span> on your Mac with{" "}<span className="font-mono">MAC_RUNNER_TOKEN</span> set.</>
+                    }
+                  </p>
+                )}
               </div>
             )}
             <button

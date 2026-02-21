@@ -1,23 +1,48 @@
 import { spawn, execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir, homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-/** Resolve xcodebuild path so it works when PATH doesn't include Xcode (e.g. non-interactive shell). */
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
+
+/** Load .env.local from project root so MAC_RUNNER_TOKEN, VIBETREE_SERVER_URL, XCODEBUILD_PATH work with just npm run mac-runner. */
+function loadEnvLocal() {
+  const path = join(__dirname, "..", ".env.local");
+  if (!existsSync(path)) return;
+  try {
+    const content = readFileSync(path, "utf8");
+    for (const line of content.split(/\r?\n/)) {
+      const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+      if (!m) continue;
+      const key = m[1];
+      let value = m[2].trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
+        value = value.slice(1, -1);
+      process.env[key] = value;
+    }
+  } catch (_) {}
+}
+
+loadEnvLocal();
+
+/** Resolve xcodebuild path so it works when PATH doesn't include Xcode (e.g. non-interactive shell). Returns { path, tried } for logging. */
 function getXcodebuildPath() {
-  const candidates = [];
+  const tried = [];
+  const explicit = process.env.XCODEBUILD_PATH?.trim();
+  if (explicit) tried.push(resolve(explicit));
   const home = process.env.HOME || homedir();
-  if (home) candidates.push(join(home, "Downloads", "Xcode.app", "Contents", "Developer", "usr", "bin", "xcodebuild"));
-  candidates.push("/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild");
+  if (home) tried.push(resolve(home, "Downloads", "Xcode.app", "Contents", "Developer", "usr", "bin", "xcodebuild"));
+  tried.push("/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild");
   try {
     const devDir = execSync("xcode-select -p", { encoding: "utf8", shell: true }).trim();
-    if (devDir) candidates.push(join(devDir, "usr", "bin", "xcodebuild"));
+    if (devDir) tried.push(resolve(devDir, "usr", "bin", "xcodebuild"));
   } catch (_) {}
-  for (const p of candidates) {
-    if (p && existsSync(p)) return p;
+  for (const p of tried) {
+    if (p && existsSync(p)) return { path: p, tried };
   }
-  return "xcodebuild";
+  return { path: "xcodebuild", tried };
 }
 
 const SERVER_URL = process.env.VIBETREE_SERVER_URL || "http://localhost:3001";
@@ -126,9 +151,27 @@ async function validateJob(job) {
       onLine: () => {},
     });
 
-    const projectName = job.request.projectName;
+    let projectName = job.request.projectName;
+
+    // Auto-detect project name from unzipped contents: find the .xcodeproj and derive the name.
+    let contents = [];
+    try { contents = readdirSync(unzipDir); } catch (_) {}
+    const xcodeprojEntry = contents.find((e) => e.endsWith(".xcodeproj"));
+    if (xcodeprojEntry) {
+      const detected = xcodeprojEntry.replace(/\.xcodeproj$/, "");
+      if (detected && detected !== projectName) {
+        projectName = detected;
+      }
+    }
+
     const projDir = join(unzipDir, projectName);
-    const xcodeproj = join(projDir, `${projectName}.xcodeproj`);
+    const xcodeproj = join(unzipDir, `${projectName}.xcodeproj`);
+
+    if (!existsSync(xcodeproj)) {
+      const msg = `Xcode project not found.\nExpected: ${projectName}.xcodeproj\nUnzip contains: ${contents.join(", ") || "(empty)"}`;
+      await updateJob(job.id, { status: "failed", error: msg, logs: [msg] });
+      return;
+    }
 
     const logs = [];
     let lastFlushAt = Date.now();
@@ -146,7 +189,7 @@ async function validateJob(job) {
       "-scheme",
       projectName,
       "-destination",
-      "platform=iOS Simulator,name=iPhone 15",
+      "generic/platform=iOS Simulator",
       "build",
       // Don't require signing for simulator builds.
       "CODE_SIGNING_ALLOWED=NO",
@@ -154,22 +197,29 @@ async function validateJob(job) {
       'CODE_SIGN_IDENTITY=""',
     ];
 
-    const xcodebuildPath = getXcodebuildPath();
+    const { path: xcodebuildPath, tried } = getXcodebuildPath();
+    logs.push(xcodebuildPath === "xcodebuild" ? `xcodebuild not found. Tried: ${tried.join(", ")}` : `Using: ${xcodebuildPath}`);
     logs.push(`xcodebuild ${baseArgs.join(" ")}`);
     await flush(true);
 
     let result;
+    const runOpts = {
+      cwd: unzipDir,
+      onLine: (line) => {
+        logs.push(line);
+        flush(false).catch(() => {});
+      },
+    };
     try {
-      result = await run(xcodebuildPath, baseArgs, {
-        cwd: projDir,
-        onLine: (line) => {
-          logs.push(line);
-          flush(false).catch(() => {});
-        },
-      });
+      // Run via shell so the OS executes xcodebuild in a normal context (avoids ENOENT when path exists but direct spawn is blocked, e.g. quarantine or sandbox).
+      if (xcodebuildPath !== "xcodebuild" && xcodebuildPath.includes("/")) {
+        result = await run("/bin/sh", ["-c", 'exec "$@"', "sh", xcodebuildPath, ...baseArgs], runOpts);
+      } else {
+        result = await run(xcodebuildPath, baseArgs, runOpts);
+      }
     } catch (spawnErr) {
       const msg = spawnErr?.code === "ENOENT"
-        ? "xcodebuild not found. Install Xcode and run: xcode-select -s /Applications/Xcode.app/Contents/Developer"
+        ? `xcodebuild not found. Tried: ${tried.join(", ")}. Install Xcode or run: xcode-select -s /Applications/Xcode.app/Contents/Developer`
         : (spawnErr?.message || String(spawnErr));
       logs.push(`Runner error: ${msg}`);
       await flush(true);
@@ -182,11 +232,20 @@ async function validateJob(job) {
     if (result.code === 0) {
       await updateJob(job.id, { status: "succeeded", exitCode: 0, logs: ["✅ Build succeeded"] });
     } else {
+      const allOutput = (result.out || "") + "\n" + (result.err || "");
+      const errorLines = allOutput
+        .split(/\r?\n/)
+        .filter((l) => /\.swift:\d+:\d+: error:/.test(l))
+        .map((l) => l.trim())
+        .filter(Boolean);
+      const uniqueErrors = [...new Set(errorLines)].slice(0, 20);
+
       await updateJob(job.id, {
         status: "failed",
         exitCode: result.code,
         error: "xcodebuild failed",
         logs: ["❌ Build failed (see logs above)"],
+        ...(uniqueErrors.length > 0 ? { compilerErrors: uniqueErrors } : {}),
       });
     }
   } catch (e) {
