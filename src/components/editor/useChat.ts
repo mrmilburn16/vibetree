@@ -426,7 +426,7 @@ export function useChat(
                   )
                 );
               } else if (event.type === "done" && event.assistantMessage) {
-                doneEvent = event as typeof doneEvent;
+                doneEvent = event as NonNullable<typeof doneEvent>;
                 break;
               } else if (event.type === "error" && typeof event.error === "string") {
                 errorEvent = { type: "error", error: event.error };
