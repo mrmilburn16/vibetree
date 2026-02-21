@@ -172,7 +172,7 @@ struct AppLiveActivityWidget: Widget {
     zip.file(`${options.projectName}/${path}`, filesMap[path] ?? "");
   }
 
-  const blob = await zip.generateAsync({ type: "nodebuffer" });
+  const blob = await zip.generateAsync({ type: "uint8array" });
 
   return new NextResponse(blob, {
     status: 200,
