@@ -329,7 +329,8 @@ export function useChat(
 
         const decoder = new TextDecoder();
         let buffer = "";
-        let doneEvent: { type: "done"; assistantMessage: unknown; buildStatus: string; projectFiles?: Array<{ path: string; content: string }> } | null = null;
+        type DoneEvent = { type: "done"; assistantMessage: unknown; buildStatus?: string; projectFiles?: Array<{ path: string; content: string }> };
+        let doneEvent: DoneEvent | null = null;
         let errorEvent: { type: "error"; error: string } | null = null;
 
         try {
@@ -426,7 +427,7 @@ export function useChat(
                   )
                 );
               } else if (event.type === "done" && event.assistantMessage) {
-                doneEvent = event as NonNullable<typeof doneEvent>;
+                doneEvent = event as DoneEvent;
                 break;
               } else if (event.type === "error" && typeof event.error === "string") {
                 errorEvent = { type: "error", error: event.error };
