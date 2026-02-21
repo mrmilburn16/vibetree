@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { QRCode } from "@/components/ui";
 import { BuildingIndicator } from "./BuildingIndicator";
 import { ReadyIndicator } from "./ReadyIndicator";
 import { FailedIndicator } from "./FailedIndicator";
@@ -15,8 +16,12 @@ const SCREEN_INSET = { top: 7.5, right: 5, bottom: 7.5, left: 5 };
 
 export function PreviewPane({
   buildStatus,
+  expoUrl = null,
+  onOpenRunOnDevice,
 }: {
   buildStatus: BuildStatus;
+  expoUrl?: string | null;
+  onOpenRunOnDevice?: () => void;
   onRunOnDevice?: () => void;
   onPublish?: () => void;
 }) {
@@ -24,31 +29,61 @@ export function PreviewPane({
 
   return (
     <div
-      className="flex h-full flex-col items-center justify-center p-8 sm:p-10"
-      style={{
-        background:
-          "radial-gradient(ellipse 90% 80% at 50% 45%, rgba(var(--accent-rgb), 0.06) 0%, transparent 55%), radial-gradient(ellipse 80% 70% at 50% 50%, var(--background-secondary) 0%, transparent 70%), var(--background-primary)",
-      }}
+      className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-8 py-8 sm:px-10 sm:py-10 md:flex-row md:items-center md:gap-0"
+      style={{ background: "var(--editor-pane-gradient)" }}
     >
-      <div className="flex flex-col items-center">
-        {useImageFrame ? (
-          <RealisticImageFrame
-            buildStatus={buildStatus}
-            screenInset={SCREEN_INSET}
-          />
-        ) : (
-          <CSSDeviceFrame buildStatus={buildStatus} />
-        )}
-        {/* Status below the device — no overlap */}
-        <div className="mt-5 flex justify-center">
-          {buildStatus === "building" && (
-            <BuildingIndicator className="animate-fade-in" />
+      {/* Left half: device stays centered in pane by sitting at the end of this flex-1 */}
+      <div className="flex min-w-0 flex-1 flex-col items-center justify-center md:flex-row md:justify-end">
+        <div className="flex flex-col items-center">
+          {useImageFrame ? (
+            <RealisticImageFrame
+              buildStatus={buildStatus}
+              screenInset={SCREEN_INSET}
+            />
+          ) : (
+            <CSSDeviceFrame buildStatus={buildStatus} />
           )}
-          {buildStatus === "live" && (
-            <ReadyIndicator label="LIVE" className="animate-ready-pop" />
-          )}
-          {buildStatus === "failed" && (
-            <FailedIndicator className="animate-fade-in" />
+          <div className="mt-5 flex justify-center">
+            {buildStatus === "building" && (
+              <BuildingIndicator className="animate-fade-in" />
+            )}
+            {buildStatus === "live" && (
+              <ReadyIndicator label="LIVE" className="animate-ready-pop" />
+            )}
+            {buildStatus === "failed" && (
+              <FailedIndicator className="animate-fade-in" />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Right half: QR centered in the space between iPhone and right edge of screen */}
+      <div className="mt-6 flex min-w-0 flex-1 flex-col items-center justify-center md:mt-0">
+        <div className="w-full max-w-[240px] rounded-lg border border-[var(--border-default)] bg-[var(--background-secondary)] p-3">
+          {expoUrl ? (
+            <div className="flex flex-col items-center gap-2">
+              <QRCode
+                value={expoUrl}
+                size={130}
+                className="shrink-0 rounded border border-[var(--border-default)] bg-white p-1.5"
+              />
+              <p className="text-body-muted text-center text-xs leading-snug">
+                Scan with Expo Go to preview on your iPhone
+              </p>
+              {onOpenRunOnDevice && (
+                <button
+                  type="button"
+                  onClick={onOpenRunOnDevice}
+                  className="text-xs text-[var(--link-default)] hover:underline"
+                >
+                  Show larger QR
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="text-body-muted text-center text-xs">
+              Build your app to see the preview QR
+            </p>
           )}
         </div>
       </div>
@@ -92,7 +127,7 @@ function CSSDeviceFrame({ buildStatus }: { buildStatus: BuildStatus }) {
             </div>
           )}
           {buildStatus === "building" && (
-            <div className="h-9 w-9 animate-spin rounded-full border-2 border-[var(--badge-building)] border-t-transparent" />
+            <div className="h-9 w-9 animate-spin rounded-full border-2 border-[var(--spinner-preview)] border-t-transparent" />
           )}
           {buildStatus === "live" && (
             <>
@@ -154,7 +189,7 @@ function RealisticImageFrame({
             </p>
           )}
           {buildStatus === "building" && (
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--badge-building)] border-t-transparent" />
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--spinner-preview)] border-t-transparent" />
           )}
           {buildStatus === "live" && (
             <p className="text-body-muted text-center text-xs">Streaming…</p>

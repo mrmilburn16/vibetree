@@ -106,10 +106,8 @@ export function ChatMessageList({
           const staggerDelay =
             msg.role === "assistant" ? Math.min(assistantIndex * 40, 200) : 0;
           const isReasoning = isReasoningMessage(msg);
-          const isFirstSummary =
-            msg.role === "assistant" &&
-            !isReasoning &&
-            !messages.slice(0, index).some((m) => m.role === "assistant" && !isReasoningMessage(m));
+          const isAssistantSummary = msg.role === "assistant" && !isReasoning;
+          const showAccent = isAssistantSummary;
 
           return (
           <div
@@ -118,9 +116,9 @@ export function ChatMessageList({
               (msg.role === "assistant" ? "animate-chat-message-in " : "animate-fade-in ") +
               (msg.role === "user"
                 ? "ml-auto w-fit max-w-[88%] rounded-2xl px-4 py-3 text-right shadow-sm " +
-                  "bg-[var(--background-secondary)] border border-[var(--border-default)] border-l-[var(--button-primary-bg)]/50"
+                  "bg-[var(--chat-bubble-user-bg)] border border-[var(--border-default)] border-l-[var(--chat-bubble-user-border-accent)]/50"
                 : "max-w-[88%] py-0.5") +
-              (isFirstSummary ? " border-l-2 border-l-[var(--button-primary-bg)]/30 pl-2 ml-0.5" : "")
+              (showAccent ? " chat-accent-full-box-v2" : "")
             }
             style={staggerDelay > 0 ? { animationDelay: `${staggerDelay}ms` } : undefined}
           >

@@ -52,6 +52,13 @@
   --badge-error: #EF4444;
   --badge-neutral: #71717A;
 
+  /* Loading spinner in preview/device frame — UX decision: keep building yellow or use theme accent (e.g. --button-primary-bg, --link-default) */
+  --spinner-preview: var(--badge-building);
+
+  /* User message bubble in chat — theme tint so "your" messages feel on-brand. Set to var(--background-secondary) for neutral. */
+  --chat-bubble-user-bg: color-mix(in srgb, var(--button-primary-bg) 14%, var(--background-secondary));
+  --chat-bubble-user-border-accent: var(--button-primary-bg);
+
   /* Semantic */
   --semantic-success: #22C55E;
   --semantic-warning: #EAB308;
@@ -60,6 +67,15 @@
 
   /* Accent RGB for theme-aware glows (rgba(var(--accent-rgb), 0.25)) */
   --accent-rgb: 99, 102, 241;
+
+  /* Editor panes: same gradient on preview and chat for consistency. To keep the chat column solid, remove the gradient from the aside in EditorLayout. */
+  --editor-pane-gradient: radial-gradient(ellipse 90% 80% at 50% 45%, rgba(var(--accent-rgb), 0.06) 0%, transparent 55%), radial-gradient(ellipse 80% 70% at 50% 50%, var(--background-secondary) 0%, transparent 70%), var(--background-primary);
+  /* Conversation box (input area): slightly darker than secondary (~5% less brightness) for subtlety. */
+  --chat-form-bg: color-mix(in srgb, var(--background-secondary) 95%, var(--background-primary));
+
+  /* Assistant message: full-box fog fill; opacity controls subtlety. */
+  --chat-assistant-accent-color: var(--button-primary-bg);
+  --chat-assistant-accent-opacity: 0.25;
 
   /* Typography scale (px) */
   --text-xs: 12px;

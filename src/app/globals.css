@@ -32,7 +32,7 @@
   --color-semantic-error: var(--semantic-error);
   --color-semantic-info: var(--semantic-info);
 
-  /* --font-sans is set by fonts.css from data-font so the switcher can change it */
+  /* --font-sans is Geist (fonts.css). Use for all UI copy. */
   --font-mono: var(--font-geist-mono);
 }
 
@@ -290,6 +290,19 @@ body {
 }
 .animate-chat-word-in {
   animation: chat-word-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Chat: assistant message — full-box fog fill. Tokens: --chat-assistant-accent-color, --chat-assistant-accent-opacity. */
+.chat-accent-full-box-v2 {
+  border-left: none;
+  background: radial-gradient(
+    ellipse 140% 140% at 50% 50%,
+    color-mix(in srgb, var(--chat-assistant-accent-color) calc(var(--chat-assistant-accent-opacity) * 35 * 1%)) 0%,
+    transparent 72%
+  );
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  margin-left: 0.125rem;
 }
 
 /* Landing: full-page scroll snap (slide-like) */

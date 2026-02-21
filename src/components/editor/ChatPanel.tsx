@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button, Textarea, DropdownSelect } from "@/components/ui";
 import { Send } from "lucide-react";
@@ -14,6 +14,13 @@ import { useCredits } from "@/contexts/CreditsContext";
 import { LLM_OPTIONS, DEFAULT_LLM } from "@/lib/llm-options";
 
 const LLM_STORAGE_KEY = "vibetree-llm";
+
+const CHAT_PLACEHOLDERS = [
+  "e.g. A fitness tracker with activity rings",
+  "e.g. A todo list with due dates",
+  "e.g. A habit tracker with streaks",
+  "e.g. A recipe app with ingredients list",
+];
 
 const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
   ...opt,
@@ -86,6 +93,20 @@ export function ChatPanel({
   );
 
   const canSendWithCredits = canSend && hasCreditsForMessage;
+  const showCharCount = input.length > 0 && input.length >= 0.8 * maxMessageLength;
+  const placeholderIndex = messages.length % CHAT_PLACEHOLDERS.length;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const sendButtonTitle =
+    !canSend ? "Building…" : !hasCreditsForMessage ? "Out of credits" : "Send message (1 credit)";
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const h = Math.min(el.scrollHeight, 120);
+    el.style.height = `${h}px`;
+  }, [input]);
 
   return (
     <div className="flex h-full flex-col">
@@ -105,13 +126,18 @@ export function ChatPanel({
 
       <ChatMessageList messages={messages} isTyping={isTyping} />
 
-      <form onSubmit={handleSubmit} className="shrink-0 border-t border-[var(--border-default)] bg-[var(--background-primary)] p-4 pt-4">
+      <form onSubmit={handleSubmit} className="shrink-0 border-t border-[var(--border-default)] p-4 pt-4" style={{ background: "var(--chat-form-bg)" }}>
+        <label htmlFor="chat-input" className="sr-only">
+          Describe your app
+        </label>
         <div className="flex gap-2 items-center">
           <Textarea
+            ref={textareaRef}
+            id="chat-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="e.g. A fitness tracker with activity rings"
-            className="min-h-[44px] min-w-0 flex-1 resize-none rounded-[24px] py-3 px-4"
+            placeholder={CHAT_PLACEHOLDERS[placeholderIndex]}
+            className="min-h-[44px] max-h-[120px] min-w-0 flex-1 resize-none rounded-[24px] py-3 px-4 overflow-y-auto"
             rows={1}
             maxLength={maxMessageLength + 500}
             onKeyDown={(e) => {
@@ -126,7 +152,8 @@ export function ChatPanel({
             variant="primary"
             disabled={!canSendWithCredits || !input.trim() || input.length > maxMessageLength}
             className={`shrink-0 p-2.5 transition-transform duration-75 ${justSent ? "scale-95" : "scale-100"}`}
-            aria-label={!canSend ? "Stop" : !hasCreditsForMessage ? "Out of credits" : "Send (1 credit)"}
+            aria-label={sendButtonTitle}
+            title={sendButtonTitle}
           >
             {canSend ? (
               <Send className="h-4 w-4" aria-hidden />
@@ -135,13 +162,20 @@ export function ChatPanel({
             )}
           </Button>
         </div>
+        {showCharCount && (
+          <p className="mt-1.5 text-right text-caption text-[var(--text-tertiary)]" role="status" aria-live="polite">
+            <span className={input.length > maxMessageLength ? "text-[var(--semantic-error)]" : ""}>
+              {input.length.toLocaleString()} / {maxMessageLength.toLocaleString()}
+            </span>
+          </p>
+        )}
         {input.length > maxMessageLength && (
-          <p className="mt-2 text-caption text-[var(--semantic-error)]">
+          <p className="mt-2 text-caption text-[var(--semantic-error)]" role="status" aria-live="polite">
             Message too long (max {maxMessageLength} characters)
           </p>
         )}
         {!hasCreditsForMessage && (
-          <p className="mt-2 text-caption text-[var(--semantic-warning)]">
+          <p className="mt-2 text-caption text-[var(--semantic-warning)]" role="status" aria-live="polite">
             You&apos;re out of credits. <Link href="/credits" className="text-[var(--link-default)] hover:underline">Buy more</Link> to send messages.
           </p>
         )}

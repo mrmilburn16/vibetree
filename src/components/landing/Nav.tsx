@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
-import { FontSwitcher } from "@/components/FontSwitcher";
 
 export function Nav() {
   const pathname = usePathname();
@@ -52,7 +51,6 @@ export function Nav() {
           </span>
         </div>
         <div className="flex items-center gap-4 sm:gap-6">
-          <FontSwitcher />
           <ThemeSwitcher />
           <Link
             href="/#features"

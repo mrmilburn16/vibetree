@@ -1,30 +1,9 @@
 /**
- * Font switcher: set data-font on <html> to change the UI font.
- * Default (no attribute) = geist.
+ * App typography: Geist only.
+ * --font-sans is used for all UI copy (body, headings, buttons, etc.).
+ * --font-geist-mono is used for code.
  */
 
-:root,
-[data-font="geist"] {
+:root {
   --font-sans: var(--font-geist-sans);
-}
-
-[data-font="inter"] {
-  --font-sans: var(--font-inter);
-}
-
-[data-font="plus-jakarta"] {
-  --font-sans: var(--font-plus-jakarta-sans);
-}
-
-[data-font="outfit"] {
-  --font-sans: var(--font-outfit);
-}
-
-[data-font="dm-sans"] {
-  --font-sans: var(--font-dm-sans);
-}
-
-/* Obvious test: serif — if you see serif text, the switcher is working */
-[data-font="playfair"] {
-  --font-sans: var(--font-playfair-display);
 }

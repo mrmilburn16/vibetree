@@ -58,16 +58,23 @@ export function CreditsWidget() {
         </span>
         <span>{balance}</span>
         <span className="text-[var(--text-tertiary)]">credits</span>
-        <span className="text-[var(--text-tertiary)]" aria-hidden>
+        <span
+          className={`inline-flex text-[var(--text-tertiary)] transition-transform duration-200 ease-out ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        >
           <IconChevronDown />
         </span>
       </button>
 
-      {open && (
-        <div
-          className="absolute right-0 top-full z-50 mt-1 min-w-[220px] rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] py-2 shadow-lg"
-          role="menu"
-        >
+      <div
+        aria-hidden={!open}
+        className={`
+          absolute right-0 top-full z-50 mt-1 min-w-[220px] rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] py-2 shadow-lg
+          transition-[opacity,transform] duration-200 ease-out
+          ${open ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0 pointer-events-none"}
+        `}
+        role="menu"
+      >
           <div className="border-b border-[var(--border-default)] px-4 py-3">
             <p className="text-caption text-[var(--text-tertiary)]">Balance</p>
             <p className="text-xl font-semibold text-[var(--text-primary)]">{balance} credits</p>
@@ -98,7 +105,6 @@ export function CreditsWidget() {
             </Link>
           </div>
         </div>
-      )}
     </div>
   );
 }

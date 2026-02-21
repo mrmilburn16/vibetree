@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Button, BetaBadge } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
-import { FontSwitcher } from "@/components/FontSwitcher";
 import { getProjects, createProject, deleteProject, duplicateProject, type Project } from "@/lib/projects";
 import { DashboardCard, NewAppCard } from "@/components/dashboard/DashboardCard";
 import { DashboardLayout2 } from "@/components/dashboard/DashboardLayout2";
@@ -156,7 +155,6 @@ export default function DashboardPage() {
             <BetaBadge />
           </div>
           <div className="flex items-center gap-3">
-            <FontSwitcher />
             <ThemeSwitcher />
             <div
               className="flex rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-0.5"

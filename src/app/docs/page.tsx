@@ -166,7 +166,7 @@ export default function DocsPage() {
                 <li><strong>Describe your app</strong> — In the chat panel, type what you want (e.g. “A todo list with due dates”). The AI will generate Swift code and you’ll see the build status and live preview.</li>
               </ol>
               <p>
-                From there you can tweak the project name and bundle ID in <strong>Project settings</strong>, use <strong>Run on device</strong> to install on your iPhone, or <strong>Publish</strong> to submit to the App Store (on Pro or Team plans).
+                From there you can tweak the project name and bundle ID in <strong>Project settings</strong>, use <strong>Run on device</strong> to preview on your iPhone with Expo Go, use <strong>Share</strong> to get a TestFlight link or invite testers, or <strong>Publish</strong> to submit to the App Store (on Pro or Team plans).
               </p>
             </DocSection>
 
@@ -181,7 +181,7 @@ export default function DocsPage() {
 
             <DocSection id="the-editor" title="The editor">
               <p>
-                The editor is a single-page layout: <strong>Chat</strong> on the left (or top on small screens), <strong>Preview</strong> in the center with an optional device frame, and access to <strong>Project settings</strong>, <strong>Run on device</strong>, and <strong>Publish</strong> from the header or preview area.
+                The editor is a single-page layout: <strong>Chat</strong> on the left (or top on small screens), <strong>Preview</strong> in the center with an optional device frame, and access to <strong>Project settings</strong>, <strong>Run on device</strong>, <strong>Share</strong>, and <strong>Publish</strong> from the header or preview area.
               </p>
               <p>
                 You describe changes or new features in natural language. The AI responds with suggested code edits and the project builds; when the build succeeds, the preview shows the live app state. Build status is shown in the chat header and in the preview pane (idle → building → live or failed).
@@ -217,21 +217,16 @@ export default function DocsPage() {
 
             <DocSection id="run-on-device" title="Run on device">
               <p>
-                Run on device lets you test your app on your physical iPhone. The modal offers three paths:
+                <strong>Run on device</strong> is for previewing your app on your iPhone with <strong>Expo Go</strong>. Scan a QR code with your iPhone (camera or Expo Go app); your app loads in Expo Go with no install step and no Apple Developer account. We generate an Expo/React Native version of your app and serve it; the QR encodes the URL.
               </p>
-              <ul>
-                <li><strong>Open in Expo Go</strong> (easiest) — Scan a QR code with your iPhone (camera or Expo Go app). Your app loads in the Expo Go app with no install step and no Apple Developer account. We generate an Expo/React Native version of your app and serve it; the QR code encodes the URL.</li>
-                <li><strong>Get TestFlight link</strong> — We build your app and give you a link (and QR code) to install via TestFlight. No Mac required; you get a full native app on your iPhone. Click &quot;Get TestFlight link&quot; to receive the link and optionally copy or scan the QR code.</li>
-                <li><strong>Desktop agent for Mac</strong> — If you have a Mac, download our desktop agent and connect your iPhone via cable to install the app directly.</li>
-              </ul>
               <p>
-                Run on device consumes credits on Pro and Team plans. The Expo Go path may use fewer credits than a full TestFlight build depending on your plan.
+                A small Expo Go QR strip appears in the <strong>Preview</strong> pane below the device frame so you can scan without opening a modal. Use the header button &quot;Run on device&quot; to open a modal with a larger QR if you prefer. Run on device (Expo Go) consumes credits on Pro and Team plans.
               </p>
             </DocSection>
 
             <DocSection id="testflight-invites" title="TestFlight invites">
               <p>
-                In the Run on device modal, the <strong>Invite testers</strong> section lets you send TestFlight invitations by email. Enter one or more email addresses (comma- or newline-separated) and click <strong>Send invites</strong>. We add those addresses as external testers and send them Apple&apos;s TestFlight invitation email so they can install your app. A build must already be in TestFlight (e.g. after you&apos;ve used &quot;Get TestFlight link&quot;) for invites to work.
+                The <strong>Share</strong> modal (header button &quot;Share&quot;) is where you get a TestFlight link, invite testers by email, or install via the desktop agent. <strong>Get TestFlight link</strong> — we build your app and give you a link (and QR code) to install via TestFlight; no Mac required. <strong>Invite testers</strong> — enter one or more email addresses (comma- or newline-separated) and click <strong>Send invites</strong>; we add them as external testers and send Apple&apos;s TestFlight invitation email. A build must already be in TestFlight (e.g. after you&apos;ve used &quot;Get TestFlight link&quot;) for invites to work. <strong>Desktop agent for Mac</strong> — download the agent and connect your iPhone via cable to install the app directly.
               </p>
             </DocSection>
 
@@ -344,7 +339,7 @@ Body: { "message": string }`}</CodeBlock>
               <p>Sends a message to the AI for that project. Returns an object with <code>assistantMessage</code> and <code>buildStatus</code>. Currently the implementation is mock (canned responses and build success).</p>
               <p><strong>Run on device URLs</strong></p>
               <CodeBlock>GET /api/projects/[id]/run-on-device</CodeBlock>
-              <p>Returns <code>expoUrl</code> and <code>testFlightLink</code> for the project so the Run on device modal can show QR codes and copy link. Mock implementation returns placeholder URLs; production will trigger or look up builds.</p>
+              <p>Returns <code>expoUrl</code> and <code>testFlightLink</code> for the project. <code>expoUrl</code> is used in the preview pane and Run on device modal (Expo Go QR); <code>testFlightLink</code> is used in the Share modal. Mock implementation returns placeholder URLs; production will trigger or look up builds.</p>
               <p><strong>Invite TestFlight testers</strong></p>
               <CodeBlock>{`POST /api/projects/[id]/invite-testers
 Content-Type: application/json
