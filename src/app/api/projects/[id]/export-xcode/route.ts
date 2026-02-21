@@ -172,9 +172,11 @@ struct AppLiveActivityWidget: Widget {
     zip.file(`${options.projectName}/${path}`, filesMap[path] ?? "");
   }
 
-  const blob = await zip.generateAsync({ type: "uint8array" });
+  const bytes = await zip.generateAsync({ type: "uint8array" });
+  // NextResponse BodyInit typing on some deployments doesn't accept Uint8Array; use an ArrayBuffer slice.
+  const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
-  return new NextResponse(blob, {
+  return new NextResponse(body, {
     status: 200,
     headers: {
       "Content-Type": "application/zip",
