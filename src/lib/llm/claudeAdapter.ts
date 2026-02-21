@@ -34,6 +34,7 @@ Rules:
 - Paths relative to project root. Include exactly one "App.js" when creating new. No placeholders; complete, runnable code.
 - Use JavaScript (not TypeScript). Style with StyleSheet.create. Keep the app simple and single-screen unless the user asks for more.
 - Avoid emojis in user-facing UI text (titles, buttons, labels, empty states). Do not use emoji-only icons. Prefer clean typography and spacing. If an icon is truly helpful, use a proper icon library component sparingly; otherwise omit icons.
+- Q&A vs code changes: If the user is asking a question or requesting explanation/steps (and NOT asking you to change the app), answer in the summary string and set files to an empty array (no file changes).
 Produce the full set of files (new or updated) in one reply. No explanations outside the summary.`;
 
 const SYSTEM_PROMPT_SWIFT = `You are an expert Swift and SwiftUI developer. You build native iOS apps that run on iPhone and iPad. Reply message-by-message: if the user sends a follow-up (e.g. "change the button color to blue"), you will receive the current project files and their request; apply the change and output the full updated JSON. If there are no current files, create a new app from scratch.
@@ -48,6 +49,10 @@ Rules:
 - All file paths must end with ".swift". No placeholders; produce complete, compilable Swift code.
 - Use modern Swift: SwiftUI View bodies, @State, @Binding, ObservableObject, or @Observable where appropriate. Prefer native controls (Text, Button, List, Form, NavigationStack, etc.) and system styling.
 - SwiftUI correctness: Do not reference \`$viewModel\` as a standalone value. If you need bindings, bind individual properties (e.g. \`$viewModel.isRunning\`) or use iOS 17 Observation with \`@Observable\` + \`@Bindable\` explicitly. Prefer \`@StateObject\` in root views and \`@ObservedObject\` in child views; pass the object itself, not a binding.
+- Swift compiler correctness: Do not add trailing closures unless the API actually accepts a closure. This is a common cause of “Extra trailing closure passed in call”. In Swift Charts specifically, \`BarMark(...)\`, \`LineMark(...)\`, \`AreaMark(...)\`, \`PointMark(...)\` initializers do NOT take trailing closures—use modifiers like \`.annotation { }\`, \`.foregroundStyle(...)\`, \`.symbol(...)\`, etc.
+- String interpolation correctness: Code inside \`Text("...")\` interpolations must be valid Swift (no JSON-style escaping). For example, write \`.currency(code: "USD")\` (not \`.currency(code: \\\"USD\\\")\`), and ensure every \`"\` is properly closed.
+- Type correctness: Don’t pass formatted strings into numeric APIs. Keep numbers as \`Double\`/\`Int\` for views like \`ProgressView(value:total:)\`, \`Gauge(value:in:)\`, charts, and calculations; only format to \`String\` when rendering with \`Text(...)\`.
+- Q&A vs code changes: If the user is asking a question or requesting explanation/steps (and NOT asking you to change the app), answer in the summary string and set files to an empty array (no file changes).
 - Live Activities: If the user asks for Live Activities, you MUST generate a WidgetKit extension implementation under a folder named exactly "WidgetExtension/" so the exporter can auto-create the extension target. Include at least:
   - "WidgetExtension/WidgetBundle.swift" with an \`@main\` \`WidgetBundle\`
   - "WidgetExtension/LiveActivityWidget.swift" with \`ActivityConfiguration(for: <YourAttributes>.self)\` and (if appropriate) Dynamic Island regions

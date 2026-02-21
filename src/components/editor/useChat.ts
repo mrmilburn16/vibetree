@@ -48,7 +48,11 @@ const MOCK_RESPONSES = [
   },
 ];
 
-const API_TIMEOUT_MS = 130_000;
+// Abort only when the stream is truly stalled.
+// We do NOT time out while tokens are actively increasing.
+const CONNECTING_TIMEOUT_MS = 180_000;
+const NO_OUTPUT_TIMEOUT_MS = 240_000;
+const TOKEN_STALL_TIMEOUT_MS = 6 * 60_000;
 
 interface QueuedMessage {
   text: string;
@@ -154,7 +158,15 @@ export function useChat(
 
     const ac = new AbortController();
     abortControllerRef.current = ac;
-    const timeoutId = setTimeout(() => ac.abort(), API_TIMEOUT_MS);
+    let abortReason: string | null = null;
+    const abortWithReason = (reason: string) => {
+      abortReason = reason;
+      try {
+        ac.abort();
+      } catch {
+        // ignore
+      }
+    };
 
     setBuildStatus("building");
 
@@ -237,13 +249,38 @@ export function useChat(
       );
     }, 1000);
 
+    const watchdog = setInterval(() => {
+      const elapsedMs = Date.now() - localStartedAt;
+      if (!sawServerProgress) {
+        if (elapsedMs > CONNECTING_TIMEOUT_MS) {
+          abortWithReason("Request timed out while connecting. Try again.");
+        }
+        return;
+      }
+
+      if (lastReceivedChars <= 0) {
+        if (elapsedMs > NO_OUTPUT_TIMEOUT_MS) {
+          abortWithReason("Request timed out waiting for output. Try again.");
+        }
+        return;
+      }
+
+      const stalledMs = Date.now() - lastIncreaseAt;
+      if (stalledMs > TOKEN_STALL_TIMEOUT_MS) {
+        abortWithReason(
+          `Request stalled (no new tokens for ${Math.max(1, Math.round(stalledMs / 1000))}s). Try again.`
+        );
+      }
+    }, 2000);
+
     const removeStreamMessage = () => {
       clearInterval(localTick);
+      clearInterval(watchdog);
       setMessages((prev) => prev.filter((m) => m.id !== progressMessageId));
     };
 
     const finish = (opts: { success?: boolean; error?: string }) => {
-      clearTimeout(timeoutId);
+      clearInterval(watchdog);
       abortControllerRef.current = null;
       if (opts.error) {
         setBuildStatus("failed");
@@ -400,7 +437,7 @@ export function useChat(
           }
         } catch (err) {
           if (err && typeof err === "object" && "name" in err && (err as Error).name === "AbortError") {
-            finish({ error: "Request timed out. Try again or shorten your message." });
+            finish({ error: abortReason ?? "Request timed out. Try again." });
             return;
           }
           finish({ error: err instanceof Error ? err.message : "Something went wrong." });
@@ -427,13 +464,16 @@ export function useChat(
             estimatedCostUsd?: number;
           };
           const rawContent = am?.content ?? "";
+          const editedFiles = Array.isArray(am?.editedFiles) ? am.editedFiles : [];
+          const shouldPrefixBuilt = editedFiles.length > 0;
           const content =
             rawContent.trim().length === 0
-              ? "App built."
-              : /^app built\b/i.test(rawContent.trim())
-                ? rawContent
-                : `App built. ${rawContent}`;
-          const editedFiles = Array.isArray(am?.editedFiles) ? am.editedFiles : [];
+              ? shouldPrefixBuilt
+                ? "App built."
+                : "Done."
+              : shouldPrefixBuilt && !/^app built\b/i.test(rawContent.trim())
+                ? `App built. ${rawContent}`
+                : rawContent;
           const usage =
             am?.usage &&
             typeof am.usage.input_tokens === "number" &&
@@ -459,7 +499,7 @@ export function useChat(
       })
       .catch((err) => {
         if (err?.name === "AbortError") {
-          finish({ error: "Request timed out. Try again or shorten your message." });
+          finish({ error: abortReason ?? "Request timed out. Try again." });
         } else {
           finish({ error: err?.message ?? "Something went wrong. Please try again." });
         }

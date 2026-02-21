@@ -18,6 +18,24 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       content = content.replace(/\$viewModel(?!\.)/g, "viewModel");
     }
 
+    // Common mistake: escaping quotes inside string interpolation Swift code,
+    // e.g. `.currency(code: \"USD\")` which breaks the string literal.
+    content = content.replace(
+      /\.currency\(code:\s*\\\"([A-Za-z]{3})\\\"\)/g,
+      '.currency(code: "$1")'
+    );
+
+    // Common mistake: using `.accent` as a ShapeStyle/Color member; SwiftUI uses `.accentColor`.
+    // Examples we fix: `.foregroundStyle(.accent)` / `.fill(.accent)` / `Color.accent`
+    content = content.replace(/\.accent(?!Color)\b/g, ".accentColor");
+
+    // Common mistake: passing a numeric string literal where a Double is expected.
+    // Examples we fix: `ProgressView(value: "0.7", total: 1)` / `Gauge(value: "42", in: 0...100)`
+    content = content.replace(
+      /\b(ProgressView|Gauge)\(\s*value:\s*"(\d+(?:\.\d+)?)"\s*,/g,
+      "$1(value: $2,"
+    );
+
     return { ...f, content };
   });
 }

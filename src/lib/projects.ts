@@ -7,6 +7,12 @@ export interface Project {
 
 const STORAGE_KEY = "vibetree-projects";
 
+function makeDefaultBundleId(id: string): string {
+  const raw = id.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const suffix = raw && /^[a-z]/.test(raw) ? raw : `app${raw || "project"}`;
+  return `com.vibetree.${suffix}`.slice(0, 60);
+}
+
 export function getProjects(): Project[] {
   if (typeof window === "undefined") return [];
   try {
@@ -29,7 +35,7 @@ export function createProject(name?: string): Project {
   const project: Project = {
     id,
     name: name || "Untitled app",
-    bundleId: `com.vibetree.${id.replace("proj_", "").replace(/[^a-z0-9]/gi, "")}`.slice(0, 60),
+    bundleId: makeDefaultBundleId(id),
     updatedAt: Date.now(),
   };
   projects.unshift(project);

@@ -20,6 +20,10 @@ function sanitizeXcodeName(name: string, fallback: string): string {
 
 type SwiftFile = { path: string; content: string };
 
+function isValidBundleId(value: string): boolean {
+  return /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/i.test(value);
+}
+
 function buildWidgetInfoPlist(): string {
   // Minimal WidgetKit extension Info.plist; required for the extension target.
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -199,7 +203,8 @@ export async function POST(
   const providedTeam = typeof body?.developmentTeam === "string" ? body.developmentTeam : "";
   const project = getProject(id) ?? ensureProject(id, providedName || "Untitled app");
   const projectName = sanitizeXcodeName(providedName || project.name, "VibetreeApp");
-  const bundleId = providedBundleId || project.bundleId || "com.vibetree.app";
+  const candidateBundleId = (providedBundleId || project.bundleId || "com.vibetree.app").trim();
+  const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";
   const developmentTeam = providedTeam.trim();
   return await buildZipFromSwiftFiles(files, id.slice(0, 12), {
     projectName,
@@ -223,7 +228,8 @@ export async function GET(
   }
   const project = getProject(id) ?? ensureProject(id, "Untitled app");
   const projectName = sanitizeXcodeName(project.name, "VibetreeApp");
-  const bundleId = project.bundleId || "com.vibetree.app";
+  const candidateBundleId = (project.bundleId || "com.vibetree.app").trim();
+  const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";
 
   const paths = getProjectFilePaths(id).filter((p) => p.endsWith(".swift"));
   const files = getProjectFiles(id);

@@ -74,32 +74,35 @@ export async function POST(
       let hasEmittedFirstTokens = false;
       let discoveredFilesCount = 0;
 
-      const enqueuePhase = (phase: string) => {
+      const safeEnqueue = (obj: object) => {
         if (closed) return;
-        controller.enqueue(
-          encodeLine({
-            type: "phase",
-            phase,
-            elapsedMs: Date.now() - startedAt,
-          })
-        );
+        try {
+          controller.enqueue(encodeLine(obj));
+        } catch {
+          // The client can disconnect at any time; ignore writes after close.
+        }
+      };
+
+      const enqueuePhase = (phase: string) => {
+        safeEnqueue({
+          type: "phase",
+          phase,
+          elapsedMs: Date.now() - startedAt,
+        });
       };
 
       const enqueueProgress = (receivedChars: number) => {
-        if (closed) return;
         const outputTokensSoFar = Math.round(receivedChars / 4);
         const estimatedCostUsdSoFar = estimateCostUsd(model, {
           input_tokens: estimatedInputTokens,
           output_tokens: outputTokensSoFar,
         });
-        controller.enqueue(
-          encodeLine({
-            type: "progress",
-            receivedChars,
-            estimatedCostUsdSoFar,
-            elapsedMs: Date.now() - startedAt,
-          })
-        );
+        safeEnqueue({
+          type: "progress",
+          receivedChars,
+          estimatedCostUsdSoFar,
+          elapsedMs: Date.now() - startedAt,
+        });
       };
 
       // Emit immediately so the client never sits on "Connecting…" silently.
@@ -133,14 +136,12 @@ export async function POST(
                 },
                 onDiscoveredFilePath: (path) => {
                   discoveredFilesCount += 1;
-                  controller.enqueue(
-                    encodeLine({
-                      type: "file",
-                      path,
-                      count: discoveredFilesCount,
-                      elapsedMs: Date.now() - startedAt,
-                    })
-                  );
+                  safeEnqueue({
+                    type: "file",
+                    path,
+                    count: discoveredFilesCount,
+                    elapsedMs: Date.now() - startedAt,
+                  });
                 },
               }
             );
@@ -191,32 +192,32 @@ export async function POST(
         }
 
         enqueuePhase("done_preview_updating");
-        controller.enqueue(
-          encodeLine({
-            type: "done",
-            assistantMessage: {
-              id: `assistant-${Date.now()}`,
-              role: "assistant",
-              content: result.content,
-              editedFiles,
-              ...(usage && { usage }),
-              ...(estimatedCostUsd !== undefined && { estimatedCostUsd }),
-            },
-            ...(projectFilesForClient && { projectFiles: projectFilesForClient }),
-            buildStatus: "live",
-          })
-        );
+        safeEnqueue({
+          type: "done",
+          assistantMessage: {
+            id: `assistant-${Date.now()}`,
+            role: "assistant",
+            content: result.content,
+            editedFiles,
+            ...(usage && { usage }),
+            ...(estimatedCostUsd !== undefined && { estimatedCostUsd }),
+          },
+          ...(projectFilesForClient && { projectFiles: projectFilesForClient }),
+          buildStatus: "live",
+        });
       } catch (err) {
         const errorMessage =
           err instanceof Error ? err.message : "AI request failed";
         console.error("[message/stream] error", errorMessage);
-        controller.enqueue(
-          encodeLine({ type: "error", error: errorMessage })
-        );
+        safeEnqueue({ type: "error", error: errorMessage });
       } finally {
         clearInterval(heartbeat);
         closed = true;
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // ignore
+        }
       }
     },
   });

@@ -32,6 +32,10 @@ export function RunOnDeviceModal({
   const [teamId, setTeamId] = useState("");
   const [bundleIdOverride, setBundleIdOverride] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [validateLoading, setValidateLoading] = useState(false);
+  const [validateJobId, setValidateJobId] = useState<string | null>(null);
+  const [validateStatus, setValidateStatus] = useState<string | null>(null);
+  const [validateLogTail, setValidateLogTail] = useState<string[]>([]);
 
   const projectType =
     projectTypeProp ??
@@ -75,6 +79,35 @@ export function RunOnDeviceModal({
       .catch(() => setError("Could not start preview. Try again."))
       .finally(() => setLoading(false));
   }, [isOpen, projectId, projectType, expoUrlProp, onExpoUrl]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!validateJobId) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/build-jobs/${validateJobId}`);
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        const job = data?.job;
+        if (!job || cancelled) return;
+        const status = typeof job.status === "string" ? job.status : null;
+        setValidateStatus(status);
+        const logs = Array.isArray(job.logs) ? job.logs.filter((x: any) => typeof x === "string") : [];
+        setValidateLogTail(logs.slice(-10));
+        if (status === "succeeded" || status === "failed") {
+          return;
+        }
+        setTimeout(poll, 2000);
+      } catch {
+        // ignore
+      }
+    };
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, validateJobId]);
 
   async function handleDownloadForXcode() {
     setDownloadLoading(true);
@@ -150,6 +183,67 @@ export function RunOnDeviceModal({
     }
   }
 
+  async function handleValidateBuild() {
+    setValidateLoading(true);
+    setError(null);
+    setValidateStatus("queued");
+    setValidateLogTail([]);
+    try {
+      // Prefer client-cached Swift files (survives refresh/dev reload).
+      let files: any[] = [];
+      if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem(`${PROJECT_FILES_STORAGE_PREFIX}${projectId}`);
+          const parsed = raw ? JSON.parse(raw) : null;
+          const arr = Array.isArray(parsed?.files) ? parsed.files : [];
+          files = arr;
+        } catch {}
+      }
+
+      // Best-effort: include project name + bundle id for consistent scheme/id.
+      let projectName = "Untitled app";
+      let bundleId = "";
+      if (typeof window !== "undefined") {
+        try {
+          const projectsRaw = localStorage.getItem("vibetree-projects");
+          const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
+          const p = Array.isArray(projects) ? projects.find((x: any) => x?.id === projectId) : null;
+          if (p?.name) projectName = String(p.name);
+          if (p?.bundleId) bundleId = String(p.bundleId);
+        } catch {}
+      }
+
+      const finalBundleId = bundleIdOverride.trim() || bundleId;
+      const finalTeamId = teamId.trim();
+
+      const res = await fetch(`/api/projects/${projectId}/validate-xcode`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(files.length > 0 ? { files } : {}),
+          projectName,
+          bundleId: finalBundleId,
+          developmentTeam: finalTeamId,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? "Validation request failed");
+      }
+      const data = await res.json().catch(() => ({}));
+      const jobId = typeof data?.job?.id === "string" ? data.job.id : null;
+      if (!jobId) throw new Error("No job id returned");
+      setValidateJobId(jobId);
+      setValidateStatus("queued");
+      setValidateLogTail([`Queued build validation job ${jobId}`]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Validation failed. Try again.");
+      setValidateStatus("failed");
+    } finally {
+      setValidateLoading(false);
+    }
+  }
+
   async function handleDownloadSource() {
     setDownloadLoading(true);
     setError(null);
@@ -201,6 +295,35 @@ export function RunOnDeviceModal({
             >
               {downloadLoading ? "Preparing…" : "Download for Xcode (.zip)"}
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleValidateBuild}
+              disabled={validateLoading}
+              className="w-full"
+            >
+              {validateLoading ? "Queueing build check…" : "Validate build on Mac (xcodebuild)"}
+            </Button>
+            {validateStatus && (
+              <div className="rounded border border-[var(--border-default)] bg-[var(--background-default)] p-3">
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  Build validation status:{" "}
+                  <span className="text-[var(--text-secondary)]">{validateStatus}</span>
+                  {validateJobId ? (
+                    <span className="text-[var(--text-tertiary)]"> · job {validateJobId}</span>
+                  ) : null}
+                </p>
+                {validateLogTail.length > 0 && (
+                  <pre className="mt-2 max-h-[160px] overflow-auto rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                    {validateLogTail.join("\n")}
+                  </pre>
+                )}
+                <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+                  Requires a Mac runner with Xcode. Run <span className="font-mono">npm run mac-runner</span> on your Mac with{" "}
+                  <span className="font-mono">MAC_RUNNER_TOKEN</span> set.
+                </p>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setShowAdvanced((v) => !v)}

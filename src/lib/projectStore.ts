@@ -7,6 +7,13 @@ export interface ProjectRecord {
 
 const store = new Map<string, ProjectRecord>();
 
+function makeDefaultBundleId(id: string): string {
+  const raw = id.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  // Each dot-separated segment should start with a letter for best compatibility.
+  const suffix = raw && /^[a-z]/.test(raw) ? raw : `app${raw || "project"}`;
+  return `com.vibetree.${suffix}`.slice(0, 60);
+}
+
 export function getProject(id: string): ProjectRecord | undefined {
   return store.get(id);
 }
@@ -15,7 +22,7 @@ export function getProject(id: string): ProjectRecord | undefined {
 export function ensureProject(id: string, name = "Untitled app"): ProjectRecord {
   const existing = store.get(id);
   if (existing) return existing;
-  const bundleId = `com.vibetree.${id.replace("proj_", "").replace(/[^a-z0-9]/gi, "")}`.slice(0, 60);
+  const bundleId = makeDefaultBundleId(id);
   const project: ProjectRecord = { id, name, bundleId, updatedAt: Date.now() };
   store.set(id, project);
   return project;
@@ -27,7 +34,7 @@ export function listProjects(): ProjectRecord[] {
 
 export function createProject(name: string): ProjectRecord {
   const id = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-  const bundleId = `com.vibetree.${id.replace("proj_", "").replace(/[^a-z0-9]/gi, "")}`.slice(0, 60);
+  const bundleId = makeDefaultBundleId(id);
   const project: ProjectRecord = { id, name, bundleId, updatedAt: Date.now() };
   store.set(id, project);
   return project;
