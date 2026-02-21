@@ -45,6 +45,10 @@ export function EditorLayout({ project }: { project: Project }) {
           >
             Dashboard
           </Link>
+          <span
+            className="h-6 w-px shrink-0 bg-[var(--text-tertiary)]"
+            aria-hidden
+          />
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}

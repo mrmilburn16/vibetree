@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Maximize2 } from "lucide-react";
 import { QRCode } from "@/components/ui";
 import { BuildingIndicator } from "./BuildingIndicator";
 import { ReadyIndicator } from "./ReadyIndicator";
@@ -59,27 +60,31 @@ export function PreviewPane({
 
       {/* Right half: QR centered in the space between iPhone and right edge of screen */}
       <div className="mt-6 flex min-w-0 flex-1 flex-col items-center justify-center md:mt-0">
-        <div className="w-full max-w-[240px] rounded-lg border border-[var(--border-default)] bg-[var(--background-secondary)] p-3">
+        <div className="relative w-full max-w-[240px] rounded-lg border border-[var(--border-default)] bg-[var(--background-secondary)] p-3">
           {expoUrl ? (
-            <div className="flex flex-col items-center gap-2">
-              <QRCode
-                value={expoUrl}
-                size={130}
-                className="shrink-0 rounded border border-[var(--border-default)] bg-white p-1.5"
-              />
-              <p className="text-body-muted text-center text-xs leading-snug">
-                Scan with Expo Go to preview on your iPhone
-              </p>
+            <>
               {onOpenRunOnDevice && (
                 <button
                   type="button"
                   onClick={onOpenRunOnDevice}
-                  className="text-xs text-[var(--link-default)] hover:underline"
+                  aria-label="Show larger QR"
+                  title="Show larger QR"
+                  className="absolute right-2 top-2 rounded p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
                 >
-                  Show larger QR
+                  <Maximize2 className="h-4 w-4" aria-hidden />
                 </button>
               )}
-            </div>
+              <div className="flex flex-col items-center gap-2">
+                <QRCode
+                  value={expoUrl}
+                  size={130}
+                  className="shrink-0 rounded border border-[var(--border-default)] bg-white p-1.5"
+                />
+                <p className="text-body-muted text-center text-xs leading-snug">
+                Scan this QR in Expo Go to preview on your iPhone
+              </p>
+              </div>
+            </>
           ) : (
             <p className="text-body-muted text-center text-xs">
               Build your app to see the preview QR

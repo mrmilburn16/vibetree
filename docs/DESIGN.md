@@ -15,3 +15,11 @@ When adding new copy (empty states, tooltips, docs, marketing), use the default 
 ## Theme and colors
 
 See [THEME.md](./THEME.md) for Twilight Violet (colors, tokens, dropdowns).
+
+## Components and patterns
+
+- **Expand on cards:** For “show larger” or fullscreen on a card (e.g. QR code, preview), place the expand icon in the **top-right corner** of the card. This associates the action with the content and matches common media-card patterns. Use an icon-only button with `aria-label` and `title` for accessibility.
+
+## Copy and microcopy
+
+- **Expo Go QR strip:** Use **"Scan this QR in Expo Go to preview on your iPhone"** below the QR. "In Expo Go" makes it clear they scan the QR from inside the Expo Go app (or with it), not with a generic camera only. Flow: scan this QR → in Expo Go → to preview on your iPhone. Alternative if we want two-step: "Open Expo Go and scan this QR to preview on your iPhone."
