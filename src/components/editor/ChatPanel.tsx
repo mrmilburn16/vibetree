@@ -55,7 +55,7 @@ export function ChatPanel({
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(LLM_STORAGE_KEY);
       const option = LLM_OPTIONS.find((o) => o.value === stored);
-      if (option && !option.disabled) setLlm(stored);
+      if (option && !option.disabled && stored != null) setLlm(stored);
     }
   }, []);
 
