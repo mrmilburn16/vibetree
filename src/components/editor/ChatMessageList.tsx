@@ -20,8 +20,10 @@ const REASONING_PHRASES = new Set([
   "Writing code…",
 ]);
 
-function isReasoningMessage(msg: { role: string; content: string; editedFiles?: string[] }): boolean {
+function isReasoningMessage(msg: { id?: string; role: string; content: string; editedFiles?: string[] }): boolean {
   if (msg.role !== "assistant" || (msg.editedFiles?.length ?? 0) > 0) return false;
+  // Status/progress messages should render immediately and update live.
+  if (typeof msg.id === "string" && msg.id.startsWith("stream-")) return true;
   return msg.content.length < 50 || REASONING_PHRASES.has(msg.content.trim());
 }
 
@@ -41,30 +43,31 @@ export function ChatMessageList({
   }, [messages, isTyping, streamedContent]);
 
   // Stream assistant messages that have content (word-by-word)
-  const streamStartedRef = useRef<string | null>(null);
+  const streamStartedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant" || last.content.length === 0) return;
 
     const full = last.content;
+    const streamKey = `${last.id}:${full}`;
 
     if (streamingMessageId !== last.id) {
       setStreamingMessageId(last.id);
       setStreamedContent("");
-      streamStartedRef.current = null;
+      streamStartedKeyRef.current = null;
     }
 
     if (streamedContent === full) return;
-    if (streamStartedRef.current === last.id) return;
+    if (streamStartedKeyRef.current === streamKey) return;
 
     // Don't stream or show cursor for short reasoning steps — show them immediately
     if (isReasoningMessage(last)) {
       setStreamedContent(full);
-      streamStartedRef.current = last.id;
+      streamStartedKeyRef.current = streamKey;
       return;
     }
-    streamStartedRef.current = last.id;
+    streamStartedKeyRef.current = streamKey;
 
     const tokens = getStreamTokens(full);
     let tokenIndex = 0;
@@ -146,6 +149,19 @@ export function ChatMessageList({
                   ))}
                 </p>
               </div>
+            )}
+            {msg.role === "assistant" && streamingComplete && (msg.estimatedCostUsd != null || msg.usage) && (
+              <p className="mt-2 text-xs text-[var(--text-tertiary)]" aria-live="polite">
+                {msg.estimatedCostUsd != null && (
+                  <span>~${msg.estimatedCostUsd < 0.005 ? "<0.01" : msg.estimatedCostUsd.toFixed(2)}</span>
+                )}
+                {msg.estimatedCostUsd != null && msg.usage && " · "}
+                {msg.usage && (
+                  <span>
+                    {(msg.usage.input_tokens / 1000).toFixed(1)}k in / {(msg.usage.output_tokens / 1000).toFixed(1)}k out
+                  </span>
+                )}
+              </p>
             )}
           </div>
           );

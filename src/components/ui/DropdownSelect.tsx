@@ -116,16 +116,18 @@ export function DropdownSelect({
             <li
               key={opt.value}
               role="option"
-              aria-selected={opt.value === value}
+              aria-selected={opt.value === value && !opt.disabled}
+              aria-disabled={opt.disabled}
               onClick={() => {
+                if (opt.disabled) return;
                 onChange(opt.value);
                 setOpen(false);
               }}
               className={`
-                flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)]
+                flex items-center gap-2 px-3 py-2 text-sm
                 transition-colors duration-[var(--transition-fast)]
-                hover:bg-[var(--button-primary-bg)]/20 hover:text-[var(--text-primary)]
-                ${opt.value === value ? "bg-[var(--button-primary-bg)]/15 text-[var(--link-default)]" : ""}
+                ${opt.disabled ? "cursor-not-allowed opacity-50 text-[var(--text-tertiary)]" : "cursor-pointer text-[var(--text-primary)] hover:bg-[var(--button-primary-bg)]/20 hover:text-[var(--text-primary)]"}
+                ${opt.value === value && !opt.disabled ? "bg-[var(--button-primary-bg)]/15 text-[var(--link-default)]" : ""}
               `}
             >
               {opt.icon && (

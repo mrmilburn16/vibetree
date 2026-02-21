@@ -48,7 +48,10 @@ export function EditorLayout({ project }: { project: Project }) {
 
   useEffect(() => {
     if (!project.id) return;
-    fetch(`/api/projects/${project.id}/run-on-device`)
+    const isPro =
+      typeof window !== "undefined" && localStorage.getItem("vibetree-project-type") === "pro";
+    if (isPro) return;
+    fetch(`/api/projects/${project.id}/run-on-device?projectType=standard`)
       .then((res) => res.json())
       .then((data) => { if (data.expoUrl) setExpoUrl(data.expoUrl); })
       .catch(() => {});
@@ -202,6 +205,7 @@ export function EditorLayout({ project }: { project: Project }) {
         onClose={() => setRunOnDeviceOpen(false)}
         projectId={project.id}
         expoUrl={expoUrl}
+        onExpoUrl={setExpoUrl}
       />
       <ShareModal
         isOpen={shareOpen}

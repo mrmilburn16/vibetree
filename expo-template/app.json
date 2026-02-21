@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Vibetree Preview",
+    "slug": "vibetree-preview",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.vibetree.preview"
+    },
+    "android": {
+      "package": "dev.vibetree.preview"
+    },
+    "scheme": "vibetree-preview"
+  }
+}

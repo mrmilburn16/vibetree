@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
+import { runExpoPreview } from "@/lib/expoPreview";
 
 /**
  * GET /api/projects/[id]/run-on-device
- * Returns URLs for Expo Go and TestFlight so the Run on device modal can show QR codes and links.
- * Mock: returns placeholder URLs. Replace with real build pipeline (Expo server URL, TestFlight link) when backend is ready.
+ * Standard (Expo): runs expo start --tunnel, returns expoUrl for QR in Expo Go.
+ * Pro (Swift): returns projectType "pro" and no expoUrl; client shows "Download source" CTA.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -14,14 +15,33 @@ export async function GET(
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
 
-  // Mock: in production, trigger or look up build, then return real expoUrl and/or testFlightLink
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://vibetree.vercel.app";
-  const expoUrl = `exp://${baseUrl.replace(/^https?:\/\//, "")}/expo/${id}`;
-  const testFlightLink = `https://testflight.apple.com/join/mock-${id.slice(0, 8)}`;
+  const url = new URL(request.url);
+  const projectType = url.searchParams.get("projectType") === "pro" ? "pro" : "standard";
+
+  if (projectType === "pro") {
+    return NextResponse.json({
+      expoUrl: null,
+      projectType: "pro",
+      testFlightLink: null,
+    });
+  }
+
+  const result = await runExpoPreview(id);
+
+  if ("error" in result) {
+    const status =
+      result.code === "NO_FILES" || result.code === "NO_APP"
+        ? 400
+        : 503;
+    return NextResponse.json(
+      { error: result.error, code: result.code },
+      { status }
+    );
+  }
 
   return NextResponse.json({
-    expoUrl,
-    testFlightLink,
-    // When backend is ready: include status "building" | "ready" and only return links when ready
+    expoUrl: result.expoUrl,
+    projectType: "standard",
+    testFlightLink: null,
   });
 }

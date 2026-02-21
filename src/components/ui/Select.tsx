@@ -7,6 +7,8 @@ export interface SelectOption {
   label: string;
   /** Optional icon (e.g. logo) shown to the left of the label in dropdowns */
   icon?: React.ReactNode;
+  /** When true, option is shown but not selectable */
+  disabled?: boolean;
 }
 
 export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {

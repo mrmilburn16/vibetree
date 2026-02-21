@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# expo preview (generated projects + node_modules)
+.expo-preview/
+
 # production
 /build
 

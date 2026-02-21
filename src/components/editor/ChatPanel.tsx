@@ -11,9 +11,16 @@ import { FailedIndicator } from "./FailedIndicator";
 import { ChatMessageList } from "./ChatMessageList";
 import { useChat } from "./useChat";
 import { useCredits } from "@/contexts/CreditsContext";
+import { featureFlags } from "@/lib/featureFlags";
 import { LLM_OPTIONS, DEFAULT_LLM } from "@/lib/llm-options";
 
 const LLM_STORAGE_KEY = "vibetree-llm";
+const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
+
+const PROJECT_TYPE_OPTIONS = [
+  { value: "standard", label: "Standard (Expo)" },
+  { value: "pro", label: "Pro (Swift)" },
+] as const;
 
 const CHAT_PLACEHOLDERS = [
   "e.g. A fitness tracker with activity rings",
@@ -41,18 +48,33 @@ export function ChatPanel({
   onError?: (message: string) => void;
 }) {
   const [llm, setLlm] = useState(DEFAULT_LLM);
+  const [projectType, setProjectType] = useState<"standard" | "pro">("standard");
   const { hasCreditsForMessage, deduct } = useCredits();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(LLM_STORAGE_KEY);
-      if (stored && LLM_OPTIONS.some((o) => o.value === stored)) setLlm(stored);
+      const option = LLM_OPTIONS.find((o) => o.value === stored);
+      if (option && !option.disabled) setLlm(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(PROJECT_TYPE_STORAGE_KEY);
+      if (stored === "pro" || stored === "standard") setProjectType(stored);
     }
   }, []);
 
   const handleLlmChange = (value: string) => {
     setLlm(value);
     if (typeof window !== "undefined") localStorage.setItem(LLM_STORAGE_KEY, value);
+  };
+
+  const handleProjectTypeChange = (value: string) => {
+    const next = value === "pro" ? "pro" : "standard";
+    setProjectType(next);
+    if (typeof window !== "undefined") localStorage.setItem(PROJECT_TYPE_STORAGE_KEY, next);
   };
   const {
     messages,
@@ -63,7 +85,11 @@ export function ChatPanel({
     setInput,
     canSend,
     maxMessageLength,
-  } = useChat(projectId, { onError, projectName });
+  } = useChat(projectId, {
+    onError,
+    projectName,
+    onMessageSuccess: featureFlags.useRealLLM ? () => deduct(1) : undefined,
+  });
 
   useEffect(() => {
     onBuildStatusChange(buildStatus);
@@ -80,16 +106,17 @@ export function ChatPanel({
         onOutOfCredits?.();
         return;
       }
-      if (!deduct(1)) {
+      // Real LLM path: deduct only on success (onMessageSuccess). Mock path: deduct now.
+      if (!featureFlags.useRealLLM && !deduct(1)) {
         onOutOfCredits?.();
         return;
       }
-      sendMessage(text, llm);
+      sendMessage(text, llm, projectType);
       setInput("");
       setJustSent(true);
       setTimeout(() => setJustSent(false), 80);
     },
-    [input, canSend, sendMessage, llm, hasCreditsForMessage, deduct, onOutOfCredits]
+    [input, canSend, sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
   );
 
   const canSendWithCredits = canSend && hasCreditsForMessage;
@@ -116,12 +143,20 @@ export function ChatPanel({
           {buildStatus === "live" && <ReadyIndicator label="Ready" />}
           {buildStatus === "failed" && <FailedIndicator />}
         </div>
-        <DropdownSelect
-          options={LLM_OPTIONS_WITH_ICONS}
-          value={llm}
-          onChange={handleLlmChange}
-          aria-label="Select LLM for app design"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <DropdownSelect
+            options={PROJECT_TYPE_OPTIONS}
+            value={projectType}
+            onChange={handleProjectTypeChange}
+            aria-label="Build with Standard (Expo) or Pro (Swift)"
+          />
+          <DropdownSelect
+            options={LLM_OPTIONS_WITH_ICONS}
+            value={llm}
+            onChange={handleLlmChange}
+            aria-label="Select LLM for app design"
+          />
+        </div>
       </div>
 
       <ChatMessageList messages={messages} isTyping={isTyping} />
@@ -132,7 +167,7 @@ export function ChatPanel({
         </label>
         <div className="min-w-0 flex flex-col">
           <div
-            className="flex min-h-[44px] items-center rounded-[24px] border-2 border-[var(--input-border)] bg-[var(--input-bg)] py-1 pr-1 pl-4 ring-0 transition-colors duration-[var(--transition-fast)] focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/30"
+            className="flex min-h-[44px] items-center rounded-[26px] border-2 border-[var(--input-border)] bg-[var(--input-bg)] py-1 pr-1 pl-4 ring-0 transition-colors duration-[var(--transition-fast)] focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/30"
           >
             <Textarea
               ref={textareaRef}
@@ -141,6 +176,7 @@ export function ChatPanel({
               onChange={(e) => setInput(e.target.value)}
               placeholder={CHAT_PLACEHOLDERS[placeholderIndex]}
               className="!border-0 !min-h-[38px] max-h-[112px] w-full resize-none bg-transparent pt-2 pb-3 pr-2 text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none"
+              style={{ resize: "none" }}
               rows={1}
               maxLength={maxMessageLength + 500}
               onKeyDown={(e) => {
@@ -154,15 +190,17 @@ export function ChatPanel({
               type="submit"
               variant="primary"
               disabled={!canSendWithCredits || !input.trim() || input.length > maxMessageLength}
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 transition-transform duration-75 ${justSent ? "scale-95" : "scale-100"}`}
+              className={`!flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 transition-transform duration-75 ${justSent ? "scale-95" : "scale-100"}`}
               aria-label={sendButtonTitle}
               title={sendButtonTitle}
             >
-              {canSend ? (
-                <Send className="h-4 w-4" aria-hidden />
-              ) : (
-                <span className="inline-block h-4 w-4 rounded-sm bg-current opacity-90" aria-hidden />
-              )}
+              <span className="flex size-full items-center justify-center">
+                {canSend ? (
+                  <Send className="h-6 w-6 shrink-0" aria-hidden size={24} />
+                ) : (
+                  <span className="h-6 w-6 shrink-0 rounded-sm bg-current opacity-90" aria-hidden />
+                )}
+              </span>
             </Button>
           </div>
           {showCharCount && (

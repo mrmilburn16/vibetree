@@ -14,6 +14,8 @@ const DEVICE_HEIGHT = 568;
 /** Screen inset when using image frame (match your mockup; % of frame size) */
 const SCREEN_INSET = { top: 7.5, right: 5, bottom: 7.5, left: 5 };
 
+const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
+
 export function PreviewPane({
   buildStatus,
   expoUrl = null,
@@ -26,6 +28,8 @@ export function PreviewPane({
   onPublish?: () => void;
 }) {
   const useImageFrame = false; // Set true when /iphone-frame.png is added
+  const isPro =
+    typeof window !== "undefined" && localStorage.getItem(PROJECT_TYPE_STORAGE_KEY) === "pro";
 
   return (
     <div
@@ -54,10 +58,27 @@ export function PreviewPane({
         </div>
       </div>
 
-      {/* Right half: QR centered in the space between iPhone and right edge of screen */}
+      {/* Right half: QR (Standard) or Download (Pro) */}
       <div className="mt-6 flex min-w-0 flex-1 flex-col items-center justify-center md:mt-0">
         <div className="relative w-full max-w-[240px] rounded-lg border border-[var(--border-default)] bg-[var(--background-secondary)] p-3">
-          {expoUrl ? (
+          {isPro ? (
+            <div className="flex flex-col items-center gap-2 text-center">
+              <p className="text-body-muted text-xs">
+                {buildStatus === "live"
+                  ? "Pro (Swift): Download your app and open in Xcode to run on your iPhone or simulator."
+                  : "Build your app in the chat to generate Swift, then download the source."}
+              </p>
+              {buildStatus === "live" && onOpenRunOnDevice && (
+                <button
+                  type="button"
+                  onClick={onOpenRunOnDevice}
+                  className="text-xs font-medium text-[var(--link-default)] hover:underline"
+                >
+                  Run on device (download source)
+                </button>
+              )}
+            </div>
+          ) : expoUrl ? (
             <>
               {onOpenRunOnDevice && (
                 <button
@@ -77,14 +98,27 @@ export function PreviewPane({
                   className="shrink-0 rounded border border-[var(--border-default)] bg-white p-1.5"
                 />
                 <p className="text-body-muted text-center text-xs leading-snug">
-                Scan this QR in Expo Go to preview on your iPhone
-              </p>
+                  Scan this QR in Expo Go to preview on your iPhone
+                </p>
               </div>
             </>
           ) : (
-            <p className="text-body-muted text-center text-xs">
-              Build your app to see the preview QR
-            </p>
+            <div className="flex flex-col items-center gap-2 text-center">
+              <p className="text-body-muted text-xs">
+                {buildStatus === "live"
+                  ? "Click Run on device above to start the preview server and show the QR code."
+                  : "Build your app to see the preview QR"}
+              </p>
+              {buildStatus === "live" && onOpenRunOnDevice && (
+                <button
+                  type="button"
+                  onClick={onOpenRunOnDevice}
+                  className="text-xs font-medium text-[var(--link-default)] hover:underline"
+                >
+                  Run on device
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

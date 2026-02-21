@@ -68,7 +68,11 @@ export function ProjectSettingsModal({
   async function handleDownloadSource() {
     setExportLoading(true);
     try {
-      const res = await fetch(`/api/projects/${project.id}/export`);
+      const pt =
+        typeof window !== "undefined" && localStorage.getItem("vibetree-project-type") === "pro"
+          ? "pro"
+          : "standard";
+      const res = await fetch(`/api/projects/${project.id}/export?projectType=${pt}`);
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
