@@ -7,6 +7,7 @@ import {
 import { getClaudeResponseStream } from "@/lib/llm/claudeAdapter";
 import { estimateCostUsd } from "@/lib/llm/usageCost";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
+import { startGeneration, updateGenerationPhase, endGeneration } from "@/lib/activeGenerations";
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -21,11 +22,11 @@ export async function POST(
   const { id: projectId } = await params;
 
   const body = await request.json().catch(() => ({}));
-  const name =
+  const nameFromBody =
     typeof body.projectName === "string"
       ? body.projectName.trim() || "Untitled app"
       : "Untitled app";
-  getProject(projectId) ?? ensureProject(projectId, name);
+  const project = getProject(projectId) ?? ensureProject(projectId, nameFromBody);
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
 
@@ -64,6 +65,8 @@ export async function POST(
     (currentFiles ? JSON.stringify(currentFiles).length : 0) +
     6000;
   const estimatedInputTokens = Math.ceil(estimatedInputChars / 4);
+
+  const generation = startGeneration(projectId, project.name);
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -105,7 +108,6 @@ export async function POST(
         });
       };
 
-      // Emit immediately so the client never sits on "Connecting…" silently.
       enqueuePhase("starting_request");
       enqueueProgress(0);
 
@@ -131,6 +133,7 @@ export async function POST(
                   if (!hasEmittedFirstTokens && data.receivedChars > 0) {
                     hasEmittedFirstTokens = true;
                     enqueuePhase("receiving_output");
+                    updateGenerationPhase(generation.id, "generating");
                   }
                   enqueueProgress(data.receivedChars);
                 },
@@ -171,12 +174,16 @@ export async function POST(
 
         let editedFiles: string[];
         enqueuePhase("saving_files");
+        updateGenerationPhase(generation.id, "saving");
         let projectFilesForClient: Array<{ path: string; content: string }> | undefined;
         if (result.parsedFiles?.length) {
           let filesToStore = result.parsedFiles;
           if (projectType === "pro") {
             filesToStore = filesToStore.filter((f) => f.path.endsWith(".swift"));
             filesToStore = fixSwiftCommonIssues(filesToStore);
+            const { preBuildLint } = await import("@/lib/preBuildLint");
+            const lintResult = preBuildLint(filesToStore);
+            filesToStore = lintResult.files;
           }
           if (filesToStore.length > 0) {
             setProjectFiles(projectId, filesToStore);
@@ -207,6 +214,7 @@ export async function POST(
           },
           ...(projectFilesForClient && { projectFiles: projectFilesForClient }),
           buildStatus: "live",
+          generationId: generation.id,
         });
       } catch (err) {
         const errorMessage =
@@ -215,6 +223,7 @@ export async function POST(
         safeEnqueue({ type: "error", error: errorMessage });
       } finally {
         clearInterval(heartbeat);
+        endGeneration(generation.id);
         closed = true;
         try {
           controller.close();

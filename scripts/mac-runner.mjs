@@ -76,7 +76,7 @@ async function api(path, opts = {}) {
 }
 
 async function claimJob() {
-  const res = await api("/api/build-jobs/next", { method: "POST" });
+  const res = await api("/api/build-jobs/claim", { method: "POST" });
   if (res.status === 204) return null;
   if (!res.ok) throw new Error(`claim failed: ${res.status} ${await res.text()}`);
   const data = await res.json();

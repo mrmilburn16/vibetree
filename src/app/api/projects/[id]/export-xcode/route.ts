@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { getProjectFiles, getProjectFilePaths } from "@/lib/projectFileStore";
-import { buildPbxproj, detectPrivacyPermissions } from "@/lib/xcodeProject";
+import { buildPbxproj, detectPrivacyPermissions, detectRequiredFrameworks, detectEntitlements, generateEntitlementsPlist } from "@/lib/xcodeProject";
 import { getProject, ensureProject } from "@/lib/projectStore";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 
@@ -42,10 +42,24 @@ function buildWidgetInfoPlist(): string {
 `;
 }
 
+/** Build a date for zip entries so extracted files show the user's local time (JSZip stores UTC; many extractors show it as-is). */
+function zipFileDate(timezoneOffsetMinutes?: number): Date {
+  const now = new Date();
+  const offset = typeof timezoneOffsetMinutes === "number" ? timezoneOffsetMinutes : 0;
+  return new Date(now.getTime() - offset * 60 * 1000);
+}
+
 async function buildZipFromSwiftFiles(
   filesArr: SwiftFile[],
   filenameId: string,
-  options: { projectName: string; bundleId: string; developmentTeam?: string }
+  options: {
+    projectName: string;
+    bundleId: string;
+    developmentTeam?: string;
+    preferredRunDevice?: string;
+    /** Client's timezone offset in minutes (e.g. from Date.getTimezoneOffset()) so zip file dates show correct local time when extracted. */
+    timezoneOffsetMinutes?: number;
+  }
 ): Promise<Response> {
   const swiftFilesRaw = filesArr.filter((f) => typeof f?.path === "string" && f.path.endsWith(".swift"));
   const swiftFiles = fixSwiftCommonIssues(swiftFilesRaw);
@@ -152,6 +166,9 @@ struct AppLiveActivityWidget: Widget {
     .filter((p) => p.endsWith(".swift"))
     .map((p) => ({ path: p, content: filesMap[p] ?? "" }));
   const privacyPermissions = detectPrivacyPermissions(allSwiftFiles);
+  const frameworks = detectRequiredFrameworks(allSwiftFiles);
+  const entitlements = detectEntitlements(allSwiftFiles);
+  const entitlementsPath = entitlements ? "App.entitlements" : undefined;
 
   const pbxproj = buildPbxproj(allPaths, {
     deploymentTarget,
@@ -159,6 +176,8 @@ struct AppLiveActivityWidget: Widget {
     bundleId: options.bundleId,
     developmentTeam: options.developmentTeam,
     privacyPermissions,
+    frameworks,
+    entitlementsPath,
     appSwiftPaths,
     widget:
       widgetInfoPlistPath && widgetSources.length > 0
@@ -171,11 +190,27 @@ struct AppLiveActivityWidget: Widget {
         : undefined,
   });
 
+  const fileDate = zipFileDate(options.timezoneOffsetMinutes);
+  const zipOpt = { date: fileDate };
+
   const zip = new JSZip();
-  zip.file(`${options.projectName}.xcodeproj/project.pbxproj`, pbxproj);
+  zip.file(`${options.projectName}.xcodeproj/project.pbxproj`, pbxproj, zipOpt);
+
+  const preferredDevice = (options.preferredRunDevice ?? "").trim();
+  if (preferredDevice) {
+    zip.file(
+      "README.txt",
+      `To run on your device: In Xcode, select "${preferredDevice}" from the device dropdown (next to the scheme in the toolbar). Xcode will then remember it for future runs.\n`,
+      zipOpt
+    );
+  }
 
   for (const path of allPaths) {
-    zip.file(`${options.projectName}/${path}`, filesMap[path] ?? "");
+    zip.file(`${options.projectName}/${path}`, filesMap[path] ?? "", zipOpt);
+  }
+
+  if (entitlements && entitlementsPath) {
+    zip.file(`${options.projectName}/${entitlementsPath}`, generateEntitlementsPlist(entitlements), zipOpt);
   }
 
   const bytes = await zip.generateAsync({ type: "uint8array" });
@@ -218,10 +253,15 @@ export async function POST(
   const candidateBundleId = (providedBundleId || project.bundleId || "com.vibetree.app").trim();
   const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";
   const developmentTeam = providedTeam.trim();
+  const preferredRunDevice = (typeof body?.preferredRunDevice === "string" ? body.preferredRunDevice : "").trim();
+  const timezoneOffsetMinutes =
+    typeof body?.timezoneOffsetMinutes === "number" ? body.timezoneOffsetMinutes : undefined;
   return await buildZipFromSwiftFiles(files, id.slice(0, 12), {
     projectName,
     bundleId,
     developmentTeam: developmentTeam || undefined,
+    preferredRunDevice: preferredRunDevice || undefined,
+    timezoneOffsetMinutes,
   });
 }
 
@@ -240,6 +280,10 @@ export async function GET(
   }
   const url = new URL(request.url);
   const developmentTeam = (url.searchParams.get("developmentTeam") ?? "").trim();
+  const preferredRunDevice = (url.searchParams.get("preferredRunDevice") ?? "").trim();
+  const timezoneOffsetParam = url.searchParams.get("timezoneOffsetMinutes");
+  const timezoneOffsetMinutes =
+    timezoneOffsetParam !== null && timezoneOffsetParam !== "" ? parseInt(timezoneOffsetParam, 10) : undefined;
 
   const project = getProject(id) ?? ensureProject(id, "Untitled app");
   const projectName = sanitizeXcodeName(project.name, "VibetreeApp");
@@ -260,5 +304,7 @@ export async function GET(
     projectName,
     bundleId,
     developmentTeam: developmentTeam || undefined,
+    preferredRunDevice: preferredRunDevice || undefined,
+    timezoneOffsetMinutes: Number.isFinite(timezoneOffsetMinutes) ? timezoneOffsetMinutes : undefined,
   });
 }

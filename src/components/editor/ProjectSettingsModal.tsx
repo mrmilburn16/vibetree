@@ -15,6 +15,7 @@ import type { SelectOption } from "@/components/ui";
 
 const XCODE_TEAM_ID_PREFIX = "vibetree-xcode-team-id:";
 const XCODE_BUNDLE_ID_OVERRIDE_PREFIX = "vibetree-xcode-bundle-id:";
+const XCODE_PREFERRED_DEVICE_PREFIX = "vibetree-xcode-preferred-device:";
 const PROJECT_SETTINGS_PREFIX = "vibetree-project-settings:";
 const UNIVERSAL_DEFAULTS_KEY = "vibetree-universal-defaults";
 
@@ -40,6 +41,7 @@ const DEVICE_FAMILY_OPTIONS: SelectOption[] = [
 
 interface UniversalDefaults {
   teamId: string;
+  preferredRunDevice: string;
   deploymentTarget: string;
   orientation: string;
   deviceFamily: string;
@@ -47,6 +49,7 @@ interface UniversalDefaults {
 
 const FACTORY_DEFAULTS: UniversalDefaults = {
   teamId: "",
+  preferredRunDevice: "",
   deploymentTarget: "17.0",
   orientation: "all",
   deviceFamily: "1,2",
@@ -60,6 +63,7 @@ function loadUniversalDefaults(): UniversalDefaults {
     const parsed = JSON.parse(raw);
     return {
       teamId: typeof parsed.teamId === "string" ? parsed.teamId : "",
+      preferredRunDevice: typeof parsed.preferredRunDevice === "string" ? parsed.preferredRunDevice : "",
       deploymentTarget: typeof parsed.deploymentTarget === "string" ? parsed.deploymentTarget : "17.0",
       orientation: typeof parsed.orientation === "string" ? parsed.orientation : "all",
       deviceFamily: typeof parsed.deviceFamily === "string" ? parsed.deviceFamily : "1,2",
@@ -78,6 +82,7 @@ function saveUniversalDefaults(defaults: UniversalDefaults) {
 
 interface ProjectSettings {
   teamId: string;
+  preferredRunDevice: string;
   bundleIdOverride: string;
   deploymentTarget: string;
   orientation: string;
@@ -86,11 +91,12 @@ interface ProjectSettings {
 }
 
 type UniversalKey = keyof UniversalDefaults;
-const UNIVERSAL_KEYS: UniversalKey[] = ["teamId", "deploymentTarget", "orientation", "deviceFamily"];
+const UNIVERSAL_KEYS: UniversalKey[] = ["teamId", "preferredRunDevice", "deploymentTarget", "orientation", "deviceFamily"];
 
 function loadSettings(projectId: string, universalDefaults: UniversalDefaults): ProjectSettings {
   const settings: ProjectSettings = {
     teamId: universalDefaults.teamId,
+    preferredRunDevice: universalDefaults.preferredRunDevice,
     bundleIdOverride: "",
     deploymentTarget: universalDefaults.deploymentTarget,
     orientation: universalDefaults.orientation,
@@ -103,6 +109,11 @@ function loadSettings(projectId: string, universalDefaults: UniversalDefaults): 
     if (teamIdStored !== null && teamIdStored !== "") {
       settings.teamId = teamIdStored;
       settings.overrides.teamId = true;
+    }
+    const preferredDeviceStored = localStorage.getItem(`${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`);
+    if (preferredDeviceStored !== null && preferredDeviceStored !== "") {
+      settings.preferredRunDevice = preferredDeviceStored;
+      settings.overrides.preferredRunDevice = true;
     }
     settings.bundleIdOverride = localStorage.getItem(`${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`) ?? "";
     const raw = localStorage.getItem(`${PROJECT_SETTINGS_PREFIX}${projectId}`);
@@ -130,6 +141,7 @@ function saveSettings(projectId: string, settings: ProjectSettings) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(`${XCODE_TEAM_ID_PREFIX}${projectId}`, settings.teamId);
+    localStorage.setItem(`${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`, settings.preferredRunDevice);
     localStorage.setItem(`${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`, settings.bundleIdOverride);
     localStorage.setItem(
       `${PROJECT_SETTINGS_PREFIX}${projectId}`,
@@ -424,6 +436,32 @@ export function ProjectSettingsModal({
               />
               <HelpTip>
                 Your 10-character Apple Developer Team ID. Set it once and it applies to all projects. Find it in Xcode → Signing &amp; Capabilities → Team, or search for <span className="font-mono">DEVELOPMENT_TEAM</span> in any .xcodeproj file.
+              </HelpTip>
+            </div>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <label htmlFor="preferred-device" className="text-sm text-[var(--text-secondary)]">
+                  Preferred run device
+                </label>
+                <InheritedBadge
+                  isOverridden={!!settings.overrides.preferredRunDevice}
+                  onReset={() => resetToDefault("preferredRunDevice")}
+                />
+              </div>
+              <Input
+                id="preferred-device"
+                value={settings.preferredRunDevice}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  handleUniversalOrOverride("preferredRunDevice", v);
+                }}
+                placeholder="e.g. iPhone (9)"
+                inputMode="text"
+                autoCapitalize="none"
+                spellCheck={false}
+              />
+              <HelpTip>
+                Your physical iPhone or device name as shown in Xcode’s device dropdown. When you open the project in Xcode, select this device once so Xcode remembers it and stops defaulting to the simulator.
               </HelpTip>
             </div>
             <div>

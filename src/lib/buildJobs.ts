@@ -10,6 +10,7 @@ export type BuildJobCreateRequest = {
   attempt?: number;
   maxAttempts?: number;
   parentJobId?: string;
+  userPrompt?: string;
 };
 
 export type BuildJobRecord = {

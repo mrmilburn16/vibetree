@@ -31,9 +31,9 @@ export async function POST(
   const providedBundleId = typeof body?.bundleId === "string" ? body.bundleId : "";
   const providedTeam = typeof body?.developmentTeam === "string" ? body.developmentTeam : "";
   const files = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : undefined;
+  const userPrompt = typeof body?.userPrompt === "string" ? body.userPrompt : undefined;
 
   const project = getProject(projectId) ?? ensureProject(projectId, providedName || "Untitled app");
-  const projectName = sanitizeXcodeName(providedName || project.name, "VibetreeApp");
   const candidateBundleId = (providedBundleId || project.bundleId || "com.vibetree.app").trim();
   const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";
 
@@ -41,13 +41,14 @@ export async function POST(
 
   const job = createBuildJob({
     projectId,
-    projectName,
+    projectName: project.name || providedName || "Untitled app",
     bundleId,
     ...(files ? { files } : {}),
     ...(providedTeam ? { developmentTeam: providedTeam } : {}),
+    ...(userPrompt ? { userPrompt } : {}),
     autoFix,
     attempt: 1,
-    maxAttempts: 5,
+    maxAttempts: 8,
   });
 
   return Response.json({ job });

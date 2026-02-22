@@ -209,6 +209,7 @@ struct BuildDetailView: View {
 
     private func statusIcon(_ status: BuildJobStatus) -> String {
         switch status {
+        case .generating: return "sparkles"
         case .queued: return "clock.fill"
         case .running: return "hammer.fill"
         case .succeeded: return "checkmark.circle.fill"
@@ -218,6 +219,7 @@ struct BuildDetailView: View {
 
     private func statusColor(_ status: BuildJobStatus) -> Color {
         switch status {
+        case .generating: return Forest.accentLight
         case .queued: return Forest.warning
         case .running: return Forest.accent
         case .succeeded: return Forest.success

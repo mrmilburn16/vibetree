@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
 import type { ChatMessage } from "./useChat";
 
 const STREAM_WORD_DELAY_MS = 45;
@@ -30,14 +30,67 @@ function isReasoningMessage(msg: { id?: string; role: string; content: string; e
   return msg.content.length < 50 || REASONING_PHRASES.has(msg.content.trim());
 }
 
+function BuildFeedback({ projectId }: { projectId?: string }) {
+  const [rating, setRating] = useState<"up" | "down" | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleRate = async (value: "up" | "down") => {
+    setRating(value);
+    setSubmitted(true);
+    try {
+      await fetch("/api/build-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, rating: value }),
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  if (submitted) {
+    return (
+      <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+        Thanks for the feedback!
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <span className="text-xs text-[var(--text-tertiary)]">How did the build turn out?</span>
+      <button
+        type="button"
+        onClick={() => handleRate("up")}
+        className="rounded p-1 text-[var(--text-tertiary)] hover:text-green-400 hover:bg-green-400/10 transition-colors"
+        title="Good build"
+      >
+        <ThumbsUp className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => handleRate("down")}
+        className="rounded p-1 text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-400/10 transition-colors"
+        title="Build had issues"
+      >
+        <ThumbsDown className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
 export function ChatMessageList({
   messages,
   isTyping,
   onEnterGuidedMode,
+  buildStatus,
+  projectId,
 }: {
   messages: ChatMessage[];
   isTyping: boolean;
   onEnterGuidedMode?: () => void;
+  buildStatus?: string;
+  projectId?: string;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -177,6 +230,13 @@ export function ChatMessageList({
                   </span>
                 )}
               </p>
+            )}
+            {msg.role === "assistant" &&
+              streamingComplete &&
+              msg.editedFiles?.length &&
+              index === messages.length - 1 &&
+              buildStatus === "live" && (
+              <BuildFeedback projectId={projectId} />
             )}
           </div>
           );

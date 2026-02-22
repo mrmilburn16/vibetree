@@ -36,6 +36,57 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       content = "import Foundation\n" + content;
     }
 
+    content = content.replace(/\bNavigationView\b/g, "NavigationStack");
+
+    content = content.replace(/\.navigationBarTitle\b/g, ".navigationTitle");
+
+    content = content.replace(/\.foregroundColor\b/g, ".foregroundStyle");
+
+    const usesCharts = /\b(Chart|BarMark|LineMark|AreaMark|PointMark|RuleMark|SectorMark)\b/.test(content);
+    if (usesCharts && !content.includes("import Charts")) {
+      content = "import Charts\n" + content;
+    }
+
+    const usesMapKit = /\b(Map\s*\(|MKCoordinateRegion|MapAnnotation|MapMarker|MapPolyline|MapCircle|CLLocationCoordinate2D)\b/.test(content);
+    if (usesMapKit && !content.includes("import MapKit")) {
+      content = "import MapKit\n" + content;
+    }
+
+    const usesAV = /\b(AVPlayer|AVAudioPlayer|AVAudioSession|AVAudioRecorder|AVAudioEngine|AVCaptureSession)\b/.test(content);
+    if (usesAV && !content.includes("import AVFoundation")) {
+      content = "import AVFoundation\n" + content;
+    }
+
+    const usesStoreKit = /\b(Product|Transaction|StoreKit|SubscriptionStoreView)\b/.test(content);
+    if (usesStoreKit && !content.includes("import StoreKit")) {
+      content = "import StoreKit\n" + content;
+    }
+
+    const usesCoreLocation = /\b(CLLocationManager|CLLocation|CLGeocoder|CLPlacemark)\b/.test(content);
+    if (usesCoreLocation && !content.includes("import CoreLocation") && !content.includes("import MapKit")) {
+      content = "import CoreLocation\n" + content;
+    }
+
+    const usesUserNotifications = /\b(UNUserNotificationCenter|UNMutableNotificationContent|UNNotificationRequest)\b/.test(content);
+    if (usesUserNotifications && !content.includes("import UserNotifications")) {
+      content = "import UserNotifications\n" + content;
+    }
+
+    const importRe = /^import\s+\w+$/gm;
+    const seenImports = new Set<string>();
+    content = content.replace(importRe, (match) => {
+      if (seenImports.has(match)) return "";
+      seenImports.add(match);
+      return match;
+    });
+    content = content.replace(/\n{3,}/g, "\n\n");
+
+    if (f.path === "App.swift" || f.path.endsWith("/App.swift")) {
+      if (content.includes("struct") && content.includes(": App") && !content.includes("@main")) {
+        content = content.replace(/(struct\s+\w+\s*:\s*App\b)/, "@main\n$1");
+      }
+    }
+
     return { ...f, content };
   });
 }
@@ -106,6 +157,24 @@ export function applyRuleBasedFixesFromBuild(
     for (const file of result) {
       if (!hasImport(file.content, "UIKit") && /UIKit|UIColor|UIFont|UIImage|UIApplication/.test(file.content)) {
         result = result.map((f) => f.path === file.path ? addImportToFile(f, "UIKit") : f);
+        changed = true;
+      }
+    }
+  }
+
+  if (/Cannot find.*(Chart|BarMark|LineMark|AreaMark|PointMark)/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "Charts") && /\b(Chart|BarMark|LineMark|AreaMark|PointMark)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "Charts") : f);
+        changed = true;
+      }
+    }
+  }
+
+  if (/Cannot find.*(Map|MKCoordinateRegion|MapAnnotation)/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "MapKit") && /\b(Map\s*\(|MKCoordinateRegion|MapAnnotation)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "MapKit") : f);
         changed = true;
       }
     }

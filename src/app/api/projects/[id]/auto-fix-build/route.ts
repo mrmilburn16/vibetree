@@ -6,6 +6,7 @@ import {
   setBuildJobAutoFixInProgress,
 } from "@/lib/buildJobs";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
+import { preBuildLint } from "@/lib/preBuildLint";
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
 
@@ -146,7 +147,8 @@ export async function POST(
   if (failedJob.status !== "failed") return Response.json({ error: "Job is not in failed state" }, { status: 400 });
 
   const attempt = (failedJob.request.attempt ?? 1) + 1;
-  const maxAttempts = failedJob.request.maxAttempts ?? 5;
+  const maxAttempts = failedJob.request.maxAttempts ?? 8;
+  const userPrompt = failedJob.request.userPrompt;
   if (attempt > maxAttempts) {
     setBuildJobAutoFixInProgress(failedJobId, false);
     return Response.json({ gaveUp: true, reason: `Max attempts (${maxAttempts}) reached` });
@@ -165,6 +167,10 @@ export async function POST(
     return Response.json({ gaveUp: true, reason: "No compiler errors or build log to fix" });
   }
 
+  const simplifyInstruction = attempt >= 4
+    ? `\n\nIMPORTANT: This is attempt ${attempt} of ${maxAttempts}. Previous fixes have not resolved all errors. If you cannot fix an error cleanly, SIMPLIFY the code: remove the problematic feature entirely rather than continuing to fail. A simpler app that compiles is far better than a complex app that doesn't. Remove any feature that uses an API you're unsure about.`
+    : "";
+
   appendBuildJobLogs(failedJobId, [`Auto-fixing with LLM (attempt ${attempt}/${maxAttempts})…`]);
 
   const errorFileNames = extractErrorFileNames(errors);
@@ -180,7 +186,10 @@ export async function POST(
     }
   }
 
-  const { fullFiles, contextFiles } = partitionFiles(currentFiles, errorFileNames);
+  const sendAllFull = attempt >= 3;
+  const { fullFiles, contextFiles } = sendAllFull
+    ? { fullFiles: currentFiles, contextFiles: [] as { path: string; summary: string }[] }
+    : partitionFiles(currentFiles, errorFileNames);
   appendBuildJobLogs(failedJobId, [
     `Files with errors: ${fullFiles.map((f) => f.path).join(", ")}`,
     `Context-only files: ${contextFiles.map((f) => f.path).join(", ") || "(none)"}`,
@@ -190,7 +199,11 @@ export async function POST(
     ? `COMPILER ERRORS:\n${errors.join("\n")}`
     : "";
   const logErrorSection = logErrorLines.length > 0
-    ? `\nADDITIONAL ERROR LINES FROM BUILD LOG:\n${logErrorLines.slice(0, 40).join("\n")}`
+    ? `\nADDITIONAL ERROR LINES FROM BUILD LOG:\n${logErrorLines.slice(-200).join("\n")}`
+    : "";
+
+  const fullLogTail = logLines.length > 0
+    ? `\nFULL BUILD LOG (last 200 lines):\n${logLines.slice(-200).join("\n")}`
     : "";
 
   const fullFilesSection = fullFiles
@@ -201,13 +214,18 @@ export async function POST(
     ? `\nOTHER PROJECT FILES (type signatures only — do NOT return these unless you need to fix them too):\n${contextFiles.map((f) => `--- ${f.path} ---\n${f.summary}`).join("\n\n")}`
     : "";
 
-  const prompt = `${errorSection}${logErrorSection}
+  const userPromptSection = userPrompt
+    ? `\nORIGINAL USER REQUEST:\n"${userPrompt}"\nFix the code to match this intent while resolving all compilation errors.\n`
+    : "";
 
+  const prompt = `${errorSection}${logErrorSection}
+${userPromptSection}
 FILES THAT NEED FIXING:
 ${fullFilesSection}
 ${contextSection}
+${fullLogTail}
 
-Fix ALL the compilation errors listed above. Return the corrected files with their complete content.`;
+Fix ALL the compilation errors listed above. Return the corrected files with their complete content.${simplifyInstruction}`;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -290,6 +308,22 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
     }
 
     const corrected = fixSwiftCommonIssues(mergedFiles);
+
+    const lintResult = preBuildLint(corrected);
+    if (lintResult.autoFixCount > 0) {
+      appendBuildJobLogs(failedJobId, [
+        `Pre-build lint auto-fixed ${lintResult.autoFixCount} issue(s)`,
+        ...lintResult.warnings.filter(w => w.autoFixed).map(w => `  Fixed: ${w.file}: ${w.message}`),
+      ]);
+    }
+    const lintWarnings = lintResult.warnings.filter(w => !w.autoFixed);
+    if (lintWarnings.length > 0) {
+      appendBuildJobLogs(failedJobId, [
+        `Pre-build lint warnings:`,
+        ...lintWarnings.map(w => `  ${w.severity}: ${w.file}: ${w.message}`),
+      ]);
+    }
+
     appendBuildJobLogs(failedJobId, [
       `Merged: ${corrected.length} total files (${fixedPathSet.size} modified by LLM).`,
     ]);
@@ -299,11 +333,12 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       projectName: failedJob.request.projectName,
       bundleId: failedJob.request.bundleId,
       developmentTeam: failedJob.request.developmentTeam,
-      files: corrected,
+      files: lintResult.files,
       autoFix: true,
       attempt,
       maxAttempts,
       parentJobId: failedJobId,
+      userPrompt: failedJob.request.userPrompt,
     });
 
     setBuildJobNextJob(failedJobId, retryJob.id);

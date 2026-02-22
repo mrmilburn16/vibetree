@@ -38,7 +38,7 @@ struct ContentView: View {
                 .padding(.top, Forest.space2)
             }
             .background(Forest.backgroundPrimary)
-            .navigationTitle("VibTree")
+            .navigationTitle("VibeTree")
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -175,6 +175,7 @@ struct ActiveBuildCard: View {
 
     private var statusIcon: String {
         switch job.status {
+        case .generating: return "sparkles"
         case .queued: return "clock.fill"
         case .running: return "hammer.fill"
         case .succeeded: return "checkmark.circle.fill"
@@ -184,6 +185,7 @@ struct ActiveBuildCard: View {
 
     private var statusColor: Color {
         switch job.status {
+        case .generating: return Forest.accentLight
         case .queued: return Forest.warning
         case .running: return Forest.accent
         case .succeeded: return Forest.success

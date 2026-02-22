@@ -1,6 +1,7 @@
 import Foundation
 
 enum BuildJobStatus: String, Codable, CaseIterable {
+    case generating
     case queued
     case running
     case succeeded
@@ -54,6 +55,8 @@ struct BuildJob: Codable, Identifiable {
 
     var stepLabel: String {
         switch status {
+        case .generating:
+            return "Generating code with AI…"
         case .queued:
             return "Waiting for runner…"
         case .running:
@@ -74,22 +77,24 @@ struct BuildJob: Codable, Identifiable {
     /// Estimated progress 0.0 – 1.0 based on status and elapsed time
     func estimatedProgress(averageBuildTime: TimeInterval = 180) -> Double {
         switch status {
+        case .generating:
+            let t = min(Double(elapsedSeconds) / 60.0, 1.0)
+            return t * 0.40
         case .queued:
-            let t = min(Double(elapsedSeconds) / 30.0, 1.0)
-            return t * 0.10
+            return 0.40 + min(Double(elapsedSeconds) / 30.0, 1.0) * 0.05
         case .running:
             if autoFixInProgress == true {
                 return 0.90
             }
             let buildElapsed = Double(elapsedSeconds)
             let fraction = min(buildElapsed / averageBuildTime, 1.0)
-            return 0.10 + fraction * 0.75
+            return 0.45 + fraction * 0.45
         case .succeeded:
             return 1.0
         case .failed:
             let buildElapsed = Double(elapsedSeconds)
             let fraction = min(buildElapsed / averageBuildTime, 1.0)
-            return 0.10 + fraction * 0.75
+            return 0.45 + fraction * 0.45
         }
     }
 }

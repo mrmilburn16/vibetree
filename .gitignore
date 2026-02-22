@@ -23,6 +23,11 @@
 # production
 /build
 
+# Xcode build artifacts
+ios/**/build/
+ios/**/*.xcuserdata/
+ios/**/DerivedData/
+
 # misc
 .DS_Store
 *.pem

@@ -7,6 +7,7 @@ const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
 const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
 const XCODE_TEAM_ID_STORAGE_PREFIX = "vibetree-xcode-team-id:";
 const XCODE_BUNDLE_ID_OVERRIDE_PREFIX = "vibetree-xcode-bundle-id:";
+const XCODE_PREFERRED_DEVICE_PREFIX = "vibetree-xcode-preferred-device:";
 
 export function RunOnDeviceModal({
   isOpen,
@@ -30,6 +31,7 @@ export function RunOnDeviceModal({
   const [error, setError] = useState<string | null>(null);
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [teamId, setTeamId] = useState("");
+  const [preferredRunDevice, setPreferredRunDevice] = useState("");
   const [bundleIdOverride, setBundleIdOverride] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [validateLoading, setValidateLoading] = useState(false);
@@ -57,8 +59,19 @@ export function RunOnDeviceModal({
     if (typeof window !== "undefined") {
       try {
         const t = localStorage.getItem(`${XCODE_TEAM_ID_STORAGE_PREFIX}${projectId}`) ?? "";
+        let d = localStorage.getItem(`${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`) ?? "";
+        if (!d) {
+          const universal = localStorage.getItem("vibetree-universal-defaults");
+          if (universal) {
+            try {
+              const parsed = JSON.parse(universal);
+              if (typeof parsed.preferredRunDevice === "string") d = parsed.preferredRunDevice;
+            } catch {}
+          }
+        }
         const b = localStorage.getItem(`${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`) ?? "";
         setTeamId(t);
+        setPreferredRunDevice(d);
         setBundleIdOverride(b);
       } catch {
         // ignore
@@ -227,6 +240,8 @@ export function RunOnDeviceModal({
                 projectName,
                 bundleId: finalBundleId,
                 developmentTeam: finalTeamId,
+                preferredRunDevice: preferredRunDevice.trim() || undefined,
+                timezoneOffsetMinutes: new Date().getTimezoneOffset(),
               }),
             });
           }
@@ -235,11 +250,13 @@ export function RunOnDeviceModal({
         }
       }
 
-      // Fallback: server-side in-memory cache (include team so signing is pre-filled)
+      // Fallback: server-side in-memory cache (include team, preferred device, timezone so signing/README/dates are correct)
       if (!res) {
         const q = new URLSearchParams();
         if (teamId.trim()) q.set("developmentTeam", teamId.trim());
-        res = await fetch(`/api/projects/${projectId}/export-xcode${q.toString() ? `?${q.toString()}` : ""}`);
+        if (preferredRunDevice.trim()) q.set("preferredRunDevice", preferredRunDevice.trim());
+        q.set("timezoneOffsetMinutes", String(new Date().getTimezoneOffset()));
+        res = await fetch(`/api/projects/${projectId}/export-xcode?${q.toString()}`);
       }
 
       if (!res.ok) {

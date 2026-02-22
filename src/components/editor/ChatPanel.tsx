@@ -214,6 +214,8 @@ export function ChatPanel({
         <ChatMessageList
           messages={messages}
           isTyping={isTyping}
+          buildStatus={buildStatus}
+          projectId={projectId}
           onEnterGuidedMode={
             messages.length === 0 && !guidedMode
               ? () => handleGuidedModeToggle(true)

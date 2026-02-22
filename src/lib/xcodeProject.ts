@@ -41,6 +41,8 @@ export interface BuildPbxprojOptions {
    * values are the user-facing usage strings.
    */
   privacyPermissions: Record<string, string>;
+  entitlementsPath?: string;
+  frameworks?: string[];
 }
 
 interface PrivacyRule {
@@ -135,6 +137,172 @@ export function detectPrivacyPermissions(
   return result;
 }
 
+interface FrameworkRule {
+  patterns: RegExp[];
+  framework: string;
+}
+
+const FRAMEWORK_RULES: FrameworkRule[] = [
+  {
+    patterns: [/\bimport Charts\b/, /\bChart\s*\{/, /\bBarMark\b/, /\bLineMark\b/, /\bAreaMark\b/, /\bPointMark\b/, /\bRuleMark\b/, /\bSectorMark\b/],
+    framework: "Charts",
+  },
+  {
+    patterns: [/\bimport MapKit\b/, /\bMap\s*\(/, /\bMKCoordinateRegion\b/, /\bMapAnnotation\b/, /\bMapMarker\b/, /\bMapPolyline\b/, /\bMapCircle\b/],
+    framework: "MapKit",
+  },
+  {
+    patterns: [/\bimport StoreKit\b/, /\bProduct\b/, /\bTransaction\b/, /\bSubscriptionStoreView\b/],
+    framework: "StoreKit",
+  },
+  {
+    patterns: [/\bimport AVFoundation\b/, /\bAVPlayer\b/, /\bAVAudioPlayer\b/, /\bAVAudioSession\b/, /\bAVCaptureSession\b/],
+    framework: "AVFoundation",
+  },
+  {
+    patterns: [/\bimport CoreData\b/, /\bNSManagedObject\b/, /\bNSPersistentContainer\b/, /\b@FetchRequest\b/],
+    framework: "CoreData",
+  },
+  {
+    patterns: [/\bimport CoreLocation\b/, /\bCLLocationManager\b/, /\bCLGeocoder\b/],
+    framework: "CoreLocation",
+  },
+  {
+    patterns: [/\bimport UserNotifications\b/, /\bUNUserNotificationCenter\b/, /\bUNMutableNotificationContent\b/],
+    framework: "UserNotifications",
+  },
+  {
+    patterns: [/\bimport ActivityKit\b/, /\bActivity</, /\bActivityAttributes\b/],
+    framework: "ActivityKit",
+  },
+  {
+    patterns: [/\bimport WidgetKit\b/, /\bTimelineProvider\b/, /\bWidgetFamily\b/],
+    framework: "WidgetKit",
+  },
+  {
+    patterns: [/\bimport CoreBluetooth\b/, /\bCBCentralManager\b/, /\bCBPeripheralManager\b/],
+    framework: "CoreBluetooth",
+  },
+  {
+    patterns: [/\bimport HealthKit\b/, /\bHKHealthStore\b/],
+    framework: "HealthKit",
+  },
+  {
+    patterns: [/\bimport CoreNFC\b/, /\bNFCTagReaderSession\b/],
+    framework: "CoreNFC",
+  },
+  {
+    patterns: [/\bimport Speech\b/, /\bSFSpeechRecognizer\b/],
+    framework: "Speech",
+  },
+  {
+    patterns: [/\bimport CoreMotion\b/, /\bCMMotionManager\b/],
+    framework: "CoreMotion",
+  },
+  {
+    patterns: [/\bimport WebKit\b/, /\bWKWebView\b/, /\bWKNavigationDelegate\b/],
+    framework: "WebKit",
+  },
+  {
+    patterns: [/\bimport SafariServices\b/, /\bSFSafariViewController\b/],
+    framework: "SafariServices",
+  },
+];
+
+export function detectRequiredFrameworks(files: SwiftFile[]): string[] {
+  const frameworks: Set<string> = new Set();
+  const combined = files.map((f) => f.content).join("\n");
+
+  for (const rule of FRAMEWORK_RULES) {
+    if (frameworks.has(rule.framework)) continue;
+    for (const pattern of rule.patterns) {
+      if (pattern.test(combined)) {
+        frameworks.add(rule.framework);
+        break;
+      }
+    }
+  }
+
+  return Array.from(frameworks).sort();
+}
+
+interface EntitlementRule {
+  patterns: RegExp[];
+  key: string;
+  value: string | boolean | string[];
+}
+
+const ENTITLEMENT_RULES: EntitlementRule[] = [
+  {
+    patterns: [/\bimport StoreKit\b/, /\bProduct\b/, /\bTransaction\b/, /\bSubscriptionStoreView\b/],
+    key: "com.apple.developer.in-app-payments",
+    value: ["merchant.*"],
+  },
+  {
+    patterns: [/\bimport UserNotifications\b/, /\bUNUserNotificationCenter\b/, /\bUNMutableNotificationContent\b/],
+    key: "aps-environment",
+    value: "development",
+  },
+  {
+    patterns: [/\bimport HealthKit\b/, /\bHKHealthStore\b/],
+    key: "com.apple.developer.healthkit",
+    value: true,
+  },
+  {
+    patterns: [/\bimport CoreNFC\b/, /\bNFCTagReaderSession\b/],
+    key: "com.apple.developer.nfc.readersession.formats",
+    value: ["NDEF", "TAG"],
+  },
+  {
+    patterns: [/\bAppGroupContainer\b/, /\bUserDefaults\(suiteName:/, /\bFileManager.*containerURL.*appGroupIdentifier/],
+    key: "com.apple.security.application-groups",
+    value: ["group.com.vibetree.app"],
+  },
+];
+
+export function detectEntitlements(files: SwiftFile[]): Record<string, string | boolean | string[]> | null {
+  const entitlements: Record<string, string | boolean | string[]> = {};
+  const combined = files.map((f) => f.content).join("\n");
+
+  for (const rule of ENTITLEMENT_RULES) {
+    if (entitlements[rule.key] !== undefined) continue;
+    for (const pattern of rule.patterns) {
+      if (pattern.test(combined)) {
+        entitlements[rule.key] = rule.value;
+        break;
+      }
+    }
+  }
+
+  return Object.keys(entitlements).length > 0 ? entitlements : null;
+}
+
+/**
+ * Generate a .entitlements plist XML file from detected entitlements.
+ */
+export function generateEntitlementsPlist(entitlements: Record<string, string | boolean | string[]>): string {
+  const entries: string[] = [];
+  for (const [key, value] of Object.entries(entitlements)) {
+    if (typeof value === "boolean") {
+      entries.push(`\t<key>${key}</key>\n\t<${value}/>"`);
+    } else if (typeof value === "string") {
+      entries.push(`\t<key>${key}</key>\n\t<string>${value}</string>`);
+    } else if (Array.isArray(value)) {
+      const items = value.map((v) => `\t\t<string>${v}</string>`).join("\n");
+      entries.push(`\t<key>${key}</key>\n\t<array>\n${items}\n\t</array>`);
+    }
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+${entries.join("\n")}
+</dict>
+</plist>
+`;
+}
+
 /**
  * Build project.pbxproj content for the given Swift file paths.
  * Paths are relative (e.g. "App.swift", "ContentView.swift", "Models/Item.swift").
@@ -192,6 +360,10 @@ export function buildPbxproj(
     .join("\n");
   const privacyPermBlock = privacyPermLines ? `${privacyPermLines}\n` : "";
 
+  const entitlementsLine = options?.entitlementsPath
+    ? `\t\t\t\tCODE_SIGN_ENTITLEMENTS = ${JSON.stringify(projectName + "/" + options.entitlementsPath)};\n`
+    : "";
+
   const fileTypeForPath = (p: string): string => {
     if (p.endsWith(".swift")) return "sourcecode.swift";
     if (p.endsWith(".plist")) return "text.plist.xml";
@@ -206,6 +378,14 @@ export function buildPbxproj(
   const widgetBuildFileIds = new Map<string, string>();
   if (usesWidgetTarget) {
     for (const p of widgetSwiftPaths) widgetBuildFileIds.set(p, xcodeId());
+  }
+
+  const frameworks = options?.frameworks ?? [];
+  const frameworkFileRefIds = new Map<string, string>();
+  const frameworkBuildFileIds = new Map<string, string>();
+  for (const fw of frameworks) {
+    frameworkFileRefIds.set(fw, xcodeId());
+    frameworkBuildFileIds.set(fw, xcodeId());
   }
 
   const projectProductsAppId = xcodeId();
@@ -246,6 +426,13 @@ export function buildPbxproj(
     })
     .join("\n");
 
+  const frameworkFileRefLines = frameworks
+    .map((fw) => {
+      const id = frameworkFileRefIds.get(fw)!;
+      return `\t\t${id} /* ${fw}.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ${JSON.stringify(fw + ".framework")}; path = System/Library/Frameworks/${fw}.framework; sourceTree = SDKROOT; };`;
+    })
+    .join("\n");
+
   const buildFileLines: string[] = [];
   for (const p of appSwiftPaths) {
     const buildId = appBuildFileIds.get(p)!;
@@ -272,6 +459,14 @@ export function buildPbxproj(
       `\t\t${embedWidgetBuildFileId} /* ${widgetName}.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = ${projectProductsWidgetId} /* ${widgetName}.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, );}; };`
     );
   }
+
+  const frameworkBuildLines = frameworks
+    .map((fw) => {
+      const buildId = frameworkBuildFileIds.get(fw)!;
+      const fileRefId = frameworkFileRefIds.get(fw)!;
+      return `\t\t${buildId} /* ${fw}.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ${fileRefId} /* ${fw}.framework */; };`;
+    })
+    .join("\n");
 
   const appSourcesPhaseFiles = appSwiftPaths
     .map((p) => appBuildFileIds.get(p)!)
@@ -313,6 +508,16 @@ export function buildPbxproj(
 
   const widgetChildrenInGroup = usesWidgetTarget
     ? `\t\t\t\t${projectProductsWidgetId} /* ${widgetName}.appex */,\n`
+    : "";
+
+  const frameworkChildrenInGroup = frameworks
+    .map((fw) => `\t\t\t\t${frameworkFileRefIds.get(fw)!} /* ${fw}.framework */,\n`)
+    .join("");
+
+  const appFrameworksPhaseFiles = frameworks.length > 0
+    ? frameworks
+        .map((fw) => `\t\t\t\t${frameworkBuildFileIds.get(fw)!} /* ${fw}.framework in Frameworks */`)
+        .join(",\n")
     : "";
 
   const widgetFrameworksBlock = usesWidgetTarget
@@ -364,7 +569,7 @@ export function buildPbxproj(
 \tobjects = {
 
 /* Begin PBXBuildFile section */
-${buildFileLines.join("\n")}
+${buildFileLines.join("\n")}${frameworkBuildLines ? "\n" + frameworkBuildLines : ""}
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -372,7 +577,7 @@ ${fileRefLines}
 \t\t${projectProductsAppId} /* ${projectName}.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ${JSON.stringify(
     `${projectName}.app`
   )}; sourceTree = BUILT_PRODUCTS_DIR; };
-${widgetFileRefLine}
+${frameworkFileRefLines ? frameworkFileRefLines + "\n" : ""}${widgetFileRefLine}
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -380,7 +585,7 @@ ${widgetFileRefLine}
 \t\t\tisa = PBXFrameworksBuildPhase;
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
-\t\t\t);
+${appFrameworksPhaseFiles ? appFrameworksPhaseFiles + "\n" : ""}\t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t};
 ${widgetFrameworksBlock}
@@ -393,7 +598,7 @@ ${copyFilesSection}
 \t\t\tchildren = (
 \t\t\t\t${sourcesGroupId} /* ${projectName} */,
 \t\t\t\t${projectProductsAppId} /* ${projectName}.app */,
-${widgetChildrenInGroup}\t\t\t);
+${frameworkChildrenInGroup}${widgetChildrenInGroup}\t\t\t);
 \t\t\tsourceTree = "<group>";
 \t\t};
 \t\t${sourcesGroupId} /* ${projectName} */ = {
@@ -534,7 +739,7 @@ ${widgetSourcesBlock}
 \t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 \t\t\t\tASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 \t\t\t\tCODE_SIGN_STYLE = Automatic;
-${developmentTeamLine}\t\t\t\tCURRENT_PROJECT_VERSION = 1;
+${entitlementsLine}${developmentTeamLine}\t\t\t\tCURRENT_PROJECT_VERSION = 1;
 \t\t\t\tDEVELOPMENT_ASSET_PATHS = "";
 \t\t\t\tENABLE_PREVIEWS = YES;
 \t\t\t\tGENERATE_INFOPLIST_FILE = YES;
@@ -562,7 +767,7 @@ ${supportsLiveActivitiesLine}${privacyPermBlock}\t\t\t\tINFOPLIST_KEY_UIApplicat
 \t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 \t\t\t\tASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 \t\t\t\tCODE_SIGN_STYLE = Automatic;
-${developmentTeamLine}\t\t\t\tCURRENT_PROJECT_VERSION = 1;
+${entitlementsLine}${developmentTeamLine}\t\t\t\tCURRENT_PROJECT_VERSION = 1;
 \t\t\t\tDEVELOPMENT_ASSET_PATHS = "";
 \t\t\t\tENABLE_PREVIEWS = YES;
 \t\t\t\tGENERATE_INFOPLIST_FILE = YES;

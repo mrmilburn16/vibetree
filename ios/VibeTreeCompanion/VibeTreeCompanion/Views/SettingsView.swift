@@ -200,7 +200,7 @@ struct SettingsView: View {
             sectionLabel("About")
 
             HStack {
-                Text("VibTree Companion")
+                Text("VibeTree Companion")
                     .font(.system(size: Forest.textSm))
                     .foregroundColor(Forest.textSecondary)
                 Spacer()

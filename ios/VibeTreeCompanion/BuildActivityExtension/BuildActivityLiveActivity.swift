@@ -79,7 +79,7 @@ struct BuildActivityLiveActivity: Widget {
                 Image(systemName: statusIcon(state.status))
                     .foregroundColor(statusColor(state.status))
                     .font(.system(size: 16, weight: .semibold))
-                Text("VibTree Build")
+                Text("VibeTree Build")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundColor(Color(hex: "FAFAFA"))
                 Spacer()
@@ -149,6 +149,7 @@ struct BuildActivityLiveActivity: Widget {
 
     private func statusIcon(_ status: String) -> String {
         switch status {
+        case "generating": return "sparkles"
         case "queued": return "clock.fill"
         case "running": return "hammer.fill"
         case "succeeded": return "checkmark.circle.fill"
@@ -159,6 +160,7 @@ struct BuildActivityLiveActivity: Widget {
 
     private func statusColor(_ status: String) -> Color {
         switch status {
+        case "generating": return Color(hex: "34D399")
         case "queued": return Color(hex: "EAB308")
         case "running": return Color(hex: "10B981")
         case "succeeded": return Color(hex: "22C55E")
