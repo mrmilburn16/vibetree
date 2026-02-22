@@ -26,6 +26,8 @@ export type BuildJobRecord = {
   compilerErrors?: string[];
   /** Points to the retry job created by auto-fix. */
   nextJobId?: string;
+  /** True while auto-fix is running; tells clients to keep polling. */
+  autoFixInProgress?: boolean;
 };
 
 const MAX_LOG_LINES = 1500;
@@ -59,6 +61,10 @@ export function getBuildJob(id: string): BuildJobRecord | undefined {
   return jobs.get(id);
 }
 
+export function getAllBuildJobs(): BuildJobRecord[] {
+  return Array.from(jobs.values());
+}
+
 export function appendBuildJobLogs(id: string, lines: string[]): void {
   const rec = jobs.get(id);
   if (!rec) return;
@@ -90,7 +96,15 @@ export function setBuildJobNextJob(failedId: string, nextId: string): void {
   const rec = jobs.get(failedId);
   if (!rec) return;
   rec.nextJobId = nextId;
+  rec.autoFixInProgress = false;
   jobs.set(failedId, rec);
+}
+
+export function setBuildJobAutoFixInProgress(id: string, inProgress: boolean): void {
+  const rec = jobs.get(id);
+  if (!rec) return;
+  rec.autoFixInProgress = inProgress;
+  jobs.set(id, rec);
 }
 
 export function claimNextBuildJob(runnerId: string): BuildJobRecord | undefined {

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "mac-runner": "node scripts/mac-runner.mjs"
+    "mac-runner": "node scripts/mac-runner.mjs",
+    "test:build-results": "node scripts/test-build-results-log.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

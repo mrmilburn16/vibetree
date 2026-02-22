@@ -20,9 +20,9 @@ const MODEL_MAP: Record<string, string> = {
 };
 
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
-// Higher cap reduces truncated/incomplete JSON responses for multi-file builds.
 // Sonnet 4.6 max output is 64K tokens; Opus 4.6 max output is 128K tokens.
-const MAX_TOKENS = 20000;
+// 32K handles complex multi-file apps (13+ files) without truncation.
+const MAX_TOKENS = 32000;
 
 const SYSTEM_PROMPT_STANDARD = `You are an expert React Native / Expo developer. You build and modify Expo apps that run in Expo Go. Reply message-by-message: if the user sends a follow-up (e.g. "change the button color to blue"), you will receive the current project files and their request; apply the change and output the full updated JSON. If there are no current files, create a new app from scratch.
 
@@ -58,9 +58,11 @@ Rules:
   - "WidgetExtension/LiveActivityWidget.swift" with \`ActivityConfiguration(for: <YourAttributes>.self)\` and (if appropriate) Dynamic Island regions
   - Share the \`ActivityAttributes\` type from your main app (e.g. in "LiveActivity/<Name>Attributes.swift") by importing it and referencing it from the widget extension code.
 - Design and UX: Every screen must feel like it was crafted by world-class product designers—modern, polished, and visually outstanding. Apply thoughtful spacing, clear hierarchy, excellent typography (e.g. .font(.title2), .fontWeight(.semibold), scale for readability), and subtle animations or transitions where they add clarity. Avoid generic or template-looking UI; aim for the level of care you would expect from an elite team of thousands of senior UI/UX designers with decades of combined experience. The result should feel like an App Store editor’s choice.
+- Backgrounds and color: Do NOT default to plain black (Color.black) or a flat dark gray for the main screen background—it reads as unfinished. Choose backgrounds that match the app's theme: if the app uses gray and purple accents, use soft grays and purple-tinted surfaces (e.g. a subtle LinearGradient using those colors). Prefer one or more of: (1) a subtle gradient from the app's primary/accent colors (e.g. dark purple to soft gray), (2) semantic colors with a light tint, or (3) materials like .regularMaterial with a tint. Keep it tasteful; only use near-black when the concept truly calls for it (e.g. cinema mode, photo viewer).
 - Avoid emojis in user-facing UI text (titles, buttons, labels, empty states). Do not use emoji-only icons. Prefer clean typography. If an icon is genuinely helpful, prefer SF Symbols via Image(systemName:) and use them sparingly and intentionally (no “icon soup”).
 - Keep the app simple and single-window unless the user asks for multiple screens or navigation. No explanations outside the summary.
 - If the user asks for Liquid Glass, iOS 26 design, or glass effect: set deployment target to iOS 26 and use the real iOS 26 APIs like \`.glassEffect()\` (and GlassEffectContainer / \`.glassEffectID()\` where appropriate) so the UI matches the new design language.
+- Privacy permissions: When using privacy-sensitive APIs (camera, microphone, photo library, location, contacts, calendar, health, Face ID, speech recognition, Bluetooth, motion, NFC), the build system will automatically detect the API usage and add the corresponding Info.plist usage description keys. You do NOT need to generate an Info.plist file. However, you MUST properly request permission at runtime using the appropriate API (e.g. \`AVCaptureDevice.requestAccess(for: .video)\`, \`CLLocationManager().requestWhenInUseAuthorization()\`, etc.) before accessing the hardware. Always handle the case where the user denies permission gracefully.
 
 Produce the full set of files (new or updated) in one reply. No markdown, no code fences around the JSON—only the raw JSON object.`;
 

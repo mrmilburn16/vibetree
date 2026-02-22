@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Smartphone, Share2, Upload } from "lucide-react";
+import { Settings, Smartphone, Share2, Upload } from "lucide-react";
 import { Button, BetaBadge, Toast } from "@/components/ui";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
 import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
@@ -24,16 +24,19 @@ const PROJECT_FILES_PREFIX = "vibetree-project-files:";
 const XCODE_TEAM_ID_PREFIX = "vibetree-xcode-team-id:";
 const XCODE_BUNDLE_ID_OVERRIDE_PREFIX = "vibetree-xcode-bundle-id:";
 const VALIDATE_POLL_MS = 2000;
-const VALIDATE_TIMEOUT_MS = 10 * 60 * 1000;
+const VALIDATE_TIMEOUT_MS = 30 * 60 * 1000;
 
-function formatValidateProgress(job: { status?: string; startedAt?: number; createdAt?: number; request?: { attempt?: number; maxAttempts?: number } }): string {
+function formatValidateProgress(job: { status?: string; startedAt?: number; createdAt?: number; autoFixInProgress?: boolean; request?: { attempt?: number; maxAttempts?: number } }): string {
   const status = job?.status ?? "queued";
   const elapsed = Math.floor((Date.now() - (job?.startedAt ?? job?.createdAt ?? Date.now())) / 1000);
   const attempt = job?.request?.attempt ?? 1;
-  const maxAttempts = job?.request?.maxAttempts ?? 3;
+  const maxAttempts = job?.request?.maxAttempts ?? 5;
   const prefix = "Validating build on Mac…";
+  if (job?.autoFixInProgress || (status === "failed" && attempt < maxAttempts)) {
+    return `${prefix} Auto-fixing Swift errors with AI… (${elapsed}s) · Attempt ${attempt}/${maxAttempts}`;
+  }
   if (attempt > 1 && (status === "queued" || status === "running")) {
-    return `${prefix} Auto-fixing Swift errors… (${elapsed}s) · Attempt ${attempt}/${maxAttempts}`;
+    return `${prefix} Rebuilding after fix… (${elapsed}s) · Attempt ${attempt}/${maxAttempts}`;
   }
   if (status === "queued") return `${prefix} Waiting for runner… (${elapsed}s)`;
   if (status === "running") return `${prefix} Building with xcodebuild… (${elapsed}s)`;
@@ -114,7 +117,14 @@ export function EditorLayout({ project }: { project: Project }) {
     async (
       projectId: string,
       onProgress?: (status: string) => void
-    ): Promise<{ status: "succeeded" | "failed"; error?: string }> => {
+    ): Promise<{
+      status: "succeeded" | "failed";
+      error?: string;
+      fixedFiles?: Array<{ path: string; content: string }>;
+      attempts?: number;
+      compilerErrors?: string[];
+      fileNames?: string[];
+    }> => {
       if (typeof window === "undefined") return { status: "failed", error: "Not in browser" };
       let files: Array<{ path: string; content: string }> = [];
       let projectName = "Untitled app";
@@ -163,20 +173,39 @@ export function EditorLayout({ project }: { project: Project }) {
         const status = typeof job?.status === "string" ? job.status : null;
         const nextJobId = typeof job?.nextJobId === "string" ? job.nextJobId : null;
         onProgress?.(formatValidateProgress(job ?? {}));
-        if (status === "succeeded") return { status: "succeeded" };
+        if (status === "succeeded") {
+          const attempt = job?.request?.attempt ?? 1;
+          const fNames = Array.isArray(job?.request?.files)
+            ? job.request.files.map((f: { path: string }) => f.path)
+            : [];
+          if (attempt > 1 && Array.isArray(job?.request?.files) && job.request.files.length > 0) {
+            return { status: "succeeded", fixedFiles: job.request.files, attempts: attempt, fileNames: fNames };
+          }
+          return { status: "succeeded", attempts: attempt, fileNames: fNames };
+        }
         if (status === "failed") {
           if (nextJobId) {
             jobId = nextJobId;
             await new Promise((r) => setTimeout(r, VALIDATE_POLL_MS));
             continue;
           }
+          if (job?.autoFixInProgress) {
+            onProgress?.(formatValidateProgress(job));
+            await new Promise((r) => setTimeout(r, VALIDATE_POLL_MS));
+            continue;
+          }
+          const attempt = job?.request?.attempt ?? 1;
+          const errors = Array.isArray(job?.compilerErrors) ? job.compilerErrors : [];
+          const fNames = Array.isArray(job?.request?.files)
+            ? job.request.files.map((f: { path: string }) => f.path)
+            : [];
           const err =
             typeof job?.error === "string" && job.error.trim()
               ? job.error.trim()
-              : Array.isArray(job?.compilerErrors) && job.compilerErrors.length > 0
-                ? String(job.compilerErrors[0]).trim()
+              : errors.length > 0
+                ? String(errors[0]).trim()
                 : "Build failed";
-          return { status: "failed", error: err };
+          return { status: "failed", error: err, attempts: attempt, compilerErrors: errors, fileNames: fNames };
         }
         await new Promise((r) => setTimeout(r, VALIDATE_POLL_MS));
       }
@@ -212,6 +241,15 @@ export function EditorLayout({ project }: { project: Project }) {
         </div>
         <div className="flex items-center gap-2">
           <CreditsWidget />
+          <Button
+            variant="secondary"
+            className="gap-1.5 text-xs"
+            onClick={() => setSettingsOpen(true)}
+            title="Project settings: signing, deployment, export"
+          >
+            <Settings className="h-3.5 w-3.5" aria-hidden />
+            Settings
+          </Button>
           <Button
             variant="secondary"
             className="gap-1.5 text-xs"
@@ -285,6 +323,7 @@ export function EditorLayout({ project }: { project: Project }) {
             buildFailureReason={buildFailureReason}
             expoUrl={expoUrl}
             onOpenRunOnDevice={() => setRunOnDeviceOpen(true)}
+            projectId={project.id}
           />
         </main>
       </div>

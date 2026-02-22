@@ -1,9 +1,14 @@
 import { spawn, execSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir, homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+/** How long to stream simulator frames after a successful build (ms). */
+const SIMULATOR_STREAM_DURATION_MS = 5 * 60 * 1000;
+/** Interval between screenshot frames (ms). */
+const SIMULATOR_FRAME_INTERVAL_MS = 200;
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -132,6 +137,70 @@ function run(cmd, args, { cwd, onLine }) {
   });
 }
 
+/**
+ * Boot simulator, install app, launch it; then stream screenshots to the server in the background.
+ * We await until install+launch are done so the caller can safely delete tmp; the screenshot loop
+ * runs via setImmediate and does not need the .app path.
+ */
+async function runSimulatorStream(projectId, appPath, bundleId) {
+  if (!existsSync(appPath)) {
+    console.warn("[simulator-stream] .app not found:", appPath);
+    return;
+  }
+  const deviceName = "iPhone 16";
+  try {
+    await run("xcrun", ["simctl", "boot", deviceName], { onLine: () => {} }).catch(() => {});
+  } catch (_) {}
+  try {
+    const installRes = await run("xcrun", ["simctl", "install", "booted", appPath], { onLine: () => {} });
+    if (installRes.code !== 0) {
+      console.warn("[simulator-stream] install failed:", installRes.err?.slice(0, 200));
+      return;
+    }
+  } catch (e) {
+    console.warn("[simulator-stream] install error:", e?.message || e);
+    return;
+  }
+  try {
+    await run("xcrun", ["simctl", "launch", "booted", bundleId], { onLine: () => {} });
+  } catch (e) {
+    console.warn("[simulator-stream] launch error:", e?.message || e);
+  }
+  setImmediate(() => {
+    runScreenshotLoop(projectId).catch((err) =>
+      console.error("[simulator-stream] screenshot loop:", err?.message || err)
+    );
+  });
+}
+
+async function runScreenshotLoop(projectId) {
+  const screenshotPath = join(tmpdir(), `vibetree-sim-${projectId}-${Date.now()}.png`);
+  const start = Date.now();
+  try {
+    while (Date.now() - start < SIMULATOR_STREAM_DURATION_MS) {
+      try {
+        const ioRes = await run("xcrun", ["simctl", "io", "booted", "screenshot", screenshotPath], {
+          onLine: () => {},
+        });
+        if (ioRes.code === 0) {
+          const buf = await readFile(screenshotPath);
+          const res = await api(`/api/projects/${projectId}/simulator-frame`, {
+            method: "POST",
+            headers: { "Content-Type": "image/png" },
+            body: buf,
+          });
+          if (!res.ok) break;
+        }
+      } catch (_) {}
+      await sleep(SIMULATOR_FRAME_INTERVAL_MS);
+    }
+  } finally {
+    try {
+      await rm(screenshotPath, { force: true });
+    } catch (_) {}
+  }
+}
+
 async function validateJob(job) {
   await updateJob(job.id, { status: "running", logs: [`Runner ${RUNNER_ID} validating…`] });
 
@@ -183,6 +252,7 @@ async function validateJob(job) {
       await updateJob(job.id, { logs: chunk });
     };
 
+    const derivedDataPath = join(tmp, "DerivedData");
     const baseArgs = [
       "-project",
       xcodeproj,
@@ -190,6 +260,8 @@ async function validateJob(job) {
       projectName,
       "-destination",
       "generic/platform=iOS Simulator",
+      "-derivedDataPath",
+      derivedDataPath,
       "build",
       // Don't require signing for simulator builds.
       "CODE_SIGNING_ALLOWED=NO",
@@ -231,6 +303,18 @@ async function validateJob(job) {
 
     if (result.code === 0) {
       await updateJob(job.id, { status: "succeeded", exitCode: 0, logs: ["✅ Build succeeded"] });
+      // Start simulator and stream frames to the web app (fire-and-forget).
+      const appPath = join(
+        derivedDataPath,
+        "Build",
+        "Products",
+        "Debug-iphonesimulator",
+        `${projectName}.app`
+      );
+      const bundleId = job.request.bundleId || "com.vibetree.app";
+      const projectId = job.request.projectId;
+      // Await boot+install+launch so tmp is still valid; screenshot loop runs in background.
+      await runSimulatorStream(projectId, appPath, bundleId);
     } else {
       const allOutput = (result.out || "") + "\n" + (result.err || "");
       // Capture Swift compiler errors: file.swift:line:col: error: or file.swift:line: error:

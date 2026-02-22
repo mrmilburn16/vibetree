@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { getProjectFiles, getProjectFilePaths } from "@/lib/projectFileStore";
-import { buildPbxproj } from "@/lib/xcodeProject";
+import { buildPbxproj, detectPrivacyPermissions } from "@/lib/xcodeProject";
 import { getProject, ensureProject } from "@/lib/projectStore";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 
@@ -148,11 +148,17 @@ struct AppLiveActivityWidget: Widget {
 
   const allPaths = widgetInfoPlistPath ? [...swiftPaths, widgetInfoPlistPath] : [...swiftPaths];
 
+  const allSwiftFiles = allPaths
+    .filter((p) => p.endsWith(".swift"))
+    .map((p) => ({ path: p, content: filesMap[p] ?? "" }));
+  const privacyPermissions = detectPrivacyPermissions(allSwiftFiles);
+
   const pbxproj = buildPbxproj(allPaths, {
     deploymentTarget,
     projectName: options.projectName,
     bundleId: options.bundleId,
     developmentTeam: options.developmentTeam,
+    privacyPermissions,
     appSwiftPaths,
     widget:
       widgetInfoPlistPath && widgetSources.length > 0

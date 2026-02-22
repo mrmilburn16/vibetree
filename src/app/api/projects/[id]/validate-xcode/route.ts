@@ -47,7 +47,7 @@ export async function POST(
     ...(providedTeam ? { developmentTeam: providedTeam } : {}),
     autoFix,
     attempt: 1,
-    maxAttempts: 3,
+    maxAttempts: 5,
   });
 
   return Response.json({ job });

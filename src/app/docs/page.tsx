@@ -205,6 +205,9 @@ export default function DocsPage() {
                 The preview pane shows the current state of your app. Build status can be <strong>idle</strong>, <strong>building</strong>, <strong>live</strong>, or <strong>failed</strong>. When live, you see the running app (or a placeholder when using the mock flow). The preview can be wrapped in an optional device frame to simulate an iPhone.
               </p>
               <p>
+                <strong>Standard (Expo)</strong> projects get a live in-browser preview: we run an Expo dev server and show a QR code; scan with Expo Go to see the app on your phone. <strong>Pro (Swift/SwiftUI)</strong> builds native iOS code—SwiftUI does not run in the browser, so there is no in-browser simulator. When a Pro build is live, use <strong>Run on device</strong> to download the Xcode project, then open it in Xcode and run on the iOS Simulator or a physical iPhone to preview. We may add a static screenshot from the Mac build runner after each successful Pro build in a future update; a full live stream of the simulator in the browser would require separate infrastructure (e.g. a cloud simulator service).
+              </p>
+              <p>
                 Each successful build consumes credits (see Credits & billing). If the build fails, you’ll see a failed state and can adjust your request and try again.
               </p>
             </DocSection>

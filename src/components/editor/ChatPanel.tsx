@@ -10,6 +10,7 @@ import { BuildingIndicator } from "./BuildingIndicator";
 import { ReadyIndicator } from "./ReadyIndicator";
 import { FailedIndicator } from "./FailedIndicator";
 import { ChatMessageList } from "./ChatMessageList";
+import { GuidedModeWizard } from "./GuidedModeWizard";
 import { useChat } from "./useChat";
 import { useCredits } from "@/contexts/CreditsContext";
 import { featureFlags } from "@/lib/featureFlags";
@@ -17,6 +18,7 @@ import { LLM_OPTIONS, DEFAULT_LLM } from "@/lib/llm-options";
 
 const LLM_STORAGE_KEY = "vibetree-llm";
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
+const GUIDED_MODE_STORAGE_KEY = "vibetree-guided-mode";
 
 const PROJECT_TYPE_OPTIONS = [
   { value: "standard", label: "Standard (Expo)" },
@@ -59,6 +61,7 @@ export function ChatPanel({
 }) {
   const [llm, setLlm] = useState(DEFAULT_LLM);
   const [projectType, setProjectType] = useState<"standard" | "pro">("standard");
+  const [guidedMode, setGuidedMode] = useState(true);
   const { hasCreditsForMessage, deduct } = useCredits();
 
   useEffect(() => {
@@ -76,6 +79,14 @@ export function ChatPanel({
     }
   }, []);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(GUIDED_MODE_STORAGE_KEY);
+      if (stored === "false") setGuidedMode(false);
+      else if (stored === "true") setGuidedMode(true);
+    }
+  }, []);
+
   const handleLlmChange = (value: string) => {
     setLlm(value);
     if (typeof window !== "undefined") localStorage.setItem(LLM_STORAGE_KEY, value);
@@ -86,6 +97,12 @@ export function ChatPanel({
     setProjectType(next);
     if (typeof window !== "undefined") localStorage.setItem(PROJECT_TYPE_STORAGE_KEY, next);
   };
+
+  const handleGuidedModeToggle = (on: boolean) => {
+    setGuidedMode(on);
+    if (typeof window !== "undefined") localStorage.setItem(GUIDED_MODE_STORAGE_KEY, String(on));
+  };
+
   const {
     messages,
     isTyping,
@@ -130,6 +147,23 @@ export function ChatPanel({
     [input, canSend, sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
   );
 
+  const handleGuidedComplete = useCallback(
+    (enrichedPrompt: string) => {
+      if (!hasCreditsForMessage) {
+        onOutOfCredits?.();
+        return;
+      }
+      if (!featureFlags.useRealLLM && !deduct(1)) {
+        onOutOfCredits?.();
+        return;
+      }
+      sendMessage(enrichedPrompt, llm, projectType);
+    },
+    [sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
+  );
+
+  const showGuidedWizard = guidedMode && messages.length === 0 && !isTyping;
+
   const canSendWithCredits = canSend && hasCreditsForMessage;
   const showCharCount = input.length > 0 && input.length >= 0.8 * maxMessageLength;
   const placeholderIndex = messages.length % CHAT_PLACEHOLDERS.length;
@@ -170,7 +204,23 @@ export function ChatPanel({
         </div>
       </div>
 
-      <ChatMessageList messages={messages} isTyping={isTyping} />
+      {showGuidedWizard ? (
+        <GuidedModeWizard
+          projectType={projectType}
+          onComplete={handleGuidedComplete}
+          onSkip={() => handleGuidedModeToggle(false)}
+        />
+      ) : (
+        <ChatMessageList
+          messages={messages}
+          isTyping={isTyping}
+          onEnterGuidedMode={
+            messages.length === 0 && !guidedMode
+              ? () => handleGuidedModeToggle(true)
+              : undefined
+          }
+        />
+      )}
 
       <form onSubmit={handleSubmit} className="shrink-0 border-t border-[var(--border-default)] p-4 pt-4" style={{ background: "var(--chat-form-bg)" }}>
         <label htmlFor="chat-input" className="sr-only">

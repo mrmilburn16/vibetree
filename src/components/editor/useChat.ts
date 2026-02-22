@@ -476,7 +476,7 @@ export function useChat(
             estimatedCostUsd?: number;
           };
           const rawContent = am?.content ?? "";
-          const editedFiles = Array.isArray(am?.editedFiles) ? am.editedFiles : [];
+          let editedFiles = Array.isArray(am?.editedFiles) ? am.editedFiles : [];
           const shouldPrefixBuilt = editedFiles.length > 0;
           const content =
             rawContent.trim().length === 0
@@ -551,11 +551,34 @@ export function useChat(
             )
               .then((result) => {
                 if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
+                const buildDuration = validateTickRef.current ? Date.now() - validateTickRef.current.startTime : 0;
                 validateTickRef.current = null;
+                if (result.fixedFiles && result.fixedFiles.length > 0) {
+                  saveProjectFilesToLocalStorage(projectId, result.fixedFiles);
+                  editedFiles = result.fixedFiles.map((f) => f.path);
+                }
+                fetch("/api/build-results", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    projectId,
+                    projectName: projectName ?? "Unknown",
+                    prompt: trimmed,
+                    tier: "custom",
+                    category: "",
+                    compiled: result.status === "succeeded",
+                    attempts: result.attempts ?? 1,
+                    autoFixUsed: (result.attempts ?? 1) > 1,
+                    compilerErrors: result.compilerErrors ?? [],
+                    fileCount: editedFiles.length,
+                    fileNames: result.fileNames ?? editedFiles,
+                    durationMs: buildDuration,
+                  }),
+                }).catch(() => {});
                 const validationLine =
                   result.status === "succeeded"
                     ? "Build validated. Your app is ready—download from Run on device when you want to run on your iPhone."
-                    : `Build validation failed: ${result.error ?? "Unknown error"}. We tried automatic fixes (no extra API cost). Describe the error in chat to fix with AI, or open Run on device to view logs.`;
+                    : `Build validation failed after auto-fix: ${result.error ?? "Unknown error"}. Open Run on device to view logs or retry.`;
                 const finalContent =
                   result.status === "succeeded"
                     ? `${content}\n\n${validationLine}`
@@ -571,6 +594,24 @@ export function useChat(
               .catch(() => {
                 if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
                 validateTickRef.current = null;
+                fetch("/api/build-results", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    projectId,
+                    projectName: projectName ?? "Unknown",
+                    prompt: trimmed,
+                    tier: "custom",
+                    category: "",
+                    compiled: false,
+                    attempts: 1,
+                    autoFixUsed: false,
+                    compilerErrors: ["Validation could not complete (error or timeout)"],
+                    fileCount: editedFiles.length,
+                    fileNames: editedFiles,
+                    durationMs: 0,
+                  }),
+                }).catch(() => {});
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === validateMessageId

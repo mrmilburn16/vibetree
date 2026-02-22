@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Sparkles } from "lucide-react";
 import type { ChatMessage } from "./useChat";
 
 const STREAM_WORD_DELAY_MS = 45;
@@ -32,9 +33,11 @@ function isReasoningMessage(msg: { id?: string; role: string; content: string; e
 export function ChatMessageList({
   messages,
   isTyping,
+  onEnterGuidedMode,
 }: {
   messages: ChatMessage[];
   isTyping: boolean;
+  onEnterGuidedMode?: () => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -99,6 +102,16 @@ export function ChatMessageList({
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             Describe your app in plain language—AI writes Swift and you preview live.
           </p>
+          {onEnterGuidedMode && (
+            <button
+              type="button"
+              onClick={onEnterGuidedMode}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[var(--button-primary-bg)]/30 bg-[var(--button-primary-bg)]/10 px-4 py-2 text-xs font-medium text-[var(--button-primary-bg)] hover:bg-[var(--button-primary-bg)]/20 transition-colors"
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              Try Guided Mode
+            </button>
+          )}
         </div>
       )}
       <div className="space-y-1">

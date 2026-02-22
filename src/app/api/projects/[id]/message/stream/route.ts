@@ -189,6 +189,11 @@ export async function POST(
           editedFiles = result.editedFiles;
         }
 
+        // For Pro: always send project files so the client can verify the build before showing "done".
+        if (!projectFilesForClient && projectType === "pro" && currentFiles?.length) {
+          projectFilesForClient = currentFiles;
+        }
+
         enqueuePhase("done_preview_updating");
         safeEnqueue({
           type: "done",

@@ -132,7 +132,7 @@ export function RunOnDeviceModal({
 
         const status = typeof job.status === "string" ? job.status : null;
         const attempt = typeof job.request?.attempt === "number" ? job.request.attempt : 1;
-        const maxAttempts = typeof job.request?.maxAttempts === "number" ? job.request.maxAttempts : 3;
+        const maxAttempts = typeof job.request?.maxAttempts === "number" ? job.request.maxAttempts : 5;
         const nextJobId = typeof job.nextJobId === "string" ? job.nextJobId : null;
 
         setValidateAttempt(attempt);

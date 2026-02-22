@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { Maximize2 } from "lucide-react";
 import { QRCode } from "@/components/ui";
@@ -21,6 +22,7 @@ export function PreviewPane({
   buildFailureReason = null,
   expoUrl = null,
   onOpenRunOnDevice,
+  projectId = null,
 }: {
   buildStatus: BuildStatus;
   buildFailureReason?: string | null;
@@ -28,6 +30,7 @@ export function PreviewPane({
   onOpenRunOnDevice?: () => void;
   onRunOnDevice?: () => void;
   onPublish?: () => void;
+  projectId?: string | null;
 }) {
   const useImageFrame = false; // Set true when /iphone-frame.png is added
   const isPro =
@@ -48,7 +51,12 @@ export function PreviewPane({
               screenInset={SCREEN_INSET}
             />
           ) : (
-            <CSSDeviceFrame buildStatus={buildStatus} buildFailureReason={buildFailureReason} />
+            <CSSDeviceFrame
+              buildStatus={buildStatus}
+              buildFailureReason={buildFailureReason}
+              isPro={isPro}
+              projectId={projectId}
+            />
           )}
           <div className="mt-5 flex justify-center">
             {buildStatus === "live" && (
@@ -68,7 +76,7 @@ export function PreviewPane({
             <div className="flex flex-col items-center gap-2 text-center">
               <p className="text-body-muted text-xs">
                 {buildStatus === "live"
-                  ? "Pro (Swift): Download your app and open in Xcode to run on your iPhone or simulator."
+                  ? "Pro (Swift): Simulator stream appears above when a Mac runner is connected; or download and run in Xcode."
                   : "Build your app in the chat to generate Swift, then download the source."}
               </p>
               {buildStatus === "live" && onOpenRunOnDevice && (
@@ -129,13 +137,56 @@ export function PreviewPane({
   );
 }
 
+const SIMULATOR_POLL_MS = 250;
+
 function CSSDeviceFrame({
   buildStatus,
   buildFailureReason,
+  isPro = false,
+  projectId = null,
 }: {
   buildStatus: BuildStatus;
   buildFailureReason?: string | null;
+  isPro?: boolean;
+  projectId?: string | null;
 }) {
+  const [simulatorPreviewUrl, setSimulatorPreviewUrl] = useState<string | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (buildStatus !== "live" || !isPro || !projectId) {
+      setSimulatorPreviewUrl(null);
+      return;
+    }
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/simulator-preview?t=${Date.now()}`, {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const blob = await res.blob();
+        if (cancelled) return;
+        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = URL.createObjectURL(blob);
+        setSimulatorPreviewUrl(blobUrlRef.current);
+      } catch {
+        // ignore
+      }
+    };
+    poll();
+    const id = setInterval(poll, SIMULATOR_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+      setSimulatorPreviewUrl(null);
+    };
+  }, [buildStatus, isPro, projectId]);
+
   return (
     <div
       className="relative animate-fade-in rounded-[2.75rem] p-[10px]"
@@ -179,9 +230,20 @@ function CSSDeviceFrame({
                 className="absolute inset-0 pointer-events-none animate-screen-shine rounded-[2.25rem] bg-white/[0.03]"
                 aria-hidden
               />
-              <p className="text-body-muted relative text-center text-sm max-w-[200px] leading-relaxed">
-                Simulator stream will appear here when connected.
-              </p>
+              {isPro && simulatorPreviewUrl ? (
+                <img
+                  src={simulatorPreviewUrl}
+                  alt="Simulator preview"
+                  className="absolute inset-0 h-full w-full object-contain object-top rounded-[2.25rem]"
+                  style={{ paddingTop: 40, paddingLeft: 12, paddingRight: 12, paddingBottom: 12 }}
+                />
+              ) : (
+                <p className="text-body-muted relative text-center text-sm max-w-[200px] leading-relaxed">
+                  {isPro
+                    ? "Simulator stream will appear here once the build finishes on the Mac runner."
+                    : "Simulator stream will appear here when connected."}
+                </p>
+              )}
             </>
           )}
           {buildStatus === "failed" && (

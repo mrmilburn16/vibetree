@@ -35,6 +35,104 @@ export interface BuildPbxprojOptions {
    * Defaults to all `.swift` paths excluding `widget.swiftPaths`.
    */
   appSwiftPaths: string[];
+  /**
+   * Privacy permission keys to inject into the auto-generated Info.plist.
+   * Keys are Info.plist keys (e.g. "NSCameraUsageDescription"),
+   * values are the user-facing usage strings.
+   */
+  privacyPermissions: Record<string, string>;
+}
+
+interface PrivacyRule {
+  patterns: RegExp[];
+  key: string;
+  description: string;
+}
+
+const PRIVACY_RULES: PrivacyRule[] = [
+  {
+    patterns: [/\bAVCaptureSession\b/, /\bAVCaptureDevice\b/, /\.camera\b/, /\bCaptureSession\b/],
+    key: "NSCameraUsageDescription",
+    description: "This app uses the camera for its features.",
+  },
+  {
+    patterns: [/\bAVAudioSession\b/, /\bAVAudioRecorder\b/, /\bAVAudioEngine\b/, /\.microphone\b/],
+    key: "NSMicrophoneUsageDescription",
+    description: "This app uses the microphone for audio input.",
+  },
+  {
+    patterns: [/\bPHPhotoLibrary\b/, /\bPHPickerViewController\b/, /\bUIImagePickerController\b/, /\bPHPickerConfiguration\b/],
+    key: "NSPhotoLibraryUsageDescription",
+    description: "This app accesses your photo library.",
+  },
+  {
+    patterns: [/\bCLLocationManager\b/, /\bCoreLocation\b/, /\blocationManager\b/],
+    key: "NSLocationWhenInUseUsageDescription",
+    description: "This app uses your location while in use.",
+  },
+  {
+    patterns: [/\bCNContactStore\b/, /\bimport Contacts\b/],
+    key: "NSContactsUsageDescription",
+    description: "This app accesses your contacts.",
+  },
+  {
+    patterns: [/\bEKEventStore\b/, /\bimport EventKit\b/],
+    key: "NSCalendarsUsageDescription",
+    description: "This app accesses your calendar.",
+  },
+  {
+    patterns: [/\bHKHealthStore\b/, /\bimport HealthKit\b/],
+    key: "NSHealthShareUsageDescription",
+    description: "This app reads your health data.",
+  },
+  {
+    patterns: [/\bLAContext\b/, /\bbiometricType\b/, /\bFaceID\b/],
+    key: "NSFaceIDUsageDescription",
+    description: "This app uses Face ID for authentication.",
+  },
+  {
+    patterns: [/\bSFSpeechRecognizer\b/, /\bimport Speech\b/],
+    key: "NSSpeechRecognitionUsageDescription",
+    description: "This app uses speech recognition.",
+  },
+  {
+    patterns: [/\bCBCentralManager\b/, /\bCBPeripheralManager\b/, /\bimport CoreBluetooth\b/],
+    key: "NSBluetoothAlwaysUsageDescription",
+    description: "This app uses Bluetooth.",
+  },
+  {
+    patterns: [/\bCMMotionManager\b/, /\bimport CoreMotion\b/],
+    key: "NSMotionUsageDescription",
+    description: "This app uses motion and fitness data.",
+  },
+  {
+    patterns: [/\bNFCTagReaderSession\b/, /\bimport CoreNFC\b/],
+    key: "NFCReaderUsageDescription",
+    description: "This app uses NFC.",
+  },
+];
+
+/**
+ * Scan Swift file contents for privacy-sensitive API usage and return
+ * the required Info.plist permission keys with default descriptions.
+ */
+export function detectPrivacyPermissions(
+  files: SwiftFile[]
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  const combined = files.map((f) => f.content).join("\n");
+
+  for (const rule of PRIVACY_RULES) {
+    if (result[rule.key]) continue;
+    for (const pattern of rule.patterns) {
+      if (pattern.test(combined)) {
+        result[rule.key] = rule.description;
+        break;
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -86,6 +184,13 @@ export function buildPbxproj(
   const supportsLiveActivitiesLine = usesWidgetTarget
     ? `\t\t\t\tINFOPLIST_KEY_NSSupportsLiveActivities = YES;\n`
     : "";
+
+  const privacyPerms = options?.privacyPermissions ?? {};
+  const privacyPermLines = Object.entries(privacyPerms)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, desc]) => `\t\t\t\tINFOPLIST_KEY_${key} = ${JSON.stringify(desc)};`)
+    .join("\n");
+  const privacyPermBlock = privacyPermLines ? `${privacyPermLines}\n` : "";
 
   const fileTypeForPath = (p: string): string => {
     if (p.endsWith(".swift")) return "sourcecode.swift";
@@ -433,7 +538,7 @@ ${developmentTeamLine}\t\t\t\tCURRENT_PROJECT_VERSION = 1;
 \t\t\t\tDEVELOPMENT_ASSET_PATHS = "";
 \t\t\t\tENABLE_PREVIEWS = YES;
 \t\t\t\tGENERATE_INFOPLIST_FILE = YES;
-${supportsLiveActivitiesLine}\t\t\t\tINFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+${supportsLiveActivitiesLine}${privacyPermBlock}\t\t\t\tINFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 \t\t\t\tINFOPLIST_KEY_UILaunchScreen_Generation = YES;
 \t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 \t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -461,7 +566,7 @@ ${developmentTeamLine}\t\t\t\tCURRENT_PROJECT_VERSION = 1;
 \t\t\t\tDEVELOPMENT_ASSET_PATHS = "";
 \t\t\t\tENABLE_PREVIEWS = YES;
 \t\t\t\tGENERATE_INFOPLIST_FILE = YES;
-${supportsLiveActivitiesLine}\t\t\t\tINFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+${supportsLiveActivitiesLine}${privacyPermBlock}\t\t\t\tINFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 \t\t\t\tINFOPLIST_KEY_UILaunchScreen_Generation = YES;
 \t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 \t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

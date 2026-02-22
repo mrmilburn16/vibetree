@@ -3,7 +3,9 @@ import {
   getBuildJob,
   setBuildJobStatus,
   setBuildJobCompilerErrors,
+  setBuildJobAutoFixInProgress,
 } from "@/lib/buildJobs";
+import { sendBuildNotification } from "@/lib/apns";
 
 function requireRunnerAuth(request: Request): { ok: true } | { ok: false; response: Response } {
   const token = process.env.MAC_RUNNER_TOKEN;
@@ -23,18 +25,22 @@ async function triggerAutoFix(
   jobId: string,
   requestOrigin?: string
 ): Promise<void> {
+  const base =
+    requestOrigin ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    `http://localhost:${process.env.PORT || 3001}`;
+  const url = `${base}/api/projects/${projectId}/auto-fix-build`;
   try {
-    const base =
-      requestOrigin ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      `http://localhost:${process.env.PORT || 3000}`;
-    await fetch(`${base}/api/projects/${projectId}/auto-fix-build`, {
+    console.log(`[auto-fix] Triggering: POST ${url} (failedJobId=${jobId})`);
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ failedJobId: jobId }),
     });
-  } catch (_) {
-    // Best-effort; if it fails, the UI will show the failure and the user can retry manually.
+    const text = await res.text();
+    console.log(`[auto-fix] Response ${res.status}: ${text.slice(0, 300)}`);
+  } catch (err) {
+    console.error(`[auto-fix] Fetch failed for job ${jobId}:`, err);
   }
 }
 
@@ -78,21 +84,49 @@ export async function POST(
     });
   }
 
-  // Trigger auto-fix when a build fails and autoFix is enabled with remaining attempts.
-  // Run auto-fix if we have parsed compiler errors OR build logs (fallback so we can try fixing from log output).
   const freshJob = getBuildJob(id);
   const hasErrors = (freshJob?.compilerErrors?.length ?? 0) > 0;
   const hasLogs = (freshJob?.logs?.length ?? 0) > 0;
+  const attempt = freshJob?.request.attempt ?? 1;
+  const maxAttempts = freshJob?.request.maxAttempts ?? 5;
+
+  if (freshJob && freshJob.status === "succeeded") {
+    sendBuildNotification(
+      freshJob.request.projectName,
+      "succeeded"
+    ).catch((err) => console.error("[apns] Error sending success notification:", err));
+  }
+
+  if (freshJob && freshJob.status === "failed") {
+    console.log(
+      `[auto-fix] Job ${id} failed. autoFix=${freshJob.request.autoFix}, ` +
+      `attempt=${attempt}/${maxAttempts}, hasErrors=${hasErrors}, hasLogs=${hasLogs}`
+    );
+  }
+
   if (
     freshJob &&
     freshJob.status === "failed" &&
     freshJob.request.autoFix &&
-    (freshJob.request.attempt ?? 1) < (freshJob.request.maxAttempts ?? 3) &&
+    attempt < maxAttempts &&
     (hasErrors || hasLogs)
   ) {
+    console.log(`[auto-fix] Triggering auto-fix for job ${id} (attempt ${attempt}/${maxAttempts})`);
+    setBuildJobAutoFixInProgress(id, true);
     triggerAutoFix(freshJob.request.projectId, id, requestOrigin);
+  } else if (freshJob && freshJob.status === "failed") {
+    console.log(
+      `[auto-fix] NOT triggering auto-fix for job ${id}: ` +
+      `autoFix=${freshJob.request.autoFix}, ` +
+      `attempt=${attempt} < maxAttempts=${maxAttempts} = ${attempt < maxAttempts}, ` +
+      `hasErrors||hasLogs=${hasErrors || hasLogs}`
+    );
+    sendBuildNotification(
+      freshJob.request.projectName,
+      "failed",
+      freshJob.error ?? "Build failed after all attempts"
+    ).catch((err) => console.error("[apns] Error sending failure notification:", err));
   }
 
   return Response.json({ ok: true });
 }
-

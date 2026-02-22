@@ -2,9 +2,7 @@ export type SwiftTextFile = { path: string; content: string };
 
 /**
  * Best-effort fixes for common, safe-to-repair SwiftUI compile issues in LLM output.
- *
- * We can't run Xcode builds server-side, so we use small heuristics that reduce
- * obvious “won’t compile” cases without changing intended logic.
+ * Applied to every file both during initial generation and after auto-fix.
  */
 export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
   return files.map((f) => {
@@ -12,29 +10,31 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
 
     let content = f.content;
 
-    // Common mistake: using `$viewModel` as a value (not `$viewModel.someBinding`),
-    // which triggers “Cannot find '$viewModel' in scope” unless using `@Bindable`.
     if (!content.includes("@Bindable")) {
       content = content.replace(/\$viewModel(?!\.)/g, "viewModel");
     }
 
-    // Common mistake: escaping quotes inside string interpolation Swift code,
-    // e.g. `.currency(code: \"USD\")` which breaks the string literal.
     content = content.replace(
       /\.currency\(code:\s*\\\"([A-Za-z]{3})\\\"\)/g,
       '.currency(code: "$1")'
     );
 
-    // Common mistake: using `.accent` as a ShapeStyle/Color member; SwiftUI uses `.accentColor`.
-    // Examples we fix: `.foregroundStyle(.accent)` / `.fill(.accent)` / `Color.accent`
     content = content.replace(/\.accent(?!Color)\b/g, ".accentColor");
 
-    // Common mistake: passing a numeric string literal where a Double is expected.
-    // Examples we fix: `ProgressView(value: "0.7", total: 1)` / `Gauge(value: "42", in: 0...100)`
     content = content.replace(
       /\b(ProgressView|Gauge)\(\s*value:\s*"(\d+(?:\.\d+)?)"\s*,/g,
       "$1(value: $2,"
     );
+
+    const usesSwiftUI = /\b(Color|LinearGradient|RoundedRectangle|Circle|Rectangle|Text|Image|Button|List|NavigationStack|NavigationView|Form|VStack|HStack|ZStack|ScrollView|ForEach|Group|Section|TabView|NavigationLink|Spacer|Divider|Toggle|Slider|Picker|DatePicker|ProgressView|Gauge|Chart|BarMark|LineMark|AreaMark|PointMark|View|some View|@State|@Binding|@Environment|@StateObject|@ObservedObject|@Published|@Observable|@AppStorage|GeometryReader|LazyVGrid|LazyHGrid|GridItem|Sheet|Alert|ToolbarItem)\b/.test(content);
+    if (usesSwiftUI && !content.includes("import SwiftUI")) {
+      content = "import SwiftUI\n" + content;
+    }
+
+    const usesFoundation = /\b(Date|UUID|JSONDecoder|JSONEncoder|UserDefaults|FileManager|Data|URL|URLSession|Timer|Calendar|DateFormatter|NumberFormatter|Locale|TimeZone|NotificationCenter|Bundle)\b/.test(content);
+    if (usesFoundation && !content.includes("import Foundation") && !content.includes("import SwiftUI")) {
+      content = "import Foundation\n" + content;
+    }
 
     return { ...f, content };
   });
@@ -56,36 +56,58 @@ export function applyRuleBasedFixesFromBuild(
   const hasImport = (content: string, mod: string) =>
     new RegExp(`import\\s+${mod}\\b`).test(content);
 
-  const appFile = () =>
-    result.find((f) => f.path === "App.swift" || f.path.endsWith("/App.swift")) ?? result[0];
+  const addImportToFile = (file: SwiftTextFile, mod: string): SwiftTextFile => ({
+    ...file,
+    content: `import ${mod}\n${file.content}`,
+  });
 
-  // Add missing UIKit if the build log says it's needed
-  if (/Cannot find 'UIKit' in scope|'UIKit' in scope/i.test(combined)) {
-    const f = appFile();
-    if (f && !hasImport(f.content, "UIKit")) {
-      const newContent = f.content.startsWith("import ") ? "import UIKit\n" + f.content : "import UIKit\n" + f.content;
-      result = result.map((p) => (p.path === f.path ? { ...p, content: newContent } : p));
+  const fileByErrorPath = (errorPath: string): SwiftTextFile | undefined => {
+    const base = errorPath.split("/").pop() ?? errorPath;
+    return result.find(
+      (f) => f.path === errorPath || f.path.endsWith(`/${base}`) || f.path.split("/").pop() === base
+    );
+  };
+
+  const fileRe = /([A-Za-z0-9_/]+\.swift):\d+/g;
+  let match: RegExpExecArray | null;
+  const filesNeedingSwiftUI = new Set<string>();
+  const filesNeedingFoundation = new Set<string>();
+
+  for (const err of [...compilerErrors, ...logLines]) {
+    while ((match = fileRe.exec(err)) !== null) {
+      const filePath = match[1];
+      if (/Cannot find.*(Color|View|Text|Image|Button|NavigationStack|List|VStack|HStack|Form|Toggle|Slider|Picker|ProgressView|ScrollView|ForEach|Group|Section|Spacer|Divider|Rectangle|Circle|RoundedRectangle|LinearGradient|State|Binding|Environment|StateObject|ObservedObject)/i.test(err)) {
+        filesNeedingSwiftUI.add(filePath);
+      }
+      if (/Cannot find.*(Date|UUID|UserDefaults|Data|URL|Timer|Calendar|FileManager)/i.test(err)) {
+        filesNeedingFoundation.add(filePath);
+      }
+    }
+    fileRe.lastIndex = 0;
+  }
+
+  for (const path of filesNeedingSwiftUI) {
+    const file = fileByErrorPath(path);
+    if (file && !hasImport(file.content, "SwiftUI")) {
+      result = result.map((f) => f.path === file.path ? addImportToFile(f, "SwiftUI") : f);
       changed = true;
     }
   }
 
-  // Add missing SwiftUI if referenced
-  if (/Cannot find 'SwiftUI' in scope|'SwiftUI' in scope/i.test(combined)) {
-    const f = appFile();
-    if (f && !hasImport(f.content, "SwiftUI")) {
-      const newContent = f.content.startsWith("import ") ? "import SwiftUI\n" + f.content : "import SwiftUI\n" + f.content;
-      result = result.map((p) => (p.path === f.path ? { ...p, content: newContent } : p));
+  for (const path of filesNeedingFoundation) {
+    const file = fileByErrorPath(path);
+    if (file && !hasImport(file.content, "Foundation") && !hasImport(file.content, "SwiftUI")) {
+      result = result.map((f) => f.path === file.path ? addImportToFile(f, "Foundation") : f);
       changed = true;
     }
   }
 
-  // Add missing Foundation if referenced
-  if (/Cannot find 'Foundation' in scope|'Foundation' in scope/i.test(combined)) {
-    const f = appFile();
-    if (f && !hasImport(f.content, "Foundation")) {
-      const newContent = f.content.startsWith("import ") ? "import Foundation\n" + f.content : "import Foundation\n" + f.content;
-      result = result.map((p) => (p.path === f.path ? { ...p, content: newContent } : p));
-      changed = true;
+  if (/Cannot find 'UIKit' in scope/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "UIKit") && /UIKit|UIColor|UIFont|UIImage|UIApplication/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "UIKit") : f);
+        changed = true;
+      }
     }
   }
 
@@ -97,4 +119,3 @@ export function applyRuleBasedFixesFromBuild(
 
   return { files: result, changed };
 }
-
