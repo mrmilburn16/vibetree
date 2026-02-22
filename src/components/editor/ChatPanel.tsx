@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button, Textarea, DropdownSelect } from "@/components/ui";
-import { Send } from "lucide-react";
+import { Send, Sparkles } from "lucide-react";
+import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { BuildingIndicator } from "./BuildingIndicator";
 import { ReadyIndicator } from "./ReadyIndicator";
@@ -37,15 +38,24 @@ const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
 export function ChatPanel({
   projectId,
   projectName,
+  buildFailureReason,
   onBuildStatusChange,
   onOutOfCredits,
   onError,
+  onProBuildComplete,
 }: {
   projectId: string;
   projectName?: string;
+  /** When build status is failed, optional reason to show in the red badge. */
+  buildFailureReason?: string | null;
   onBuildStatusChange: (status: "idle" | "building" | "live" | "failed") => void;
   onOutOfCredits?: () => void;
   onError?: (message: string) => void;
+  /** When a Pro build completes, run validate on Mac and return result; useChat will post the result in chat. */
+  onProBuildComplete?: (
+    projectId: string,
+    onProgress?: (status: string) => void
+  ) => Promise<{ status: "succeeded" | "failed"; error?: string }>;
 }) {
   const [llm, setLlm] = useState(DEFAULT_LLM);
   const [projectType, setProjectType] = useState<"standard" | "pro">("standard");
@@ -89,6 +99,7 @@ export function ChatPanel({
     onError,
     projectName,
     onMessageSuccess: featureFlags.useRealLLM ? () => deduct(1) : undefined,
+    onProBuildComplete,
   });
 
   useEffect(() => {
@@ -141,7 +152,7 @@ export function ChatPanel({
         <div className="flex items-center gap-3">
           {buildStatus === "building" && <BuildingIndicator />}
           {buildStatus === "live" && <ReadyIndicator label="Ready" />}
-          {buildStatus === "failed" && <FailedIndicator />}
+          {buildStatus === "failed" && <FailedIndicator reason={buildFailureReason} />}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DropdownSelect
@@ -202,6 +213,17 @@ export function ChatPanel({
                 )}
               </span>
             </Button>
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setInput(getRandomAppIdeaPrompt())}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--link-default)] transition-colors"
+              aria-label="Fill with a random app idea from the list of 100"
+            >
+              <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Mystery app
+            </button>
           </div>
           {showCharCount && (
 <p className="mt-1.5 overflow-x-auto px-4 text-caption text-[var(--text-tertiary)]" role="status" aria-live="polite">

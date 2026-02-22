@@ -67,9 +67,14 @@ export function useChat(
     projectName?: string;
     /** Called when the message API returns 200 (real LLM path only). Use for deduct-on-success. */
     onMessageSuccess?: () => void;
+    /** When a Pro (Swift) build completes, run validate on Mac and return result. Used to auto-validate and post result in chat. */
+    onProBuildComplete?: (
+      projectId: string,
+      onProgress?: (status: string) => void
+    ) => Promise<{ status: "succeeded" | "failed"; error?: string }>;
   }
 ) {
-  const { onError, projectName, onMessageSuccess } = options ?? {};
+  const { onError, projectName, onMessageSuccess, onProBuildComplete } = options ?? {};
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [buildStatus, setBuildStatus] = useState<"idle" | "building" | "live" | "failed">("idle");
@@ -78,6 +83,12 @@ export function useChat(
 
   const MAX_MESSAGE_LENGTH = 4000;
   const timeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const validateTickRef = useRef<{
+    messageId: string;
+    startTime: number;
+    base: string;
+    intervalId: ReturnType<typeof setInterval> | null;
+  } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
   const processingRef = useRef(false);
@@ -483,18 +494,97 @@ export function useChat(
               : undefined;
           const estimatedCostUsd =
             typeof am?.estimatedCostUsd === "number" ? am.estimatedCostUsd : undefined;
+          const isProBuild =
+            Array.isArray(doneEvent.projectFiles) &&
+            doneEvent.projectFiles.some((f: { path: string }) => f.path.endsWith(".swift"));
+          const validateMessageId = `validate-${Date.now()}`;
           const realMessage: ChatMessage = {
-            id: am?.id ?? `assistant-${Date.now()}`,
+            id: am?.id ?? validateMessageId,
             role: "assistant",
             content,
             editedFiles,
             ...(usage && { usage }),
             ...(estimatedCostUsd !== undefined && { estimatedCostUsd }),
           };
-          setMessages((prev) => [
-            ...prev.filter((m) => m.id !== progressMessageId),
-            realMessage,
-          ]);
+
+          if (isProBuild && onProBuildComplete) {
+            // Don't show "App built" yet; show one message after validation with app description + result.
+            // Placeholder has no editedFiles/usage so it renders as progress (muted, same as "Generating..." / "Validating structured output").
+            setMessages((prev) => [
+              ...prev.filter((m) => m.id !== progressMessageId),
+              {
+                id: validateMessageId,
+                role: "assistant",
+                content: "Validating build on Mac… Waiting for runner… (0s)",
+              },
+            ]);
+            const progressBase = "Validating build on Mac… Waiting for runner…";
+            validateTickRef.current = {
+              messageId: validateMessageId,
+              startTime: Date.now(),
+              base: progressBase,
+              intervalId: null,
+            };
+            const tick = () => {
+              const r = validateTickRef.current;
+              if (!r) return;
+              const elapsed = Math.floor((Date.now() - r.startTime) / 1000);
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === r.messageId ? { ...m, content: `${r.base} (${elapsed}s)` } : m
+                )
+              );
+            };
+            const intervalId = setInterval(tick, 1000);
+            validateTickRef.current.intervalId = intervalId;
+            onProBuildComplete(
+              projectId,
+              (status) => {
+                const base = status.replace(/\s*\(\d+s\)\s*$/, "").trim();
+                if (validateTickRef.current) validateTickRef.current.base = base;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === validateMessageId ? { ...m, content: status } : m
+                  )
+                );
+              }
+            )
+              .then((result) => {
+                if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
+                validateTickRef.current = null;
+                const validationLine =
+                  result.status === "succeeded"
+                    ? "Build validated. Your app is ready—download from Run on device when you want to run on your iPhone."
+                    : `Build validation failed: ${result.error ?? "Unknown error"}. We tried automatic fixes (no extra API cost). Describe the error in chat to fix with AI, or open Run on device to view logs.`;
+                const finalContent =
+                  result.status === "succeeded"
+                    ? `${content}\n\n${validationLine}`
+                    : validationLine;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === validateMessageId
+                      ? { ...m, content: finalContent, editedFiles, ...(usage && { usage }), ...(estimatedCostUsd !== undefined && { estimatedCostUsd }) }
+                      : m
+                  )
+                );
+              })
+              .catch(() => {
+                if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
+                validateTickRef.current = null;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === validateMessageId
+                      ? { ...m, content: "Build validation could not complete. Open Run on device to validate manually.", editedFiles, ...(usage && { usage }), ...(estimatedCostUsd !== undefined && { estimatedCostUsd }) }
+                      : m
+                  )
+                );
+              });
+          } else {
+            setMessages((prev) => [
+              ...prev.filter((m) => m.id !== progressMessageId),
+              realMessage,
+            ]);
+          }
         }
         finish({ success: true });
       })
@@ -505,7 +595,7 @@ export function useChat(
           finish({ error: err?.message ?? "Something went wrong. Please try again." });
         }
       });
-  }, [projectId, projectName, onError, onMessageSuccess]);
+  }, [projectId, projectName, onError, onMessageSuccess, onProBuildComplete]);
 
   const sendMessage = useCallback(
     (text: string, model?: string, projectType: "standard" | "pro" = "standard") => {

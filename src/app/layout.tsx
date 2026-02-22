@@ -30,7 +30,7 @@ export default function RootLayout({
       <body className="antialiased">
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t=document.documentElement;var th=localStorage.getItem('vibetree-theme');if(th){t.setAttribute('data-theme',th);}})();`,
+            __html: `(function(){var t=document.documentElement;var th=localStorage.getItem('vibetree-theme')||'emerald';t.setAttribute('data-theme',th);})();`,
           }}
         />
         <CreditsProvider>

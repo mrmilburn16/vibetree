@@ -1,0 +1,16 @@
+---
+description: Do dev server restarts and git push yourself; do not ask the user
+alwaysApply: true
+---
+
+# Do these yourself
+
+When code or config changes require it, **you** must perform the action — do not tell the user to do it.
+
+- **Restart the Next.js dev server**  
+  When API routes, server code, or env changes need a restart to take effect: stop any running `next dev` (e.g. `pkill -f "next dev"`), then start it again (`npm run dev` in the project root). Run the start in the background so the server stays up.
+
+- **Push to GitHub**  
+  When the user or the task implies that changes should be pushed (e.g. "push this", "save to github", or after finishing a feature): run `git add`, `git commit` with a clear message, and `git push` yourself. Do not say "you can push to GitHub" or "remember to push"; do the push.
+
+Only ask the user to do something when it truly requires their credentials, their machine, or a decision only they can make (e.g. choosing a branch, resolving a merge conflict, or approving a deploy).

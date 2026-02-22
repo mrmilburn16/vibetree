@@ -18,9 +18,16 @@ function requireRunnerAuth(request: Request): { ok: true } | { ok: false; respon
   return { ok: true };
 }
 
-async function triggerAutoFix(projectId: string, jobId: string): Promise<void> {
+async function triggerAutoFix(
+  projectId: string,
+  jobId: string,
+  requestOrigin?: string
+): Promise<void> {
   try {
-    const base = process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`;
+    const base =
+      requestOrigin ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      `http://localhost:${process.env.PORT || 3000}`;
     await fetch(`${base}/api/projects/${projectId}/auto-fix-build`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -38,6 +45,13 @@ export async function POST(
   const auth = requireRunnerAuth(request);
   if (!auth.ok) return auth.response;
 
+  const host = request.headers.get("host");
+  const requestOrigin =
+    host && (request.url.startsWith("http://") || request.url.startsWith("https://"))
+      ? new URL(request.url).origin
+      : host
+        ? `http://${host}`
+        : undefined;
   const { id } = await params;
   const job = getBuildJob(id);
   if (!job) return Response.json({ error: "Job not found" }, { status: 404 });
@@ -64,16 +78,19 @@ export async function POST(
     });
   }
 
-  // Trigger auto-fix loop when a build fails and autoFix is enabled with remaining attempts.
+  // Trigger auto-fix when a build fails and autoFix is enabled with remaining attempts.
+  // Run auto-fix if we have parsed compiler errors OR build logs (fallback so we can try fixing from log output).
   const freshJob = getBuildJob(id);
+  const hasErrors = (freshJob?.compilerErrors?.length ?? 0) > 0;
+  const hasLogs = (freshJob?.logs?.length ?? 0) > 0;
   if (
     freshJob &&
     freshJob.status === "failed" &&
     freshJob.request.autoFix &&
     (freshJob.request.attempt ?? 1) < (freshJob.request.maxAttempts ?? 3) &&
-    (freshJob.compilerErrors?.length ?? 0) > 0
+    (hasErrors || hasLogs)
   ) {
-    triggerAutoFix(freshJob.request.projectId, id);
+    triggerAutoFix(freshJob.request.projectId, id, requestOrigin);
   }
 
   return Response.json({ ok: true });

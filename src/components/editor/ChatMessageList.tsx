@@ -10,7 +10,7 @@ function getStreamTokens(text: string): string[] {
   return text.split(/(\s+)/).filter(Boolean);
 }
 
-/** Short status phrases from useChat step messages */
+/** Short status phrases from useChat step messages — rendered muted (same as "Generating...", "Validating structured output") */
 const REASONING_PHRASES = new Set([
   "Reading files.",
   "Explored.",
@@ -18,12 +18,14 @@ const REASONING_PHRASES = new Set([
   "Analyzed.",
   "Planning next moves…",
   "Writing code…",
+  "Validating build on Mac…",
 ]);
 
 function isReasoningMessage(msg: { id?: string; role: string; content: string; editedFiles?: string[] }): boolean {
   if (msg.role !== "assistant" || (msg.editedFiles?.length ?? 0) > 0) return false;
-  // Status/progress messages should render immediately and update live.
+  // Status/progress messages should render immediately and update live (muted styling).
   if (typeof msg.id === "string" && msg.id.startsWith("stream-")) return true;
+  if (msg.content.startsWith("Validating build on Mac…")) return true;
   return msg.content.length < 50 || REASONING_PHRASES.has(msg.content.trim());
 }
 

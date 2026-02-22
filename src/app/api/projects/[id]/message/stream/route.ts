@@ -181,9 +181,7 @@ export async function POST(
           if (filesToStore.length > 0) {
             setProjectFiles(projectId, filesToStore);
             editedFiles = filesToStore.map((f) => f.path);
-            if (projectType === "pro") {
-              projectFilesForClient = filesToStore;
-            }
+            projectFilesForClient = filesToStore;
           } else {
             editedFiles = result.editedFiles;
           }

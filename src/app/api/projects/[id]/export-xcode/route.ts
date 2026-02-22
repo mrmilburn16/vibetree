@@ -225,13 +225,16 @@ export async function POST(
  * that opens in Xcode and builds to iPhone. Pro (Swift) only.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
+  const url = new URL(request.url);
+  const developmentTeam = (url.searchParams.get("developmentTeam") ?? "").trim();
+
   const project = getProject(id) ?? ensureProject(id, "Untitled app");
   const projectName = sanitizeXcodeName(project.name, "VibetreeApp");
   const candidateBundleId = (project.bundleId || "com.vibetree.app").trim();
@@ -247,5 +250,9 @@ export async function GET(
   }
 
   const filesArr: SwiftFile[] = paths.map((p) => ({ path: p, content: files[p] ?? "" }));
-  return await buildZipFromSwiftFiles(filesArr, id.slice(0, 12), { projectName, bundleId });
+  return await buildZipFromSwiftFiles(filesArr, id.slice(0, 12), {
+    projectName,
+    bundleId,
+    developmentTeam: developmentTeam || undefined,
+  });
 }

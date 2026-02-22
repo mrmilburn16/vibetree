@@ -18,10 +18,12 @@ const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
 
 export function PreviewPane({
   buildStatus,
+  buildFailureReason = null,
   expoUrl = null,
   onOpenRunOnDevice,
 }: {
   buildStatus: BuildStatus;
+  buildFailureReason?: string | null;
   expoUrl?: string | null;
   onOpenRunOnDevice?: () => void;
   onRunOnDevice?: () => void;
@@ -42,17 +44,18 @@ export function PreviewPane({
           {useImageFrame ? (
             <RealisticImageFrame
               buildStatus={buildStatus}
+              buildFailureReason={buildFailureReason}
               screenInset={SCREEN_INSET}
             />
           ) : (
-            <CSSDeviceFrame buildStatus={buildStatus} />
+            <CSSDeviceFrame buildStatus={buildStatus} buildFailureReason={buildFailureReason} />
           )}
           <div className="mt-5 flex justify-center">
             {buildStatus === "live" && (
               <ReadyIndicator label="LIVE" className="animate-ready-pop" />
             )}
             {buildStatus === "failed" && (
-              <FailedIndicator className="animate-fade-in" />
+              <FailedIndicator className="animate-fade-in" reason={buildFailureReason} />
             )}
           </div>
         </div>
@@ -126,7 +129,13 @@ export function PreviewPane({
   );
 }
 
-function CSSDeviceFrame({ buildStatus }: { buildStatus: BuildStatus }) {
+function CSSDeviceFrame({
+  buildStatus,
+  buildFailureReason,
+}: {
+  buildStatus: BuildStatus;
+  buildFailureReason?: string | null;
+}) {
   return (
     <div
       className="relative animate-fade-in rounded-[2.75rem] p-[10px]"
@@ -176,8 +185,10 @@ function CSSDeviceFrame({ buildStatus }: { buildStatus: BuildStatus }) {
             </>
           )}
           {buildStatus === "failed" && (
-            <p className="text-body-muted text-center text-sm leading-relaxed">
-              Build failed. Try again or adjust your request.
+            <p className="text-body-muted text-center text-sm leading-relaxed max-w-[220px]">
+              {buildFailureReason && buildFailureReason.trim()
+                ? buildFailureReason.trim()
+                : "Build failed. Try again or adjust your request."}
             </p>
           )}
         </div>
@@ -188,9 +199,11 @@ function CSSDeviceFrame({ buildStatus }: { buildStatus: BuildStatus }) {
 
 function RealisticImageFrame({
   buildStatus,
+  buildFailureReason,
   screenInset,
 }: {
   buildStatus: BuildStatus;
+  buildFailureReason?: string | null;
   screenInset: { top: number; right: number; bottom: number; left: number };
 }) {
   const w = DEVICE_WIDTH + 24;
@@ -230,7 +243,11 @@ function RealisticImageFrame({
             <p className="text-body-muted text-center text-xs">Streaming…</p>
           )}
           {buildStatus === "failed" && (
-            <p className="text-body-muted text-center text-xs">Build failed</p>
+            <p className="text-body-muted text-center text-xs max-w-[180px]">
+              {buildFailureReason && buildFailureReason.trim()
+                ? buildFailureReason.trim()
+                : "Build failed"}
+            </p>
           )}
         </div>
       </div>

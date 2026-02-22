@@ -233,9 +233,11 @@ async function validateJob(job) {
       await updateJob(job.id, { status: "succeeded", exitCode: 0, logs: ["✅ Build succeeded"] });
     } else {
       const allOutput = (result.out || "") + "\n" + (result.err || "");
+      // Capture Swift compiler errors: file.swift:line:col: error: or file.swift:line: error:
+      const swiftErrorRe = /\.swift:\d+(?::\d+)?:\s*error:/;
       const errorLines = allOutput
         .split(/\r?\n/)
-        .filter((l) => /\.swift:\d+:\d+: error:/.test(l))
+        .filter((l) => swiftErrorRe.test(l) || (/\.swift/.test(l) && /error:/.test(l)))
         .map((l) => l.trim())
         .filter(Boolean);
       const uniqueErrors = [...new Set(errorLines)].slice(0, 20);

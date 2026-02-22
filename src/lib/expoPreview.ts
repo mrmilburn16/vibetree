@@ -12,7 +12,7 @@ const TEMPLATE_DIR = path.join(process.cwd(), "expo-template");
 const PREVIEW_BASE = path.join(process.cwd(), ".expo-preview");
 
 /** Paths we copy from the template (not overwritten by generated files). */
-const TEMPLATE_FILES = ["package.json", "app.json", "babel.config.js"] as const;
+const TEMPLATE_FILES = ["package.json", "app.json", "babel.config.js", "metro.config.js"] as const;
 
 export interface ExpoPreviewResult {
   expoUrl: string;
@@ -87,7 +87,7 @@ function npmInstall(dir: string, timeoutMs: number = 120_000): Promise<void> {
  * Run expo start --tunnel and capture the first URL that looks like exp:// or a tunnel URL.
  * Resolves with that URL; rejects on timeout or process error.
  */
-function startExpoAndGetUrl(projectDir: string, timeoutMs: number = 90_000): Promise<string> {
+function startExpoAndGetUrl(projectDir: string, timeoutMs: number = 150_000): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("npx", ["expo", "start", "--tunnel"], {
       cwd: projectDir,
@@ -95,33 +95,46 @@ function startExpoAndGetUrl(projectDir: string, timeoutMs: number = 90_000): Pro
       stdio: ["ignore", "pipe", "pipe"],
     });
     let resolved = false;
+    const stderrLines: string[] = [];
     const onUrl = (line: string) => {
-      // Expo prints URLs like exp://u.expo.dev/... (tunnel)
-      const match = line.match(/(exp:\/\/[^\s)\]\"]+)/) || line.match(/(https:\/\/[^\s)\]\"]*u\.expo\.dev[^\s)\]\"]*)/);
-      if (match && !resolved) {
+      // Expo prints URLs like exp://u.expo.dev/... or exp://192.168.x.x:8081 (tunnel or LAN)
+      const expMatch = line.match(/(exp:\/\/[^\s)\]\"]+?)(?=[\s)\]\"]|$)/) || line.match(/(exp:\/\/\S+)/);
+      const httpsMatch = line.match(/(https:\/\/[^\s)\]\"]*u\.expo\.dev[^\s)\]\"]*)/);
+      const url = expMatch?.[1]?.trim() || httpsMatch?.[1]?.trim();
+      if (url && !resolved) {
         resolved = true;
         // Leave process running so user can scan QR and connect with Expo Go
-        resolve(match[1].trim());
+        resolve(url);
       }
     };
     const flush = (buf: Buffer) => {
       const s = buf.toString();
       s.split("\n").forEach(onUrl);
     };
+    const flushStderr = (buf: Buffer) => {
+      const s = buf.toString();
+      stderrLines.push(...s.split("\n").map((l) => l.trim()).filter(Boolean));
+      if (stderrLines.length > 30) stderrLines.splice(0, stderrLines.length - 30);
+      flush(buf);
+    };
     child.stdout?.on("data", flush);
-    child.stderr?.on("data", flush);
+    child.stderr?.on("data", flushStderr);
     child.on("error", reject);
     child.on("close", (code, signal) => {
       if (!resolved) {
         resolved = true;
-        reject(new Error(`Expo exited before URL appeared (code=${code}, signal=${signal})`));
+        const tail = stderrLines.slice(-8).join(" ").trim();
+        const reason = tail
+          ? `Expo exited before URL appeared (code=${code}, signal=${signal}). ${tail}`
+          : `Expo exited before URL appeared (code=${code}, signal=${signal}). Run "npx expo start --tunnel" in the project directory to see the full error.`;
+        reject(new Error(reason));
       }
     });
     setTimeout(() => {
       if (!resolved) {
         resolved = true;
         child.kill("SIGTERM");
-        reject(new Error("Expo start timeout: no URL in output"));
+        reject(new Error("Expo start timeout: no URL in output. The tunnel may be slow—try again, or run \"npx expo start --tunnel\" in the project folder to see the URL in the terminal."));
       }
     }, timeoutMs);
   });
@@ -130,16 +143,25 @@ function startExpoAndGetUrl(projectDir: string, timeoutMs: number = 90_000): Pro
 /**
  * Write project to Expo preview dir, install deps if needed, start tunnel, return URL.
  * Call from API route only (uses projectFileStore and filesystem).
+ * If clientFiles is provided (e.g. from localStorage when server store is empty), use those instead of the store.
  */
-export async function runExpoPreview(projectId: string): Promise<ExpoPreviewResult | ExpoPreviewError> {
-  const filesMap = getProjectFiles(projectId);
-  if (!filesMap || Object.keys(filesMap).length === 0) {
+export async function runExpoPreview(
+  projectId: string,
+  clientFiles?: Array<{ path: string; content: string }>
+): Promise<ExpoPreviewResult | ExpoPreviewError> {
+  let files: Array<{ path: string; content: string }>;
+  if (Array.isArray(clientFiles) && clientFiles.length > 0) {
+    files = clientFiles.filter((f) => f && typeof f.path === "string" && typeof f.content === "string");
+  } else {
+    const filesMap = getProjectFiles(projectId);
+    if (!filesMap || Object.keys(filesMap).length === 0) {
+      return { error: "Build your app first.", code: "NO_FILES" };
+    }
+    files = Object.entries(filesMap).map((entry) => ({ path: entry[0], content: entry[1] }));
+  }
+  if (files.length === 0) {
     return { error: "Build your app first.", code: "NO_FILES" };
   }
-
-  const files: Array<{ path: string; content: string }> = Object.entries(filesMap).map(
-    (entry) => ({ path: entry[0], content: entry[1] })
-  );
   const hasApp = files.some(
     (f) => f.path === "App.js" || f.path.endsWith("/App.js") || f.path === "app/App.js"
   );
@@ -155,7 +177,13 @@ export async function runExpoPreview(projectId: string): Promise<ExpoPreviewResu
   }
 
   const nodeModules = path.join(previewDir, "node_modules");
-  if (!fs.existsSync(nodeModules)) {
+  const ngrokPath = path.join(nodeModules, "@expo", "ngrok");
+  const expoAssetPath = path.join(nodeModules, "expo-asset");
+  const needsInstall =
+    !fs.existsSync(nodeModules) ||
+    !fs.existsSync(ngrokPath) ||
+    !fs.existsSync(expoAssetPath);
+  if (needsInstall) {
     try {
       await npmInstall(previewDir);
     } catch (e) {

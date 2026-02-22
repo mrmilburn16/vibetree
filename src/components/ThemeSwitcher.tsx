@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 
 const THEMES = [
-  { value: "violet", label: "Twilight Violet", color: "#6366F1", mode: "dark" },
   { value: "emerald", label: "Forest", color: "#10B981", mode: "dark" },
+  { value: "violet", label: "Twilight Violet", color: "#6366F1", mode: "dark" },
   { value: "amber", label: "Amber", color: "#F59E0B", mode: "dark" },
   { value: "ocean", label: "Ocean", color: "#0EA5E9", mode: "dark" },
   { value: "rose", label: "Rose", color: "#F43F5E", mode: "dark" },
@@ -13,8 +13,8 @@ const THEMES = [
   { value: "fuchsia", label: "Fuchsia", color: "#D946EF", mode: "dark" },
   { value: "sky", label: "Sky", color: "#0284C7", mode: "dark" },
   { value: "lime", label: "Lime", color: "#84CC16", mode: "dark" },
-  { value: "violet-light", label: "Twilight Violet (Light)", color: "#6366F1", mode: "light" },
   { value: "emerald-light", label: "Forest (Light)", color: "#10B981", mode: "light" },
+  { value: "violet-light", label: "Twilight Violet (Light)", color: "#6366F1", mode: "light" },
   { value: "amber-light", label: "Amber (Light)", color: "#F59E0B", mode: "light" },
   { value: "ocean-light", label: "Ocean (Light)", color: "#0EA5E9", mode: "light" },
   { value: "rose-light", label: "Rose (Light)", color: "#F43F5E", mode: "light" },
@@ -28,8 +28,8 @@ const THEMES = [
 const STORAGE_KEY = "vibetree-theme";
 
 function getTheme(): string {
-  if (typeof document === "undefined") return "violet";
-  return document.documentElement.getAttribute("data-theme") || "violet";
+  if (typeof document === "undefined") return "emerald";
+  return document.documentElement.getAttribute("data-theme") || "emerald";
 }
 
 function applyTheme(value: string) {
@@ -40,7 +40,7 @@ function applyTheme(value: string) {
 }
 
 export function ThemeSwitcher() {
-  const [theme, setTheme] = useState("violet");
+  const [theme, setTheme] = useState("emerald");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 

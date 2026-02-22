@@ -43,6 +43,8 @@ export function RunOnDeviceModal({
   const [validateMaxAttempts, setValidateMaxAttempts] = useState(3);
   const [validateFixing, setValidateFixing] = useState(false);
   const [validateHadCompilerErrors, setValidateHadCompilerErrors] = useState(false);
+  const [validateFailureReason, setValidateFailureReason] = useState<string | null>(null);
+  const [errorCopyFeedback, setErrorCopyFeedback] = useState(false);
 
   const projectType =
     projectTypeProp ??
@@ -73,18 +75,45 @@ export function RunOnDeviceModal({
     }
     setLoading(true);
     setError(null);
-    fetch(`/api/projects/${projectId}/run-on-device?projectType=standard`)
-      .then((res) => res.json())
-      .then((data) => {
+    (async () => {
+      try {
+        let res = await fetch(`/api/projects/${projectId}/run-on-device?projectType=standard`);
+        let data = await res.json().catch(() => ({}));
         if (data.expoUrl) {
           setExpoUrlLocal(data.expoUrl);
           onExpoUrl?.(data.expoUrl);
-        } else if (data.error) {
-          setError(data.error);
+          return;
         }
-      })
-      .catch(() => setError("Could not start preview. Try again."))
-      .finally(() => setLoading(false));
+        const noFiles = res.status === 400 && (data.code === "NO_FILES" || data.code === "NO_APP");
+        if (noFiles && typeof window !== "undefined") {
+          try {
+            const raw = localStorage.getItem(`${PROJECT_FILES_STORAGE_PREFIX}${projectId}`);
+            const parsed = raw ? JSON.parse(raw) : null;
+            const files = Array.isArray(parsed?.files) ? parsed.files : [];
+            if (files.length > 0) {
+              res = await fetch(`/api/projects/${projectId}/run-on-device?projectType=standard`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ files }),
+              });
+              data = await res.json().catch(() => ({}));
+              if (data.expoUrl) {
+                setExpoUrlLocal(data.expoUrl);
+                onExpoUrl?.(data.expoUrl);
+                return;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+        if (data.error) setError(data.error);
+      } catch {
+        setError("Could not start preview. Try again.");
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [isOpen, projectId, projectType, expoUrlProp, onExpoUrl]);
 
   useEffect(() => {
@@ -125,6 +154,13 @@ export function RunOnDeviceModal({
         setValidateLogTail(logs.slice(-10));
         if (status === "failed") {
           setValidateHadCompilerErrors((Array.isArray(job.compilerErrors) ? job.compilerErrors.length : 0) > 0);
+          const err = typeof job.error === "string" && job.error.trim() ? job.error.trim() : null;
+          const firstCompiler = Array.isArray(job.compilerErrors) && job.compilerErrors.length > 0
+            ? String(job.compilerErrors[0]).trim()
+            : null;
+          setValidateFailureReason(err || firstCompiler || (logs.length > 0 ? "See log below." : null));
+        } else {
+          setValidateFailureReason(null);
         }
 
         if (status === "succeeded" || status === "failed") {
@@ -199,9 +235,11 @@ export function RunOnDeviceModal({
         }
       }
 
-      // Fallback: server-side in-memory cache
+      // Fallback: server-side in-memory cache (include team so signing is pre-filled)
       if (!res) {
-        res = await fetch(`/api/projects/${projectId}/export-xcode`);
+        const q = new URLSearchParams();
+        if (teamId.trim()) q.set("developmentTeam", teamId.trim());
+        res = await fetch(`/api/projects/${projectId}/export-xcode${q.toString() ? `?${q.toString()}` : ""}`);
       }
 
       if (!res.ok) {
@@ -282,6 +320,7 @@ export function RunOnDeviceModal({
       setValidateMaxAttempts(3);
       setValidateFixing(false);
       setValidateHadCompilerErrors(false);
+      setValidateFailureReason(null);
       setValidateLogTail([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Validation failed. Try again.");
@@ -324,16 +363,20 @@ export function RunOnDeviceModal({
           )}
           <div className="space-y-2">
             <p className="text-body-muted text-sm">
-              Pro apps are native Swift/SwiftUI. Download for Xcode (zip), unzip, double‑click the project, then Run on your iPhone or simulator.
+              Pro apps are native Swift/SwiftUI. Download for Xcode (zip), unzip, double‑click the project, then Run on your iPhone or simulator. If Xcode defaults to a simulator, select your physical iPhone from the device dropdown once—Xcode will remember it.
             </p>
             <div className="rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-2">
               <p className="text-caption text-xs text-[var(--text-tertiary)]">
-                After opening in Xcode: <span className="text-[var(--text-secondary)]">Target → Signing &amp; Capabilities</span> → select your{" "}
-                <span className="text-[var(--text-secondary)]">Team</span>. (Automatic signing is enabled by default.)
+                Set your <span className="text-[var(--text-secondary)]">Team ID</span> below once—we’ll embed it in the zip so Xcode won’t ask you to pick a team. (That team appears in Xcode as e.g. &quot;Michael Milburn (Individual)&quot;.)
               </p>
             </div>
           </div>
           <div className="flex flex-col gap-3 rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
+            {validateStatus === "succeeded" && (
+              <p className="text-sm text-[var(--text-secondary)]">
+                Build validated. Download the zip below, then unzip and open in Xcode to run on your iPhone.
+              </p>
+            )}
             <Button
               type="button"
               onClick={handleDownloadForXcode}
@@ -349,7 +392,7 @@ export function RunOnDeviceModal({
               disabled={validateLoading}
               className="w-full"
             >
-              {validateLoading ? "Queueing build check…" : "Validate build on Mac (xcodebuild)"}
+              {validateLoading ? "Queueing build check…" : validateStatus === "succeeded" ? "Re-validate build" : "Validate build on Mac (xcodebuild)"}
             </Button>
             {validateStatus && (
               <div className="rounded border border-[var(--border-default)] bg-[var(--background-default)] p-3">
@@ -369,7 +412,11 @@ export function RunOnDeviceModal({
                       {validateStatus === "running" && `Building with xcodebuild… (${validateElapsed}s)${validateAttempt > 1 ? ` — Attempt ${validateAttempt}/${validateMaxAttempts}` : ""}`}
                       {validateStatus === "fixing" && `Auto-fixing Swift errors… (${validateElapsed}s) — Attempt ${validateAttempt + 1}/${validateMaxAttempts}`}
                       {validateStatus === "succeeded" && (validateAttempt > 1 ? `Build succeeded on attempt ${validateAttempt}/${validateMaxAttempts}` : "Build succeeded")}
-                      {validateStatus === "failed" && (validateAttempt > 1 ? `Build failed after ${validateAttempt} attempt${validateAttempt > 1 ? "s" : ""}` : "Build failed")}
+                      {validateStatus === "failed" && (
+                        validateFailureReason
+                          ? `Build failed: ${validateFailureReason}`
+                          : (validateAttempt > 1 ? `Build failed after ${validateAttempt} attempt${validateAttempt > 1 ? "s" : ""}` : "Build failed")
+                      )}
                       {validateStatus !== "queued" && validateStatus !== "running" && validateStatus !== "fixing" && validateStatus !== "succeeded" && validateStatus !== "failed" && validateStatus}
                     </span>
                   </div>
@@ -441,7 +488,7 @@ export function RunOnDeviceModal({
                     spellCheck={false}
                   />
                   <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                    If provided, we’ll embed it into the exported project (avoids the “Pick a Team” prompt on first open).
+                    Find it: in Xcode, pick your team once, then open the .xcodeproj in a text editor and search for <span className="font-mono">DEVELOPMENT_TEAM</span>—the 10-character value is your Team ID.
                   </p>
                 </div>
                 <div>
@@ -478,7 +525,7 @@ export function RunOnDeviceModal({
               Or download single .swift file
             </button>
             <p className="text-caption text-xs text-[var(--text-tertiary)]">
-              Unzip → double‑click the .xcodeproj → connect iPhone → Run. No Expo Go needed.
+              Unzip → double‑click the .xcodeproj → connect iPhone → Run. No Expo Go needed. If Xcode picks a simulator, choose your physical iPhone from the device dropdown (e.g. &quot;iPhone (9)&quot;) once—Xcode will remember it next time.
             </p>
           </div>
         </div>
@@ -499,8 +546,29 @@ export function RunOnDeviceModal({
           </div>
         ) : error ? (
           <div className="rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
-            <p className="text-sm text-[var(--text-secondary)]">{error}</p>
-            <p className="mt-2 text-xs text-[var(--text-tertiary)]">Build your app in the chat first (e.g. &quot;A simple counter app&quot;), then try again.</p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 flex-1 text-sm text-[var(--text-secondary)]">{error}</p>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(error);
+                    setErrorCopyFeedback(true);
+                    setTimeout(() => setErrorCopyFeedback(false), 2000);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="shrink-0 rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
+              >
+                {errorCopyFeedback ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+              {error.includes("Build your app") || error.includes("Generated app must include")
+                ? "Describe an app in the chat (e.g. &quot;A simple counter app&quot;), wait for it to build, then try again."
+                : "If you haven’t built an app yet, describe one in the chat first. Otherwise the Expo server may have failed—check the terminal where the dev server is running for details."}
+            </p>
           </div>
         ) : expoUrl ? (
           <div className="flex flex-col items-start gap-2">
