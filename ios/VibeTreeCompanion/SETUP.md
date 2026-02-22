@@ -98,6 +98,8 @@ The app should open and show the main screen (title “VibeTree”, possibly “
 |-------|------------|
 | “Attaching to buildactivity” / stuck | You’re running **BuildActivityExtension**. Stop (■), switch scheme to **VibeTreeCompanion**, run again. |
 | “Show Notification Center Widget timed out” | Simulator quirk. Ignore, or run on a **real device**. |
+| Live Activity never appears (but Activity IDs update in logs) | Ensure the widget extension has an entry point (`@main` on `BuildActivityExtensionBundle`) and **reinstall** the app on device after changes to the extension. |
+| `Failed to show Widget 'com.vibetree.companion.buildactivity'` / SpringBoard request denied | This is an **Xcode widget-debugging** failure (it tries to open **SpringBoard**) and does **not** necessarily mean Live Activities are broken. Workaround: run the **VibeTreeCompanion** app scheme and trigger a Live Activity from inside the app (Settings → Live Activities → **Start Test**, then lock the phone). If it persists: unlock the phone, reboot the device, and ensure **Signing & Capabilities** uses the same Team for both app + extension, then delete and reinstall the app. |
 | Test Connection fails | Check Server URL (use Mac IP from phone, not `localhost`), check API token, and that the Next.js server is running. |
 | No Live Activity on lock screen | Start a build from the web app with the app open or recently used; then lock the phone. Ensure notification permission is granted. |
 | No “Allow Notifications” prompt | Open **Settings** in the app and tap **Enable** under Push Notifications. |

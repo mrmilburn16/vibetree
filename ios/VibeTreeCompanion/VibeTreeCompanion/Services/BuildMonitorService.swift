@@ -26,7 +26,11 @@ final class BuildMonitorService: ObservableObject {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.poll()
-                try? await Task.sleep(nanoseconds: UInt64(2_000_000_000))
+                let seconds: TimeInterval = {
+                    guard let self else { return 2.0 }
+                    return self.activeBuilds.isEmpty ? 10.0 : self.pollInterval
+                }()
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             }
         }
     }
@@ -134,7 +138,7 @@ final class BuildMonitorService: ObservableObject {
         let content = ActivityContent(state: finalState, staleDate: nil)
 
         for activity in Activity<BuildActivityAttributes>.activities where activity.attributes.jobId == job.id {
-            await activity.end(content, dismissalPolicy: .after(.now + 60))
+            await activity.end(content, dismissalPolicy: .after(.now + 300))
         }
         liveActivities.removeValue(forKey: job.id)
 

@@ -1,4 +1,5 @@
 import { claimNextBuildJob } from "@/lib/buildJobs";
+import { sendBackgroundRefreshPush } from "@/lib/apns";
 
 function requireRunnerAuth(request: Request): { ok: true; runnerId: string } | { ok: false; response: Response } {
   const token = process.env.MAC_RUNNER_TOKEN;
@@ -20,6 +21,10 @@ export async function POST(request: Request) {
 
   const job = claimNextBuildJob(auth.runnerId);
   if (!job) return new Response(null, { status: 204 });
+
+  sendBackgroundRefreshPush(`build_claimed:${job.id}`).catch((err) =>
+    console.error("[apns] Error sending background refresh push:", err)
+  );
 
   return Response.json({ job });
 }

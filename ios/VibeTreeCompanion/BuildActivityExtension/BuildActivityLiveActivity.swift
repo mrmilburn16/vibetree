@@ -175,6 +175,7 @@ struct BuildActivityLiveActivity: Widget {
     }
 }
 
+@main
 struct BuildActivityExtensionBundle: WidgetBundle {
     var body: some Widget {
         BuildActivityLiveActivity()

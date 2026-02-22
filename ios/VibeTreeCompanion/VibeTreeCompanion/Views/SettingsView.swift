@@ -1,3 +1,4 @@
+import ActivityKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -11,6 +12,9 @@ struct SettingsView: View {
     @AppStorage("vibetree-universal-minIOS") private var universalMinIOS = "17.0"
 
     @State private var testStatus: TestStatus = .idle
+    @State private var liveActivityTestMessage: String?
+    @State private var testActivityId: String?
+    @State private var liveActivityDebugInfo: String?
 
     enum TestStatus {
         case idle, testing, success, failed(String)
@@ -25,6 +29,7 @@ struct SettingsView: View {
                     universalDefaultsSection
                     serverSection
                     notificationSection
+                    liveActivitiesSection
                     connectionTestSection
                     aboutSection
                 }
@@ -251,6 +256,74 @@ struct SettingsView: View {
         .forestCard()
     }
 
+    // MARK: - Live Activities
+
+    private var liveActivitiesSection: some View {
+        VStack(alignment: .leading, spacing: Forest.space3) {
+            sectionLabel("Live Activities")
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Lock Screen & Dynamic Island")
+                        .font(.system(size: Forest.textBase, weight: .medium))
+                        .foregroundColor(Forest.textPrimary)
+                    Text(ActivityAuthorizationInfo().areActivitiesEnabled ? "Enabled" : "Disabled in iOS Settings")
+                        .font(.system(size: Forest.textXs))
+                        .foregroundColor(ActivityAuthorizationInfo().areActivitiesEnabled ? Forest.success : Forest.textTertiary)
+                }
+                Spacer()
+                Button("Start Test") {
+                    startTestLiveActivity()
+                }
+                .font(.system(size: Forest.textSm, weight: .semibold))
+                .foregroundColor(Forest.backgroundPrimary)
+                .padding(.horizontal, Forest.space4)
+                .padding(.vertical, Forest.space2)
+                .background(Forest.accent)
+                .cornerRadius(Forest.radiusSm)
+            }
+
+            HStack {
+                Button(testActivityId == nil ? "End Test" : "End Test") {
+                    Task { await endTestLiveActivity() }
+                }
+                .font(.system(size: Forest.textSm, weight: .semibold))
+                .foregroundColor(Forest.textSecondary)
+                .padding(.horizontal, Forest.space4)
+                .padding(.vertical, Forest.space2)
+                .background(Forest.backgroundSecondary)
+                .cornerRadius(Forest.radiusSm)
+
+                Button("Refresh Status") {
+                    refreshLiveActivityDebugInfo()
+                }
+                .font(.system(size: Forest.textSm, weight: .semibold))
+                .foregroundColor(Forest.textSecondary)
+                .padding(.horizontal, Forest.space4)
+                .padding(.vertical, Forest.space2)
+                .background(Forest.backgroundSecondary)
+                .cornerRadius(Forest.radiusSm)
+
+                Spacer()
+            }
+
+            if let msg = liveActivityTestMessage {
+                Text(msg)
+                    .font(.system(size: Forest.textXs))
+                    .foregroundColor(Forest.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let info = liveActivityDebugInfo {
+                Text(info)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(Forest.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .forestCard()
+    }
+
     // MARK: - Connection Test
 
     private var connectionTestSection: some View {
@@ -320,6 +393,94 @@ struct SettingsView: View {
                 testStatus = .idle
             }
         }
+    }
+
+    private func startTestLiveActivity() {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            liveActivityTestMessage = "Live Activities are disabled for this app in iOS Settings."
+            refreshLiveActivityDebugInfo()
+            return
+        }
+
+        let jobId = "test_" + UUID().uuidString.lowercased()
+        let attributes = BuildActivityAttributes(jobId: jobId, projectName: "Test Build")
+        let state = BuildActivityAttributes.ContentState(
+            status: "running",
+            progress: 0.15,
+            elapsedSeconds: 12,
+            stepLabel: "Starting…",
+            estimatedSecondsLeft: 240,
+            attempt: 1,
+            maxAttempts: 1
+        )
+        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(60 * 10))
+
+        do {
+            let activity = try Activity.request(attributes: attributes, content: content, pushType: nil)
+            testActivityId = activity.id
+            liveActivityTestMessage = "Test Live Activity started. Lock your phone now. If you still don’t see it, check iOS Settings → Face ID & Passcode → Live Activities, and Settings → VibeTree → Live Activities."
+            refreshLiveActivityDebugInfo()
+
+            // Keep it visibly updating for a bit.
+            Task { @MainActor in
+                for i in 1...20 {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    let progress = min(0.95, 0.15 + (Double(i) * 0.03))
+                    let next = BuildActivityAttributes.ContentState(
+                        status: "running",
+                        progress: progress,
+                        elapsedSeconds: 12 + (i * 3),
+                        stepLabel: "Running…",
+                        estimatedSecondsLeft: max(0, 240 - (i * 3)),
+                        attempt: 1,
+                        maxAttempts: 1
+                    )
+                    await activity.update(ActivityContent(state: next, staleDate: Date().addingTimeInterval(60 * 10)))
+                }
+            }
+        } catch {
+            liveActivityTestMessage = "Could not start Live Activity: \(error.localizedDescription)"
+            testActivityId = nil
+            refreshLiveActivityDebugInfo()
+        }
+    }
+
+    private func refreshLiveActivityDebugInfo() {
+        let enabled = ActivityAuthorizationInfo().areActivitiesEnabled
+        let activities = Activity<BuildActivityAttributes>.activities
+        let ids = activities.map(\.id).joined(separator: ", ")
+        let testId = testActivityId ?? "nil"
+        liveActivityDebugInfo =
+            "areActivitiesEnabled=\(enabled)\n" +
+            "activeActivities.count=\(activities.count)\n" +
+            "testActivityId=\(testId)\n" +
+            "activeActivityIds=[\(ids)]"
+    }
+
+    private func endTestLiveActivity() async {
+        let activities = Activity<BuildActivityAttributes>.activities
+        let toEnd = activities.filter { activity in
+            guard let testActivityId else { return false }
+            return activity.id == testActivityId
+        }
+
+        for activity in toEnd {
+            let endState = BuildActivityAttributes.ContentState(
+                status: "succeeded",
+                progress: 1.0,
+                elapsedSeconds: 0,
+                stepLabel: "Done",
+                estimatedSecondsLeft: nil,
+                attempt: 1,
+                maxAttempts: 1
+            )
+            let endContent = ActivityContent(state: endState, staleDate: nil)
+            await activity.end(endContent, dismissalPolicy: .immediate)
+        }
+
+        testActivityId = nil
+        liveActivityTestMessage = "Ended test Live Activity."
+        refreshLiveActivityDebugInfo()
     }
 
     // MARK: - About

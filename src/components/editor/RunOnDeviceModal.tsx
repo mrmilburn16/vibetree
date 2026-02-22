@@ -47,6 +47,8 @@ export function RunOnDeviceModal({
   const [validateHadCompilerErrors, setValidateHadCompilerErrors] = useState(false);
   const [validateFailureReason, setValidateFailureReason] = useState<string | null>(null);
   const [errorCopyFeedback, setErrorCopyFeedback] = useState(false);
+  const [simulateLoading, setSimulateLoading] = useState(false);
+  const [validateIsSimulated, setValidateIsSimulated] = useState(false);
 
   const projectType =
     projectTypeProp ??
@@ -339,11 +341,69 @@ export function RunOnDeviceModal({
       setValidateHadCompilerErrors(false);
       setValidateFailureReason(null);
       setValidateLogTail([]);
+      setValidateIsSimulated(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Validation failed. Try again.");
       setValidateStatus("failed");
     } finally {
       setValidateLoading(false);
+    }
+  }
+
+  async function handleSimulateBuild() {
+    setSimulateLoading(true);
+    setError(null);
+    setValidateStatus("queued");
+    setValidateLogTail([]);
+    try {
+      // Best-effort: include project name + bundle id for consistent UI.
+      let projectName = "Untitled app";
+      let bundleId = "";
+      if (typeof window !== "undefined") {
+        try {
+          const projectsRaw = localStorage.getItem("vibetree-projects");
+          const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
+          const p = Array.isArray(projects) ? projects.find((x: any) => x?.id === projectId) : null;
+          if (p?.name) projectName = String(p.name);
+          if (p?.bundleId) bundleId = String(p.bundleId);
+        } catch {}
+      }
+
+      const finalBundleId = bundleIdOverride.trim() || bundleId;
+
+      const res = await fetch(`/api/projects/${projectId}/simulate-build`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName,
+          bundleId: finalBundleId,
+          durationSeconds: 45,
+          fail: false,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? "Simulate build request failed");
+      }
+      const data = await res.json().catch(() => ({}));
+      const jobId = typeof data?.job?.id === "string" ? data.job.id : null;
+      if (!jobId) throw new Error("No job id returned");
+      setValidateJobId(jobId);
+      setValidateStatus("queued");
+      setValidateStartedAt(Date.now());
+      setValidateElapsed(0);
+      setValidateAttempt(1);
+      setValidateMaxAttempts(1);
+      setValidateFixing(false);
+      setValidateHadCompilerErrors(false);
+      setValidateFailureReason(null);
+      setValidateLogTail([]);
+      setValidateIsSimulated(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Simulated build failed. Try again.");
+      setValidateStatus("failed");
+    } finally {
+      setSimulateLoading(false);
     }
   }
 
@@ -411,6 +471,15 @@ export function RunOnDeviceModal({
             >
               {validateLoading ? "Queueing build check…" : validateStatus === "succeeded" ? "Re-validate build" : "Validate build on Mac (xcodebuild)"}
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleSimulateBuild}
+              disabled={simulateLoading}
+              className="w-full"
+            >
+              {simulateLoading ? "Starting simulated build…" : "Simulate build (no credits) — test Live Activity"}
+            </Button>
             {validateStatus && (
               <div className="rounded border border-[var(--border-default)] bg-[var(--background-default)] p-3">
                 <div className="flex items-center justify-between gap-2">
@@ -425,8 +494,9 @@ export function RunOnDeviceModal({
                       <span className="text-red-400">&#10007;</span>
                     )}
                     <span>
-                      {validateStatus === "queued" && `Waiting for runner… (${validateElapsed}s)`}
-                      {validateStatus === "running" && `Building with xcodebuild… (${validateElapsed}s)${validateAttempt > 1 ? ` — Attempt ${validateAttempt}/${validateMaxAttempts}` : ""}`}
+                      {validateIsSimulated && <span className="mr-1 rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">SIM</span>}
+                      {validateStatus === "queued" && (validateIsSimulated ? `Simulated build queued… (${validateElapsed}s)` : `Waiting for runner… (${validateElapsed}s)`)}
+                      {validateStatus === "running" && (validateIsSimulated ? `Simulated xcodebuild… (${validateElapsed}s)` : `Building with xcodebuild… (${validateElapsed}s)${validateAttempt > 1 ? ` — Attempt ${validateAttempt}/${validateMaxAttempts}` : ""}`)}
                       {validateStatus === "fixing" && `Auto-fixing Swift errors… (${validateElapsed}s) — Attempt ${validateAttempt + 1}/${validateMaxAttempts}`}
                       {validateStatus === "succeeded" && (validateAttempt > 1 ? `Build succeeded on attempt ${validateAttempt}/${validateMaxAttempts}` : "Build succeeded")}
                       {validateStatus === "failed" && (
@@ -468,7 +538,9 @@ export function RunOnDeviceModal({
                 )}
                 {(validateStatus === "queued" || validateStatus === "running" || validateStatus === "fixing") && (
                   <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-                    {validateStatus === "fixing"
+                    {validateIsSimulated
+                      ? "This is a fake build job for testing Live Activities. It will auto-complete."
+                      : validateStatus === "fixing"
                       ? "Sending compiler errors to LLM for auto-fix…"
                       : <>Requires a Mac runner with Xcode. Run <span className="font-mono">npm run mac-runner</span> on your Mac with{" "}<span className="font-mono">MAC_RUNNER_TOKEN</span> set.</>
                     }

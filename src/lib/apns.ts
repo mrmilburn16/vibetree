@@ -36,7 +36,8 @@ function createToken(config: NonNullable<ReturnType<typeof getApnsConfig>>): str
 async function sendPush(
   deviceToken: string,
   payload: object,
-  config: NonNullable<ReturnType<typeof getApnsConfig>>
+  config: NonNullable<ReturnType<typeof getApnsConfig>>,
+  opts?: { pushType?: "alert" | "background"; priority?: "10" | "5"; topic?: string }
 ): Promise<boolean> {
   const host = config.useSandbox ? APNS_HOST_DEV : APNS_HOST_PROD;
   const token = createToken(config);
@@ -45,13 +46,17 @@ async function sendPush(
     const client = http2.connect(host);
     client.on("error", () => resolve(false));
 
+    const pushType = opts?.pushType ?? "alert";
+    const priority = opts?.priority ?? (pushType === "background" ? "5" : "10");
+    const topic = opts?.topic ?? config.bundleId;
+
     const headers = {
       ":method": "POST",
       ":path": `/3/device/${deviceToken}`,
       "authorization": `bearer ${token}`,
-      "apns-topic": config.bundleId,
-      "apns-push-type": "alert",
-      "apns-priority": "10",
+      "apns-topic": topic,
+      "apns-push-type": pushType,
+      "apns-priority": priority,
     };
 
     const req = client.request(headers);
@@ -112,9 +117,41 @@ export async function sendBuildNotification(
   console.log(`[apns] Sending push to ${devices.length} device(s): ${title}`);
 
   const results = await Promise.allSettled(
-    devices.map((d) => sendPush(d.deviceToken, payload, config))
+    devices.map((d) => sendPush(d.deviceToken, payload, config, { pushType: "alert", priority: "10" }))
   );
 
   const sent = results.filter((r) => r.status === "fulfilled" && r.value).length;
   console.log(`[apns] Sent ${sent}/${devices.length} push notifications`);
+}
+
+export async function sendBackgroundRefreshPush(reason: string): Promise<void> {
+  const config = getApnsConfig();
+  if (!config) {
+    console.log("[apns] APNs not configured, skipping background refresh push");
+    return;
+  }
+
+  const devices = getAllDevices();
+  if (devices.length === 0) {
+    console.log("[apns] No devices registered, skipping background refresh push");
+    return;
+  }
+
+  const payload = {
+    aps: {
+      "content-available": 1,
+    },
+    vibetree: {
+      type: "refresh",
+      reason,
+      ts: Date.now(),
+    },
+  };
+
+  console.log(`[apns] Sending background refresh to ${devices.length} device(s): ${reason}`);
+  const results = await Promise.allSettled(
+    devices.map((d) => sendPush(d.deviceToken, payload, config, { pushType: "background", priority: "5" }))
+  );
+  const sent = results.filter((r) => r.status === "fulfilled" && r.value).length;
+  console.log(`[apns] Sent ${sent}/${devices.length} background refresh push(es)`);
 }

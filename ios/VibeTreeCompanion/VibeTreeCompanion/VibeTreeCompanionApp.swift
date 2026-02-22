@@ -21,6 +21,8 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
         Task { @MainActor in
             await NotificationService.shared.requestPermission()
+            NotificationService.shared.reregisterIfPossible()
+            BuildMonitorService.shared.startPolling()
         }
 
         return true
@@ -41,6 +43,18 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     ) {
         Task { @MainActor in
             NotificationService.shared.handleRegistrationError(error)
+        }
+    }
+
+    // Wake up on pushes (especially background/silent) to refresh build state and start/end Live Activities.
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        Task { @MainActor in
+            await BuildMonitorService.shared.refreshOnce()
+            completionHandler(.newData)
         }
     }
 

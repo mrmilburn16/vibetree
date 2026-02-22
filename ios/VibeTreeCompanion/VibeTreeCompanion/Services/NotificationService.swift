@@ -29,9 +29,17 @@ final class NotificationService: NSObject, ObservableObject {
     func handleDeviceToken(_ token: Data) {
         let tokenString = token.map { String(format: "%02.2hhx", $0) }.joined()
         deviceToken = tokenString
+        UserDefaults.standard.set(tokenString, forKey: "apnsDeviceToken")
 
         Task {
             try? await APIService.shared.registerDevice(token: tokenString)
+        }
+    }
+
+    func reregisterIfPossible() {
+        guard let token = UserDefaults.standard.string(forKey: "apnsDeviceToken"), !token.isEmpty else { return }
+        Task {
+            try? await APIService.shared.registerDevice(token: token)
         }
     }
 

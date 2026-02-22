@@ -5,7 +5,7 @@ import {
   setBuildJobCompilerErrors,
   setBuildJobAutoFixInProgress,
 } from "@/lib/buildJobs";
-import { sendBuildNotification } from "@/lib/apns";
+import { sendBackgroundRefreshPush, sendBuildNotification } from "@/lib/apns";
 import { setProjectIPA } from "@/lib/ipaStore";
 
 function requireRunnerAuth(request: Request): { ok: true } | { ok: false; response: Response } {
@@ -99,6 +99,9 @@ export async function POST(
   const maxAttempts = freshJob?.request.maxAttempts ?? 5;
 
   if (freshJob && freshJob.status === "succeeded") {
+    sendBackgroundRefreshPush(`build_succeeded:${id}`).catch((err) =>
+      console.error("[apns] Error sending background refresh push:", err)
+    );
     sendBuildNotification(
       freshJob.request.projectName,
       "succeeded"
@@ -128,6 +131,9 @@ export async function POST(
       `autoFix=${freshJob.request.autoFix}, ` +
       `attempt=${attempt} < maxAttempts=${maxAttempts} = ${attempt < maxAttempts}, ` +
       `hasErrors||hasLogs=${hasErrors || hasLogs}`
+    );
+    sendBackgroundRefreshPush(`build_failed:${id}`).catch((err) =>
+      console.error("[apns] Error sending background refresh push:", err)
     );
     sendBuildNotification(
       freshJob.request.projectName,
