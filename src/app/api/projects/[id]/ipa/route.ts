@@ -15,12 +15,16 @@ export async function GET(
     );
   }
 
-  return new NextResponse(ipa, {
+  // NextResponse expects BodyInit; Buffer isn't typed as BodyInit in TS here.
+  // Convert to Uint8Array so TypeScript + runtime both agree.
+  const body = new Uint8Array(ipa);
+
+  return new NextResponse(body, {
     status: 200,
     headers: {
       "Content-Type": "application/octet-stream",
       "Content-Disposition": `attachment; filename="VibeTreeApp.ipa"`,
-      "Content-Length": String(ipa.length),
+      "Content-Length": String(body.byteLength),
     },
   });
 }
