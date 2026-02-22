@@ -268,8 +268,7 @@ function ResultRow({
             <div className="flex flex-col gap-1">
               <Button
                 variant="secondary"
-                size="sm"
-                className="gap-1.5"
+                className="gap-1.5 text-xs py-1.5 px-2 min-h-0"
                 disabled={removing}
                 onClick={async () => {
                   setRemoving(true);
