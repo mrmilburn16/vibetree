@@ -166,7 +166,7 @@ export function EditorLayout({ project }: { project: Project }) {
       const deadline = Date.now() + VALIDATE_TIMEOUT_MS;
       onProgress?.("Validating build on Mac… Waiting for runner… (0s)");
       while (Date.now() < deadline) {
-        const jobRes = await fetch(`/api/build-jobs/${jobId}`);
+        const jobRes: Response = await fetch(`/api/build-jobs/${jobId}`);
         if (!jobRes.ok) break;
         const jobData = await jobRes.json().catch(() => ({}));
         const job = jobData?.job;

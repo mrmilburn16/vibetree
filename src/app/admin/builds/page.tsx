@@ -308,8 +308,7 @@ function ResultRow({
             />
             <Button
               variant="secondary"
-              size="sm"
-              className="gap-1.5"
+              className="gap-1.5 text-xs py-1.5 px-2 min-h-0"
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
             >

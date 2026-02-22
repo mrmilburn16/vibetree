@@ -71,7 +71,14 @@ export function useChat(
     onProBuildComplete?: (
       projectId: string,
       onProgress?: (status: string) => void
-    ) => Promise<{ status: "succeeded" | "failed"; error?: string }>;
+    ) => Promise<{
+      status: "succeeded" | "failed";
+      error?: string;
+      fixedFiles?: Array<{ path: string; content: string }>;
+      attempts?: number;
+      compilerErrors?: string[];
+      fileNames?: string[];
+    }>;
   }
 ) {
   const { onError, projectName, onMessageSuccess, onProBuildComplete } = options ?? {};

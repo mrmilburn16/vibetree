@@ -16,7 +16,7 @@ export async function GET(
   const frame = getSimulatorFrame(projectId);
   if (!frame) return new NextResponse(null, { status: 404 });
 
-  return new NextResponse(frame.buffer, {
+  return new NextResponse(new Uint8Array(frame.buffer), {
     status: 200,
     headers: {
       "Content-Type": "image/png",

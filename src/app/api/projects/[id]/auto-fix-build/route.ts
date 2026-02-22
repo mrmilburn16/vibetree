@@ -259,13 +259,14 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
         );
         explanation = po.explanation ?? "";
       }
-      const textContent = Array.isArray((finalMessage as Record<string, unknown>).content)
-        ? ((finalMessage as Record<string, unknown>).content as Array<{ type: string; text?: string }>)
+      const msg = finalMessage as unknown as Record<string, unknown>;
+      const textContent = Array.isArray(msg.content)
+        ? (msg.content as Array<{ type: string; text?: string }>)
             .filter((b) => b.type === "text" && typeof b.text === "string")
             .map((b) => b.text)
             .join("")
         : "";
-      return { fixedFiles, explanation, raw: textContent, stopReason: String((finalMessage as Record<string, unknown>).stop_reason ?? "") };
+      return { fixedFiles, explanation, raw: textContent, stopReason: String(msg.stop_reason ?? "") };
     }
 
     let result = await callLLMStreaming(prompt);
