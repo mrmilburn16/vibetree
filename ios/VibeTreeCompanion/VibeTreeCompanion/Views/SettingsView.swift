@@ -5,6 +5,10 @@ struct SettingsView: View {
     @AppStorage("serverURL") private var serverURL = "http://localhost:3001"
     @AppStorage("apiToken") private var apiToken = ""
     @StateObject private var notifications = NotificationService.shared
+    @StateObject private var auth = AuthService.shared
+    @StateObject private var credits = CreditsService.shared
+    @AppStorage("vibetree-universal-teamId") private var universalTeamId = ""
+    @AppStorage("vibetree-universal-minIOS") private var universalMinIOS = "17.0"
 
     @State private var testStatus: TestStatus = .idle
 
@@ -16,6 +20,9 @@ struct SettingsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Forest.space6) {
+                    accountSection
+                    creditsSection
+                    universalDefaultsSection
                     serverSection
                     notificationSection
                     connectionTestSection
@@ -25,17 +32,139 @@ struct SettingsView: View {
             }
             .background(Forest.backgroundPrimary)
             .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .foregroundColor(Forest.accent)
-                        .fontWeight(.semibold)
+        }
+        .task {
+            await credits.fetchBalance()
+        }
+    }
+
+    // MARK: - Account
+
+    private var accountSection: some View {
+        VStack(alignment: .leading, spacing: Forest.space3) {
+            sectionLabel("Account")
+
+            if auth.isAuthenticated {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(auth.userEmail ?? "Signed in")
+                            .font(.system(size: Forest.textBase, weight: .medium))
+                            .foregroundColor(Forest.textPrimary)
+                        Text("Active session")
+                            .font(.system(size: Forest.textXs))
+                            .foregroundColor(Forest.success)
+                    }
+                    Spacer()
+                    Button("Sign Out") {
+                        auth.signOut()
+                    }
+                    .font(.system(size: Forest.textSm, weight: .medium))
+                    .foregroundColor(Forest.destructiveText)
+                }
+            } else {
+                HStack {
+                    Text("Not signed in")
+                        .font(.system(size: Forest.textBase))
+                        .foregroundColor(Forest.textSecondary)
+                    Spacer()
+                    NavigationLink("Sign In") {
+                        SignInView()
+                    }
+                    .font(.system(size: Forest.textSm, weight: .semibold))
+                    .foregroundColor(Forest.accent)
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .forestCard()
+    }
+
+    // MARK: - Credits
+
+    private var creditsSection: some View {
+        VStack(alignment: .leading, spacing: Forest.space3) {
+            sectionLabel("Credits")
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Balance")
+                        .font(.system(size: Forest.textXs, weight: .medium))
+                        .foregroundColor(Forest.textTertiary)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(credits.balance)")
+                            .font(.system(size: Forest.textXl, weight: .bold, design: .rounded))
+                            .foregroundColor(credits.isLow ? Forest.warning : Forest.accent)
+                        Text("credits")
+                            .font(.system(size: Forest.textSm))
+                            .foregroundColor(Forest.textTertiary)
+                    }
+                }
+                Spacer()
+                NavigationLink {
+                    CreditsView()
+                } label: {
+                    Text("Buy More")
+                        .font(.system(size: Forest.textSm, weight: .semibold))
+                        .foregroundColor(Forest.backgroundPrimary)
+                        .padding(.horizontal, Forest.space4)
+                        .padding(.vertical, Forest.space2)
+                        .background(Forest.accent)
+                        .cornerRadius(Forest.radiusSm)
+                }
+            }
+        }
+        .forestCard()
+    }
+
+    // MARK: - Universal Defaults
+
+    private var universalDefaultsSection: some View {
+        VStack(alignment: .leading, spacing: Forest.space3) {
+            sectionLabel("Universal Defaults")
+            Text("These values apply to all new projects unless overridden.")
+                .font(.system(size: Forest.textXs))
+                .foregroundColor(Forest.textTertiary)
+
+            VStack(alignment: .leading, spacing: Forest.space1) {
+                Text("Team ID")
+                    .font(.system(size: Forest.textXs, weight: .medium))
+                    .foregroundColor(Forest.textTertiary)
+                TextField("ABCDE12345", text: $universalTeamId)
+                    .textFieldStyle(.plain)
+                    .forestInput()
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.characters)
+            }
+
+            VStack(alignment: .leading, spacing: Forest.space1) {
+                Text("Minimum iOS Version")
+                    .font(.system(size: Forest.textXs, weight: .medium))
+                    .foregroundColor(Forest.textTertiary)
+                Menu {
+                    ForEach(["17.0", "17.2", "17.4", "18.0", "18.2", "26.0"], id: \.self) { version in
+                        Button(version) { universalMinIOS = version }
+                    }
+                } label: {
+                    HStack {
+                        Text(universalMinIOS)
+                            .font(.system(size: Forest.textBase))
+                            .foregroundColor(Forest.inputText)
+                        Spacer()
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 12))
+                            .foregroundColor(Forest.textTertiary)
+                    }
+                    .padding(Forest.space3)
+                    .background(Forest.inputBg)
+                    .cornerRadius(Forest.radiusSm)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Forest.radiusSm)
+                            .stroke(Forest.inputBorder, lineWidth: 1)
+                    )
+                }
+            }
+        }
+        .forestCard()
     }
 
     // MARK: - Server

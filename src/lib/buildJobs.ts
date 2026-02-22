@@ -11,6 +11,8 @@ export type BuildJobCreateRequest = {
   maxAttempts?: number;
   parentJobId?: string;
   userPrompt?: string;
+  /** "build" = simulator only (default); "ipa" = archive + export signed IPA for OTA install */
+  outputType?: "build" | "ipa";
 };
 
 export type BuildJobRecord = {
@@ -29,6 +31,8 @@ export type BuildJobRecord = {
   nextJobId?: string;
   /** True while auto-fix is running; tells clients to keep polling. */
   autoFixInProgress?: boolean;
+  /** Path to built IPA (set by runner when outputType=ipa). */
+  ipaPath?: string;
 };
 
 const MAX_LOG_LINES = 1500;

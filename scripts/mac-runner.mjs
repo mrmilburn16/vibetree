@@ -10,6 +10,9 @@ const SIMULATOR_STREAM_DURATION_MS = 5 * 60 * 1000;
 /** Interval between screenshot frames (ms). */
 const SIMULATOR_FRAME_INTERVAL_MS = 200;
 
+/** Persistent DerivedData cache per project (keyed by projectId). */
+const DERIVED_DATA_CACHE_DIR = join(homedir(), ".vibetree", "derived-data-cache");
+
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 /** Load .env.local from project root so MAC_RUNNER_TOKEN, VIBETREE_SERVER_URL, XCODEBUILD_PATH work with just npm run mac-runner. */
@@ -201,6 +204,102 @@ async function runScreenshotLoop(projectId) {
   }
 }
 
+/**
+ * Archive and export a signed IPA from a successful build.
+ * Returns the path to the .ipa file, or null on failure.
+ */
+async function archiveAndExportIPA(xcodebuildPath, xcodeproj, projectName, unzipDir, derivedDataPath, teamId, logs, flush) {
+  const archivePath = join(derivedDataPath, `${projectName}.xcarchive`);
+
+  logs.push("[ipa] Archiving…");
+  await flush(true);
+
+  const archiveArgs = [
+    "-project", xcodeproj,
+    "-scheme", projectName,
+    "-archivePath", archivePath,
+    "-destination", "generic/platform=iOS",
+    "-derivedDataPath", derivedDataPath,
+    "archive",
+  ];
+  if (teamId) {
+    archiveArgs.push(`DEVELOPMENT_TEAM=${teamId}`);
+  }
+
+  const archiveResult = await run(
+    xcodebuildPath.includes("/") ? "/bin/sh" : xcodebuildPath,
+    xcodebuildPath.includes("/") ? ["-c", 'exec "$@"', "sh", xcodebuildPath, ...archiveArgs] : archiveArgs,
+    { cwd: unzipDir, onLine: (line) => { logs.push(line); flush(false).catch(() => {}); } }
+  );
+
+  if (archiveResult.code !== 0) {
+    logs.push("[ipa] Archive failed");
+    await flush(true);
+    return null;
+  }
+
+  const exportDir = join(derivedDataPath, "Export");
+  const exportOptionsPath = join(unzipDir, "ExportOptions.plist");
+  const exportOptions = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>development</string>
+  <key>compileBitcode</key>
+  <false/>
+  ${teamId ? `<key>teamID</key><string>${teamId}</string>` : ""}
+</dict>
+</plist>`;
+
+  await writeFile(exportOptionsPath, exportOptions);
+
+  logs.push("[ipa] Exporting IPA…");
+  await flush(true);
+
+  const exportArgs = [
+    "-exportArchive",
+    "-archivePath", archivePath,
+    "-exportPath", exportDir,
+    "-exportOptionsPlist", exportOptionsPath,
+  ];
+
+  const exportResult = await run(
+    xcodebuildPath.includes("/") ? "/bin/sh" : xcodebuildPath,
+    xcodebuildPath.includes("/") ? ["-c", 'exec "$@"', "sh", xcodebuildPath, ...exportArgs] : exportArgs,
+    { cwd: unzipDir, onLine: (line) => { logs.push(line); flush(false).catch(() => {}); } }
+  );
+
+  if (exportResult.code !== 0) {
+    logs.push("[ipa] Export failed");
+    await flush(true);
+    return null;
+  }
+
+  const ipaFiles = readdirSync(exportDir).filter(f => f.endsWith(".ipa"));
+  if (ipaFiles.length === 0) {
+    logs.push("[ipa] No .ipa found in export output");
+    await flush(true);
+    return null;
+  }
+
+  const ipaPath = join(exportDir, ipaFiles[0]);
+  logs.push(`[ipa] IPA ready: ${ipaFiles[0]}`);
+  await flush(true);
+  return ipaPath;
+}
+
+/**
+ * Get or create a cached DerivedData directory for a project.
+ */
+function getCachedDerivedDataPath(projectId) {
+  const cached = join(DERIVED_DATA_CACHE_DIR, projectId);
+  try {
+    execSync(`mkdir -p "${cached}"`, { shell: true });
+  } catch (_) {}
+  return existsSync(cached) ? cached : null;
+}
+
 async function validateJob(job) {
   await updateJob(job.id, { status: "running", logs: [`Runner ${RUNNER_ID} validating…`] });
 
@@ -252,7 +351,9 @@ async function validateJob(job) {
       await updateJob(job.id, { logs: chunk });
     };
 
-    const derivedDataPath = join(tmp, "DerivedData");
+    const wantIPA = job.request.outputType === "ipa";
+    const cachedDD = getCachedDerivedDataPath(job.request.projectId);
+    const derivedDataPath = cachedDD || join(tmp, "DerivedData");
     const baseArgs = [
       "-project",
       xcodeproj,
@@ -302,19 +403,40 @@ async function validateJob(job) {
     await flush(true);
 
     if (result.code === 0) {
-      await updateJob(job.id, { status: "succeeded", exitCode: 0, logs: ["✅ Build succeeded"] });
-      // Start simulator and stream frames to the web app (fire-and-forget).
-      const appPath = join(
-        derivedDataPath,
-        "Build",
-        "Products",
-        "Debug-iphonesimulator",
-        `${projectName}.app`
-      );
-      const bundleId = job.request.bundleId || "com.vibetree.app";
-      const projectId = job.request.projectId;
-      // Await boot+install+launch so tmp is still valid; screenshot loop runs in background.
-      await runSimulatorStream(projectId, appPath, bundleId);
+      if (wantIPA) {
+        const teamId = job.request.developmentTeam || "";
+        const ipaPath = await archiveAndExportIPA(
+          xcodebuildPath, xcodeproj, projectName, unzipDir, derivedDataPath, teamId, logs, flush
+        );
+        if (ipaPath) {
+          const ipaBuf = await readFile(ipaPath);
+          const ipaBase64 = ipaBuf.toString("base64");
+          await updateJob(job.id, {
+            status: "succeeded",
+            exitCode: 0,
+            logs: ["✅ Build succeeded", "[ipa] IPA uploaded"],
+            ipaBase64,
+          });
+        } else {
+          await updateJob(job.id, {
+            status: "succeeded",
+            exitCode: 0,
+            logs: ["✅ Build succeeded", "⚠️ IPA export failed (build still valid)"],
+          });
+        }
+      } else {
+        await updateJob(job.id, { status: "succeeded", exitCode: 0, logs: ["✅ Build succeeded"] });
+        const appPath = join(
+          derivedDataPath,
+          "Build",
+          "Products",
+          "Debug-iphonesimulator",
+          `${projectName}.app`
+        );
+        const bundleId = job.request.bundleId || "com.vibetree.app";
+        const projectId = job.request.projectId;
+        await runSimulatorStream(projectId, appPath, bundleId);
+      }
     } else {
       const allOutput = (result.out || "") + "\n" + (result.err || "");
       // Capture Swift compiler errors: file.swift:line:col: error: or file.swift:line: error:

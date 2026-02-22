@@ -59,6 +59,83 @@ actor APIService {
         return response.jobs
     }
 
+    // MARK: - Projects
+
+    func fetchProjects() async throws -> [Project] {
+        let data = try await request("/api/projects")
+        let response = try decoder.decode(ProjectListResponse.self, from: data)
+        return response.projects
+    }
+
+    func createProject(name: String, type: ProjectType) async throws -> Project {
+        let body = try JSONEncoder().encode(CreateProjectRequest(name: name, projectType: type.rawValue))
+        let data = try await request("/api/projects", method: "POST", body: body)
+        let response = try decoder.decode(CreateProjectResponse.self, from: data)
+        return response.project
+    }
+
+    func deleteProject(id: String) async throws {
+        _ = try await request("/api/projects/\(id)", method: "DELETE")
+    }
+
+    func fetchProject(id: String) async throws -> Project {
+        let data = try await request("/api/projects/\(id)")
+        return try decoder.decode(Project.self, from: data)
+    }
+
+    // MARK: - Chat / Messaging
+
+    func streamMessageRequest(projectId: String, message: String, model: String, projectType: String) throws -> URLRequest {
+        guard let url = URL(string: "\(baseURL)/api/projects/\(projectId)/message/stream") else {
+            throw APIError.invalidURL
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !apiToken.isEmpty {
+            req.setValue("Bearer \(apiToken)", forHTTPHeaderField: "Authorization")
+        }
+        req.timeoutInterval = 300
+        let payload: [String: Any] = [
+            "message": message,
+            "model": model,
+            "projectType": projectType,
+            "useRealLLM": true
+        ]
+        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        return req
+    }
+
+    // MARK: - Build / Install
+
+    func triggerBuild(projectId: String) async throws -> BuildJob {
+        let data = try await request("/api/projects/\(projectId)/validate-xcode", method: "POST")
+        let response = try decoder.decode(BuildJobResponse.self, from: data)
+        guard let job = response.job else { throw APIError.invalidResponse }
+        return job
+    }
+
+    func exportXcodeURL(projectId: String) -> URL? {
+        URL(string: "\(baseURL)/api/projects/\(projectId)/export-xcode")
+    }
+
+    func installManifestURL(projectId: String) -> URL? {
+        guard let manifestURL = URL(string: "\(baseURL)/api/projects/\(projectId)/install-manifest") else { return nil }
+        var components = URLComponents(string: "itms-services://")
+        components?.queryItems = [
+            URLQueryItem(name: "action", value: "download-manifest"),
+            URLQueryItem(name: "url", value: manifestURL.absoluteString)
+        ]
+        return components?.url
+    }
+
+    // MARK: - Credits
+
+    func fetchCredits() async throws -> CreditBalanceResponse {
+        let data = try await request("/api/credits")
+        return try decoder.decode(CreditBalanceResponse.self, from: data)
+    }
+
     // MARK: - Device Registration
 
     func registerDevice(token: String, activityPushToken: String? = nil) async throws {

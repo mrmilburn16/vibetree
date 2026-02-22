@@ -2,8 +2,6 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var monitor = BuildMonitorService.shared
-    @State private var showSettings = false
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -38,19 +36,8 @@ struct ContentView: View {
                 .padding(.top, Forest.space2)
             }
             .background(Forest.backgroundPrimary)
-            .navigationTitle("VibeTree")
+            .navigationTitle("Builds")
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showSettings = true }) {
-                        Image(systemName: "gearshape.fill")
-                            .foregroundColor(Forest.accent)
-                    }
-                }
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
             .refreshable {
                 await monitor.refreshOnce()
             }
@@ -58,7 +45,6 @@ struct ContentView: View {
                 monitor.startPolling()
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: - Components

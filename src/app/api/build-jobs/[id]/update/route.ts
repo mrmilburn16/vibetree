@@ -6,6 +6,7 @@ import {
   setBuildJobAutoFixInProgress,
 } from "@/lib/buildJobs";
 import { sendBuildNotification } from "@/lib/apns";
+import { setProjectIPA } from "@/lib/ipaStore";
 
 function requireRunnerAuth(request: Request): { ok: true } | { ok: false; response: Response } {
   const token = process.env.MAC_RUNNER_TOKEN;
@@ -82,6 +83,13 @@ export async function POST(
       ...(exitCode !== undefined ? { exitCode } : {}),
       ...(error ? { error } : {}),
     });
+  }
+
+  if (typeof body?.ipaBase64 === "string" && body.ipaBase64.length > 0) {
+    const ipaBuf = Buffer.from(body.ipaBase64, "base64");
+    setProjectIPA(job.request.projectId, ipaBuf);
+    const rec = getBuildJob(id);
+    if (rec) rec.ipaPath = `in-memory:${job.request.projectId}`;
   }
 
   const freshJob = getBuildJob(id);

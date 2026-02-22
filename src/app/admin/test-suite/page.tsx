@@ -52,6 +52,8 @@ type TestResult = {
   fileCount: number;
   errorMessage?: string;
   buildResultId?: string;
+  /** Kept so Xcode download works without relying on server in-memory store (e.g. after refresh or serverless). */
+  projectFiles?: Array<{ path: string; content: string }>;
 };
 
 type RunConfig = {
@@ -382,6 +384,33 @@ function StatusBadge({ status }: { status: TestResultStatus }) {
 
 /* ────────────────────────── Result Row ────────────────────────── */
 
+async function downloadXcodeZip(
+  projectId: string,
+  projectName: string,
+  projectFiles: Array<{ path: string; content: string }>,
+): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/export-xcode`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      files: projectFiles,
+      projectName: projectName.replace(/[^a-zA-Z0-9]/g, "") || "App",
+      bundleId: "com.vibetree.test",
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? "Export failed");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${projectName.replace(/[^a-zA-Z0-9]/g, "") || "App"}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function ResultRow({
   result,
   onRerun,
@@ -392,6 +421,8 @@ function ResultRow({
   running: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [xcodeLoading, setXcodeLoading] = useState(false);
+  const [xcodeError, setXcodeError] = useState<string | null>(null);
 
   return (
     <article className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4 transition-all duration-[var(--transition-normal)] hover:border-[var(--border-subtle)]">
@@ -424,13 +455,52 @@ function ResultRow({
           )}
 
           {result.compiled && result.projectId && (
-            <a
-              href={`/api/projects/${result.projectId}/export-xcode`}
-              className="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--button-secondary-bg)] px-2 py-1 text-xs font-medium text-[var(--button-secondary-text)] transition-colors hover:bg-[var(--button-secondary-hover)]"
-            >
-              <Download className="h-3 w-3" aria-hidden />
-              Xcode
-            </a>
+            <span className="inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={xcodeLoading}
+                onClick={async () => {
+                  setXcodeError(null);
+                  setXcodeLoading(true);
+                  try {
+                    if (result.projectFiles?.length) {
+                      await downloadXcodeZip(
+                        result.projectId!,
+                        result.idea.title,
+                        result.projectFiles,
+                      );
+                    } else {
+                      const url = `/api/projects/${result.projectId}/export-xcode`;
+                      const res = await fetch(url);
+                      if (!res.ok) {
+                        const err = await res.json().catch(() => ({ error: res.statusText }));
+                        throw new Error((err as { error?: string }).error ?? "Export failed");
+                      }
+                      const blob = await res.blob();
+                      const downloadUrl = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = downloadUrl;
+                      a.download = `${result.idea.title.replace(/[^a-zA-Z0-9]/g, "") || "App"}.zip`;
+                      a.click();
+                      URL.revokeObjectURL(downloadUrl);
+                    }
+                  } catch (e) {
+                    setXcodeError(e instanceof Error ? e.message : "Download failed");
+                  } finally {
+                    setXcodeLoading(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--button-secondary-bg)] px-2 py-1 text-xs font-medium text-[var(--button-secondary-text)] transition-colors hover:bg-[var(--button-secondary-hover)] disabled:opacity-60"
+              >
+                {xcodeLoading ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : <Download className="h-3 w-3" aria-hidden />}
+                Xcode
+              </button>
+              {xcodeError && (
+                <span className="text-xs text-[var(--semantic-error)]" title={xcodeError}>
+                  Failed
+                </span>
+              )}
+            </span>
           )}
 
           {result.screenshotUrl && (
@@ -670,6 +740,73 @@ function RunComparison({ runs }: { runs: SavedRun[] }) {
   );
 }
 
+const TEST_SUITE_STORAGE_KEY = "vibetree-test-suite-state";
+
+function loadPersistedState(): {
+  model: string;
+  results: TestResult[];
+  currentRunId: string | null;
+  completedCount: number;
+  running: boolean;
+} | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(TEST_SUITE_STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as {
+      model?: string;
+      results?: unknown[];
+      currentRunId?: string | null;
+      completedCount?: number;
+      running?: boolean;
+    };
+    if (!data || !Array.isArray(data.results) || data.results.length !== APP_IDEAS.length) return null;
+    const results: TestResult[] = data.results.map((r: unknown, i: number) => {
+      const row = r as Record<string, unknown>;
+      const idea = (row.idea as AppIdea) ?? APP_IDEAS[i];
+      return {
+        idea,
+        status: (row.status as TestResultStatus) ?? "pending",
+        projectId: row.projectId as string | undefined,
+        buildJobId: row.buildJobId as string | undefined,
+        compiled: row.compiled as boolean | undefined,
+        attempts: (row.attempts as number) ?? 0,
+        compilerErrors: Array.isArray(row.compilerErrors) ? (row.compilerErrors as string[]) : [],
+        screenshotUrl: row.screenshotUrl as string | undefined,
+        durationMs: (row.durationMs as number) ?? 0,
+        fileCount: (row.fileCount as number) ?? 0,
+        errorMessage: row.errorMessage as string | undefined,
+        buildResultId: row.buildResultId as string | undefined,
+        projectFiles: Array.isArray(row.projectFiles) ? (row.projectFiles as Array<{ path: string; content: string }>) : undefined,
+      };
+    });
+    return {
+      model: typeof data.model === "string" ? data.model : "sonnet-4.6",
+      results,
+      currentRunId: data.currentRunId ?? null,
+      completedCount: typeof data.completedCount === "number" ? data.completedCount : 0,
+      running: false,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function savePersistedState(state: {
+  model: string;
+  results: TestResult[];
+  currentRunId: string | null;
+  completedCount: number;
+  running: boolean;
+}): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(TEST_SUITE_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // quota or disabled localStorage
+  }
+}
+
 /* ────────────────────────── Main Page ────────────────────────── */
 
 export default function TestSuitePage() {
@@ -689,6 +826,7 @@ export default function TestSuitePage() {
   const [pastRuns, setPastRuns] = useState<SavedRun[]>([]);
   const [completedCount, setCompletedCount] = useState(0);
   const abortRef = useRef(false);
+  const restoredRef = useRef(false);
 
   const loadPastRuns = useCallback(async () => {
     try {
@@ -701,6 +839,23 @@ export default function TestSuitePage() {
   useEffect(() => {
     loadPastRuns();
   }, [loadPastRuns]);
+
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const persisted = loadPersistedState();
+    if (persisted) {
+      setModel(persisted.model);
+      setResults(persisted.results);
+      setCurrentRunId(persisted.currentRunId);
+      setCompletedCount(persisted.completedCount);
+      setRunning(persisted.running);
+    }
+  }, []);
+
+  useEffect(() => {
+    savePersistedState({ model, results, currentRunId, completedCount, running });
+  }, [model, results, currentRunId, completedCount, running]);
 
   const updateResult = useCallback((index: number, updates: Partial<TestResult>) => {
     setResults((prev) => {
@@ -779,6 +934,8 @@ export default function TestSuitePage() {
 
         const compiled = finalJob.status === "succeeded";
         const compilerErrors = (finalJob.compilerErrors as string[]) ?? [];
+        const jobRequest = finalJob.request as { files?: Array<{ path: string; content: string }> } | undefined;
+        const builtFiles = (compiled && jobRequest?.files?.length ? jobRequest.files : projectFiles) ?? null;
 
         let screenshotUrl: string | undefined;
         if (compiled) {
@@ -815,6 +972,7 @@ export default function TestSuitePage() {
           screenshotUrl,
           durationMs,
           fileCount,
+          ...(builtFiles?.length ? { projectFiles: builtFiles } : {}),
         };
 
         updateResult(index, finalResult);
