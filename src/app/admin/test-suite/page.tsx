@@ -17,6 +17,8 @@ import {
   ChevronDown,
   ChevronUp,
   BarChart3,
+  Trash2,
+  Shuffle,
 } from "lucide-react";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
@@ -49,11 +51,15 @@ type TestResult = {
   compilerErrors: string[];
   screenshotUrl?: string;
   durationMs: number;
+  generationMs?: number;
+  buildMs?: number;
   fileCount: number;
   errorMessage?: string;
   buildResultId?: string;
   /** Kept so Xcode download works without relying on server in-memory store (e.g. after refresh or serverless). */
   projectFiles?: Array<{ path: string; content: string }>;
+  /** Excluded from stats and from resume; use when a failure was due to test/env issues, not the app. */
+  excluded?: boolean;
 };
 
 type RunConfig = {
@@ -87,9 +93,9 @@ type SavedRun = {
   };
 };
 
-/* ────────────────────────── 10 Hardcoded App Ideas ────────────────────────── */
+/* ────────────────────────── Default 10 App Ideas ────────────────────────── */
 
-const APP_IDEAS: AppIdea[] = [
+const DEFAULT_IDEAS: AppIdea[] = [
   {
     title: "Todo list with categories",
     category: "Persistence (UserDefaults)",
@@ -318,9 +324,12 @@ async function readNDJSONStream(
 
 /* ────────────────────────── Build Job Poller ────────────────────────── */
 
+const ABORTED_MSG = "TEST_SUITE_ABORTED";
+
 async function pollBuildJob(
   jobId: string,
   onStatusChange?: (status: string, attempts: number) => void,
+  shouldAbort?: () => boolean,
 ): Promise<{ finalJob: Record<string, unknown>; attempts: number }> {
   const POLL_INTERVAL = 3000;
   const MAX_POLL_TIME = 10 * 60 * 1000;
@@ -329,6 +338,8 @@ async function pollBuildJob(
   let currentId = jobId;
 
   while (Date.now() - start < MAX_POLL_TIME) {
+    if (shouldAbort?.()) throw new Error(ABORTED_MSG);
+
     const res = await fetch(`/api/build-jobs/${currentId}`);
     if (!res.ok) throw new Error(`Poll failed: ${res.status}`);
     const { job } = await res.json();
@@ -347,6 +358,7 @@ async function pollBuildJob(
       }
       if (job.autoFixInProgress) {
         onStatusChange?.("auto-fixing", attempts);
+        if (shouldAbort?.()) throw new Error(ABORTED_MSG);
         await sleep(POLL_INTERVAL);
         continue;
       }
@@ -354,6 +366,7 @@ async function pollBuildJob(
     }
 
     onStatusChange?.(job.status, attempts);
+    if (shouldAbort?.()) throw new Error(ABORTED_MSG);
     await sleep(POLL_INTERVAL);
   }
 
@@ -414,10 +427,12 @@ async function downloadXcodeZip(
 function ResultRow({
   result,
   onRerun,
+  onExclude,
   running,
 }: {
   result: TestResult;
   onRerun?: () => void;
+  onExclude?: () => void;
   running: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -425,10 +440,22 @@ function ResultRow({
   const [xcodeError, setXcodeError] = useState<string | null>(null);
 
   return (
-    <article className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4 transition-all duration-[var(--transition-normal)] hover:border-[var(--border-subtle)]">
+    <article
+      className={`rounded-[var(--radius-lg)] border p-4 transition-all duration-[var(--transition-normal)] ${
+        result.excluded
+          ? "border-[var(--border-subtle)] bg-[var(--background-tertiary)]/50 opacity-75"
+          : "border-[var(--border-default)] bg-[var(--background-secondary)] hover:border-[var(--border-subtle)]"
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <StatusBadge status={result.status} />
+          {result.excluded ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-[var(--background-tertiary)] text-[var(--text-tertiary)]">
+              Excluded
+            </span>
+          ) : (
+            <StatusBadge status={result.status} />
+          )}
           <div className="min-w-0">
             <p className="text-sm font-medium text-[var(--text-primary)] truncate">
               {result.idea.title}
@@ -446,6 +473,16 @@ function ResultRow({
           {result.durationMs > 0 && (
             <span className="text-xs tabular-nums text-[var(--text-tertiary)]">
               {formatDuration(result.durationMs)}
+            </span>
+          )}
+          {result.generationMs !== undefined && result.generationMs > 0 && (
+            <span className="text-xs tabular-nums text-[var(--text-tertiary)]">
+              gen {formatDuration(result.generationMs)}
+            </span>
+          )}
+          {result.buildMs !== undefined && result.buildMs > 0 && (
+            <span className="text-xs tabular-nums text-[var(--text-tertiary)]">
+              build {formatDuration(result.buildMs)}
             </span>
           )}
           {result.fileCount > 0 && (
@@ -503,15 +540,18 @@ function ResultRow({
             </span>
           )}
 
-          {result.screenshotUrl && (
-            <img
-              src={result.screenshotUrl}
-              alt={`${result.idea.title} preview`}
-              className="h-10 w-auto rounded-[var(--radius-sm)] border border-[var(--border-default)] object-contain bg-[var(--background-tertiary)]"
-            />
+          {!running && onExclude && (
+            <button
+              type="button"
+              onClick={onExclude}
+              className="rounded-[var(--radius-md)] px-2 py-1 text-xs font-medium text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
+              title={result.excluded ? "Include in stats and resume" : "Exclude from stats and resume (e.g. test/env failure)"}
+            >
+              {result.excluded ? "Include" : "Exclude"}
+            </button>
           )}
 
-          {!running && result.status !== "pending" && onRerun && (
+          {!running && result.status !== "pending" && !result.excluded && onRerun && (
             <button
               type="button"
               onClick={onRerun}
@@ -561,7 +601,9 @@ function ResultRow({
 /* ────────────────────────── Summary Panel ────────────────────────── */
 
 function SummaryPanel({ results }: { results: TestResult[] }) {
-  const completed = results.filter((r) => r.status === "succeeded" || r.status === "failed" || r.status === "error");
+  const completed = results.filter(
+    (r) => !r.excluded && (r.status === "succeeded" || r.status === "failed" || r.status === "error"),
+  );
   if (completed.length === 0) return null;
 
   const compiled = completed.filter((r) => r.compiled).length;
@@ -683,17 +725,24 @@ function RunComparison({ runs }: { runs: SavedRun[] }) {
               </tr>
             </thead>
             <tbody>
-              {APP_IDEAS.map((idea) => {
-                const ra = a.results.find((r) => r.title === idea.title);
-                const rb = b.results.find((r) => r.title === idea.title);
+              {Array.from(
+                new Set<string>([
+                  ...a.results.map((r) => r.title),
+                  ...b.results.map((r) => r.title),
+                ])
+              )
+                .sort((x, y) => x.localeCompare(y))
+                .map((title) => {
+                const ra = a.results.find((r) => r.title === title);
+                const rb = b.results.find((r) => r.title === title);
                 const aPass = ra?.compiled ?? false;
                 const bPass = rb?.compiled ?? false;
                 const improved = !aPass && bPass;
                 const regressed = aPass && !bPass;
 
                 return (
-                  <tr key={idea.title} className="border-b border-[var(--border-default)]/50">
-                    <td className="py-2 pr-4 text-[var(--text-primary)]">{idea.title}</td>
+                  <tr key={title} className="border-b border-[var(--border-default)]/50">
+                    <td className="py-2 pr-4 text-[var(--text-primary)]">{title}</td>
                     <td className="py-2 px-3 text-center">
                       {ra ? (
                         <span className={aPass ? "text-[var(--semantic-success)]" : "text-[var(--semantic-error)]"}>
@@ -742,6 +791,17 @@ function RunComparison({ runs }: { runs: SavedRun[] }) {
 
 const TEST_SUITE_STORAGE_KEY = "vibetree-test-suite-state";
 
+function makeInitialResults(ideas: AppIdea[]): TestResult[] {
+  return ideas.map((idea) => ({
+    idea,
+    status: "pending" as const,
+    attempts: 0,
+    compilerErrors: [],
+    durationMs: 0,
+    fileCount: 0,
+  }));
+}
+
 function loadPersistedState(): {
   model: string;
   results: TestResult[];
@@ -760,10 +820,15 @@ function loadPersistedState(): {
       completedCount?: number;
       running?: boolean;
     };
-    if (!data || !Array.isArray(data.results) || data.results.length !== APP_IDEAS.length) return null;
+    if (!data || !Array.isArray(data.results) || data.results.length < 1) return null;
     const results: TestResult[] = data.results.map((r: unknown, i: number) => {
       const row = r as Record<string, unknown>;
-      const idea = (row.idea as AppIdea) ?? APP_IDEAS[i];
+      const idea = (row.idea as AppIdea) ?? DEFAULT_IDEAS[i] ?? {
+        title: `Idea ${i + 1}`,
+        prompt: "",
+        category: "Misc",
+        tier: "medium",
+      };
       return {
         idea,
         status: (row.status as TestResultStatus) ?? "pending",
@@ -774,17 +839,21 @@ function loadPersistedState(): {
         compilerErrors: Array.isArray(row.compilerErrors) ? (row.compilerErrors as string[]) : [],
         screenshotUrl: row.screenshotUrl as string | undefined,
         durationMs: (row.durationMs as number) ?? 0,
+        generationMs: typeof row.generationMs === "number" ? (row.generationMs as number) : undefined,
+        buildMs: typeof row.buildMs === "number" ? (row.buildMs as number) : undefined,
         fileCount: (row.fileCount as number) ?? 0,
         errorMessage: row.errorMessage as string | undefined,
         buildResultId: row.buildResultId as string | undefined,
         projectFiles: Array.isArray(row.projectFiles) ? (row.projectFiles as Array<{ path: string; content: string }>) : undefined,
+        excluded: (row.excluded as boolean) ?? false,
       };
     });
+    const computedCompletedCount = results.filter((r) => !r.excluded && r.status !== "pending").length;
     return {
       model: typeof data.model === "string" ? data.model : "sonnet-4.6",
       results,
       currentRunId: data.currentRunId ?? null,
-      completedCount: typeof data.completedCount === "number" ? data.completedCount : 0,
+      completedCount: computedCompletedCount,
       running: false,
     };
   } catch {
@@ -811,22 +880,15 @@ function savePersistedState(state: {
 
 export default function TestSuitePage() {
   const [model, setModel] = useState("sonnet-4.6");
-  const [results, setResults] = useState<TestResult[]>(
-    APP_IDEAS.map((idea) => ({
-      idea,
-      status: "pending" as const,
-      attempts: 0,
-      compilerErrors: [],
-      durationMs: 0,
-      fileCount: 0,
-    })),
-  );
+  const [ideas, setIdeas] = useState<AppIdea[]>(DEFAULT_IDEAS);
+  const [results, setResults] = useState<TestResult[]>(makeInitialResults(DEFAULT_IDEAS));
   const [running, setRunning] = useState(false);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [pastRuns, setPastRuns] = useState<SavedRun[]>([]);
   const [completedCount, setCompletedCount] = useState(0);
   const abortRef = useRef(false);
   const restoredRef = useRef(false);
+  const hydratedRef = useRef(false);
 
   const loadPastRuns = useCallback(async () => {
     try {
@@ -846,16 +908,24 @@ export default function TestSuitePage() {
     const persisted = loadPersistedState();
     if (persisted) {
       setModel(persisted.model);
+      setIdeas(persisted.results.map((r) => r.idea));
       setResults(persisted.results);
       setCurrentRunId(persisted.currentRunId);
       setCompletedCount(persisted.completedCount);
       setRunning(persisted.running);
     }
+    hydratedRef.current = true;
   }, []);
 
   useEffect(() => {
+    if (!hydratedRef.current) return;
     savePersistedState({ model, results, currentRunId, completedCount, running });
   }, [model, results, currentRunId, completedCount, running]);
+
+  // Keep completedCount consistent even as ideas are appended/excluded.
+  useEffect(() => {
+    setCompletedCount(results.filter((r) => !r.excluded && r.status !== "pending").length);
+  }, [results]);
 
   const updateResult = useCallback((index: number, updates: Partial<TestResult>) => {
     setResults((prev) => {
@@ -866,13 +936,15 @@ export default function TestSuitePage() {
   }, []);
 
   const runSingleTest = useCallback(
-    async (index: number, config: RunConfig): Promise<TestResult> => {
-      const idea = APP_IDEAS[index];
+    async (index: number, config: RunConfig, getAbort: () => boolean): Promise<TestResult> => {
+      const idea = ideas[index] ?? DEFAULT_IDEAS[index];
       const t0 = Date.now();
 
       try {
+        if (getAbort()) throw new Error(ABORTED_MSG);
         updateResult(index, { status: "generating" });
 
+        const genStart = Date.now();
         const project = await fetch("/api/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -905,9 +977,12 @@ export default function TestSuitePage() {
         projectFiles = (done.projectFiles as Array<{ path: string; content: string }>) ?? null;
         if (!projectFiles?.length) throw new Error("No files generated");
 
+        const generationMs = Date.now() - genStart;
         fileCount = projectFiles.length;
-        updateResult(index, { status: "building", fileCount });
+        if (getAbort()) throw new Error(ABORTED_MSG);
+        updateResult(index, { status: "building", fileCount, generationMs });
 
+        const buildStart = Date.now();
         const buildRes = await fetch(`/api/projects/${projectId}/validate-xcode`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -930,8 +1005,10 @@ export default function TestSuitePage() {
               buildJobId: buildRes.job.id,
             });
           },
+          getAbort,
         );
 
+        const buildMs = Date.now() - buildStart;
         const compiled = finalJob.status === "succeeded";
         const compilerErrors = (finalJob.compilerErrors as string[]) ?? [];
         const jobRequest = finalJob.request as { files?: Array<{ path: string; content: string }> } | undefined;
@@ -971,6 +1048,8 @@ export default function TestSuitePage() {
           compilerErrors,
           screenshotUrl,
           durationMs,
+          generationMs,
+          buildMs,
           fileCount,
           ...(builtFiles?.length ? { projectFiles: builtFiles } : {}),
         };
@@ -985,11 +1064,12 @@ export default function TestSuitePage() {
         } as TestResult;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const isAborted = msg === ABORTED_MSG;
         const durationMs = Date.now() - t0;
         updateResult(index, {
           status: "error",
           compiled: false,
-          errorMessage: msg,
+          errorMessage: isAborted ? "Stopped by user" : msg,
           durationMs,
         });
         return {
@@ -1000,28 +1080,25 @@ export default function TestSuitePage() {
           compilerErrors: [],
           durationMs,
           fileCount: 0,
-          errorMessage: msg,
+          errorMessage: isAborted ? "Stopped by user" : msg,
         };
       }
     },
-    [updateResult],
+    [ideas, updateResult],
   );
 
   const runAllTests = useCallback(async () => {
     abortRef.current = false;
     setRunning(true);
-    setCompletedCount(0);
-
-    setResults(
-      APP_IDEAS.map((idea) => ({
-        idea,
-        status: "pending",
-        attempts: 0,
-        compilerErrors: [],
-        durationMs: 0,
-        fileCount: 0,
-      })),
-    );
+    const pending = results
+      .map((_, i) => i)
+      .filter((i) => results[i].status === "pending" && !results[i].excluded);
+    const baseDone = results.filter((r) => !r.excluded && r.status !== "pending").length;
+    setCompletedCount(baseDone);
+    if (pending.length === 0) {
+      setRunning(false);
+      return;
+    }
 
     const config: RunConfig = { model, projectType: "pro" };
 
@@ -1035,78 +1112,171 @@ export default function TestSuitePage() {
     setCurrentRunId(runId);
 
     const finalResults: TestResult[] = [];
+    const baseResults = results.filter((r) => !r.excluded && r.status !== "pending");
 
-    for (let i = 0; i < APP_IDEAS.length; i++) {
-      if (abortRef.current) break;
+    try {
+      for (let step = 0; step < pending.length; step++) {
+        if (abortRef.current) break;
 
-      const result = await runSingleTest(i, config);
-      finalResults.push(result);
-      setCompletedCount(i + 1);
+        const idx = pending[step]!;
+        const result = await runSingleTest(idx, config, () => abortRef.current);
+        finalResults.push(result);
+        setCompletedCount(baseDone + finalResults.length);
 
-      if (runId) {
-        const summary = {
-          total: finalResults.length,
-          compiled: finalResults.filter((r) => r.compiled).length,
-          compileRate: Math.round(
-            (finalResults.filter((r) => r.compiled).length / finalResults.length) * 100,
-          ),
-          avgAttempts: Math.round(
-            (finalResults.reduce((s, r) => s + r.attempts, 0) / finalResults.length) * 10,
-          ) / 10,
-          totalDurationMs: finalResults.reduce((s, r) => s + r.durationMs, 0),
-        };
+        if (runId) {
+          const mergedByKey = new Map<string, TestResult>();
+          for (const r of [...baseResults, ...finalResults]) {
+            mergedByKey.set(`${r.idea.title}::${r.idea.prompt}`, r);
+          }
+          const merged = Array.from(mergedByKey.values());
+          const summary = {
+            total: merged.length,
+            compiled: merged.filter((r) => r.compiled).length,
+            compileRate: Math.round(
+              (merged.filter((r) => r.compiled).length / merged.length) * 100,
+            ),
+            avgAttempts: Math.round(
+              (merged.reduce((s, r) => s + r.attempts, 0) / merged.length) * 10,
+            ) / 10,
+            totalDurationMs: merged.reduce((s, r) => s + r.durationMs, 0),
+          };
 
-        await fetch("/api/test-suite", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "update",
-            id: runId,
-            status: abortRef.current ? "stopped" : (i === APP_IDEAS.length - 1 ? "completed" : "running"),
-            results: finalResults.map((r) => ({
-              title: r.idea.title,
-              category: r.idea.category,
-              compiled: r.compiled ?? false,
-              attempts: r.attempts,
-              durationMs: r.durationMs,
-              projectId: r.projectId,
-              buildResultId: r.buildResultId,
-              errors: r.compilerErrors,
-              fileCount: r.fileCount,
-            })),
-            summary,
-          }),
-        });
+          try {
+            await fetch("/api/test-suite", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "update",
+                id: runId,
+                status: abortRef.current ? "stopped" : (step === pending.length - 1 ? "completed" : "running"),
+                results: merged.map((r) => ({
+                  title: r.idea.title,
+                  category: r.idea.category,
+                  compiled: r.compiled ?? false,
+                  attempts: r.attempts,
+                  durationMs: r.durationMs,
+                  projectId: r.projectId,
+                  buildResultId: r.buildResultId,
+                  errors: r.compilerErrors,
+                  fileCount: r.fileCount,
+                })),
+                summary,
+              }),
+            });
+          } catch (_) {
+            // Don't let a failed save stop the run; continue to next app
+          }
+        }
+
+        if (step < pending.length - 1 && !abortRef.current) {
+          await sleep(2000);
+        }
       }
-
-      if (i < APP_IDEAS.length - 1 && !abortRef.current) {
-        await sleep(2000);
-      }
+    } finally {
+      setRunning(false);
+      loadPastRuns();
     }
-
-    setRunning(false);
-    loadPastRuns();
-  }, [model, runSingleTest, loadPastRuns]);
+  }, [ideas, model, results, runSingleTest, loadPastRuns]);
 
   const stopRun = useCallback(() => {
     abortRef.current = true;
+    setRunning(false);
   }, []);
+
+  const clearAndReset = useCallback(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem(TEST_SUITE_STORAGE_KEY);
+      } catch {}
+    }
+    setResults(makeInitialResults(ideas));
+    setRunning(false);
+    setCurrentRunId(null);
+    setCompletedCount(0);
+  }, [ideas]);
 
   const rerunSingle = useCallback(
     async (index: number) => {
       setRunning(true);
-      await runSingleTest(index, { model, projectType: "pro" });
+      await runSingleTest(index, { model, projectType: "pro" }, () => false);
       setRunning(false);
     },
     [model, runSingleTest],
   );
+
+  const pendingIndices = results
+    .map((r, i) => i)
+    .filter((i) => results[i].status === "pending" && !results[i].excluded);
+  const canResume = !running && pendingIndices.length > 0;
+
+  const resumeRun = useCallback(async () => {
+    const pending = results
+      .map((_, i) => i)
+      .filter((i) => results[i].status === "pending" && !results[i].excluded);
+    if (pending.length === 0) return;
+    abortRef.current = false;
+    setRunning(true);
+    const config: RunConfig = { model, projectType: "pro" };
+    const initialDone = results.filter((r) => r.status !== "pending").length;
+    let doneInResume = 0;
+    try {
+      for (const i of pending) {
+        if (abortRef.current) break;
+        await runSingleTest(i, config, () => abortRef.current);
+        doneInResume++;
+        setCompletedCount(initialDone + doneInResume);
+      }
+    } finally {
+      setRunning(false);
+      loadPastRuns();
+    }
+  }, [model, results, runSingleTest, loadPastRuns]);
+
+  const toggleExclude = useCallback((index: number) => {
+    setResults((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], excluded: !next[index].excluded };
+      return next;
+    });
+  }, []);
+
+  const restoreLastRun = useCallback(() => {
+    const latest = [...pastRuns]
+      .filter((r) => Array.isArray(r.results) && r.results.length > 0)
+      .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""))[0];
+    if (!latest) return;
+
+    setCurrentRunId(latest.id);
+    setRunning(false);
+
+    setResults((prev) =>
+      prev.map((row) => {
+        const match = latest.results.find((r) => r.title === row.idea.title);
+        if (!match) return row;
+        const compiled = Boolean(match.compiled);
+        const errors = Array.isArray(match.errors) ? match.errors : [];
+        return {
+          ...row,
+          status: compiled ? "succeeded" : "failed",
+          compiled,
+          attempts: typeof match.attempts === "number" ? match.attempts : row.attempts,
+          durationMs: typeof match.durationMs === "number" ? match.durationMs : row.durationMs,
+          fileCount: typeof (match as any).fileCount === "number" ? (match as any).fileCount : row.fileCount,
+          compilerErrors: errors,
+          projectId: typeof match.projectId === "string" ? match.projectId : row.projectId,
+          buildResultId: typeof match.buildResultId === "string" ? match.buildResultId : row.buildResultId,
+          errorMessage: compiled ? undefined : row.errorMessage,
+        };
+      }),
+    );
+  }, [pastRuns]);
 
   const avgDuration = results.filter((r) => r.durationMs > 0).length > 0
     ? results.filter((r) => r.durationMs > 0).reduce((s, r) => s + r.durationMs, 0) /
       results.filter((r) => r.durationMs > 0).length
     : 0;
   const remaining = running
-    ? Math.max(0, APP_IDEAS.length - completedCount) * avgDuration
+    ? pendingIndices.length * avgDuration
     : 0;
 
   const modelOptions: SelectOption[] = [
@@ -1152,10 +1322,48 @@ export default function TestSuitePage() {
               aria-label="Select LLM model"
             />
             {!running ? (
-              <Button onClick={runAllTests} className="gap-2">
-                <Play className="h-4 w-4" aria-hidden />
-                Start Test Run ({APP_IDEAS.length} apps)
-              </Button>
+              <>
+                <Button onClick={runAllTests} className="gap-2" disabled={pendingIndices.length === 0} title={pendingIndices.length === 0 ? "No pending apps to run" : "Run only pending, non-excluded apps"}>
+                  <Play className="h-4 w-4" aria-hidden />
+                  Run pending ({pendingIndices.length})
+                </Button>
+                {canResume && (
+                  <Button variant="secondary" onClick={resumeRun} className="gap-2" title="Run only the apps still pending (skips excluded)">
+                    <RefreshCw className="h-4 w-4" aria-hidden />
+                    Resume ({pendingIndices.length} left)
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`/api/app-ideas/random?count=${DEFAULT_IDEAS.length}`);
+                      const data = await res.json();
+                      const nextIdeas = Array.isArray(data.ideas) ? (data.ideas as AppIdea[]) : [];
+                      if (nextIdeas.length !== DEFAULT_IDEAS.length) return;
+                      setIdeas((prev) => {
+                        const seen = new Set(prev.map((i) => `${i.title}::${i.prompt}`));
+                        const toAdd = nextIdeas.filter((i) => !seen.has(`${i.title}::${i.prompt}`));
+                        return [...prev, ...toAdd];
+                      });
+                      setResults((prev) => {
+                        const seen = new Set(prev.map((r) => `${r.idea.title}::${r.idea.prompt}`));
+                        const toAdd = nextIdeas
+                          .filter((i) => !seen.has(`${i.title}::${i.prompt}`))
+                          .map((idea) => makeInitialResults([idea])[0]!);
+                        return [...prev, ...toAdd];
+                      });
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                  className="gap-2"
+                  title="Add 10 more prompts to the list (keeps existing results)"
+                >
+                  <Shuffle className="h-4 w-4" aria-hidden />
+                  Add 10 ideas
+                </Button>
+              </>
             ) : (
               <Button variant="destructive" onClick={stopRun} className="gap-2">
                 <Square className="h-4 w-4" aria-hidden />
@@ -1168,21 +1376,59 @@ export default function TestSuitePage() {
                 <div className="flex-1 h-2 overflow-hidden rounded-full bg-[var(--background-tertiary)]">
                   <div
                     className="h-full rounded-full bg-[var(--button-primary-bg)] transition-all duration-500"
-                    style={{ width: `${(completedCount / APP_IDEAS.length) * 100}%` }}
+                    style={{ width: `${(completedCount / ideas.length) * 100}%` }}
                   />
                 </div>
                 <span className="text-xs tabular-nums text-[var(--text-tertiary)] shrink-0">
-                  {completedCount}/{APP_IDEAS.length}
+                  {completedCount}/{ideas.length}
                   {remaining > 0 && ` \u2022 ~${formatDuration(remaining)} remaining`}
                 </span>
               </div>
             )}
 
-            {currentRunId && !running && (
-              <span className="text-xs text-[var(--semantic-success)]">Run complete</span>
+            {currentRunId && !running && (() => {
+              const total = ideas.length;
+              const excludedCount = results.filter((r) => r.excluded).length;
+              const evaluable = total - excludedCount;
+              const done = results.filter((r) => !r.excluded && r.status !== "pending").length;
+              if (done === evaluable && evaluable > 0) return <span className="text-xs text-[var(--semantic-success)]">Run complete</span>;
+              if (done > 0 && done < evaluable) return <span className="text-xs text-[var(--semantic-warning)]">Stopped after {done} apps</span>;
+              return null;
+            })()}
+
+            {!running && pastRuns.some((r) => Array.isArray(r.results) && r.results.length > 0) && (
+              <Button
+                variant="ghost"
+                onClick={restoreLastRun}
+                className="gap-2"
+                title="Restore statuses from the most recent saved run history"
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden />
+                Restore last run
+              </Button>
             )}
+
+            <Button
+              variant="secondary"
+              onClick={clearAndReset}
+              className="gap-2 ml-auto"
+              title="Clear all results and reset state (stored data will be removed so refresh won’t restore it)"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden />
+              Clear & reset
+            </Button>
           </div>
         </section>
+
+        {/* ── Summary (Sticky) ── */}
+        {results.some((r) => !r.excluded && (r.status === "succeeded" || r.status === "failed" || r.status === "error")) && (
+          <section className="sm:sticky sm:top-4 z-20">
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-primary)]/70 backdrop-blur-sm p-4">
+              <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Summary</h2>
+              <SummaryPanel results={results} />
+            </div>
+          </section>
+        )}
 
         {/* ── Results Table ── */}
         <section>
@@ -1194,15 +1440,10 @@ export default function TestSuitePage() {
                 result={result}
                 running={running}
                 onRerun={() => rerunSingle(i)}
+                onExclude={() => toggleExclude(i)}
               />
             ))}
           </div>
-        </section>
-
-        {/* ── Summary ── */}
-        <section>
-          <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Summary</h2>
-          <SummaryPanel results={results} />
         </section>
 
         {/* ── Run Comparison ── */}

@@ -294,6 +294,7 @@ export function EditorLayout({ project }: { project: Project }) {
             projectId={project.id}
             projectName={projectName}
             buildFailureReason={buildFailureReason}
+            onProjectRenamed={(name) => setProjectName(name)}
             onBuildStatusChange={(status) => {
               setBuildStatus(status);
               if (status !== "failed") setBuildFailureReason(null);

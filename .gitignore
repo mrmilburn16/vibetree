@@ -26,11 +26,15 @@
 # Xcode build artifacts
 ios/**/build/
 ios/**/*.xcuserdata/
+ios/**/xcuserdata/
 ios/**/DerivedData/
 
 # misc
 .DS_Store
 *.pem
+
+# local run artifacts
+data/*.jsonl
 
 # debug
 npm-debug.log*

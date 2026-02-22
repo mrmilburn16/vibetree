@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { AlertTriangle, AlertCircle, CheckCircle, Info } from "lucide-react";
+import { AlertTriangle, AlertCircle, CheckCircle, Info, ThumbsDown, ThumbsUp } from "lucide-react";
 import { ThemedTooltipContent } from "@/components/admin/ChartTooltip";
 import {
   LineChart,
@@ -99,7 +100,7 @@ function KpiCard({
   status,
 }: {
   title: string;
-  value: string | number;
+  value: ReactNode;
   sub?: string;
   trend?: number;
   trendUpGood?: boolean;
@@ -204,6 +205,14 @@ export default function AdminDashboardPage() {
   const revenueTrend = prev ? ((stats.revenue.total - prev.revenue) / prev.revenue) * 100 : 0;
   const costTrend = prev ? ((stats.cost.total - prev.cost) / prev.cost) * 100 : 0;
   const marginTrend = prev ? stats.profit.marginPct - prev.marginPct : 0;
+  const feedbackTotalTrend =
+    prev && typeof prev.feedbackTotal === "number" && prev.feedbackTotal > 0
+      ? ((stats.feedback.total - prev.feedbackTotal) / prev.feedbackTotal) * 100
+      : undefined;
+  const prevFeedbackUpRate =
+    prev && typeof prev.feedbackUpRatePct === "number" ? prev.feedbackUpRatePct : undefined;
+  const feedbackUpRateDelta =
+    prevFeedbackUpRate !== undefined ? stats.feedback.upRatePct - prevFeedbackUpRate : undefined;
 
   const costByModelData = Object.entries(stats.cost.byModel).map(([name, value], i) => ({
     name: name.replace("Claude ", "").replace("GPT-5.2", "GPT 5.2"),
@@ -534,6 +543,173 @@ export default function AdminDashboardPage() {
                   ))}
                 </ul>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 2.5 Build feedback */}
+        <section aria-labelledby="feedback-heading" className="space-y-6">
+          <div className="space-y-2">
+            <h2 id="feedback-heading" className="text-heading-section">Build feedback</h2>
+            <div className="h-0.5 w-10 rounded-full bg-[var(--link-default)]/50" aria-hidden />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard
+              title="Feedback submissions"
+              value={stats.feedback.total.toLocaleString()}
+              sub="From thumbs up/down in editor"
+              trend={feedbackTotalTrend}
+              trendUpGood={true}
+              status={stats.feedback.total === 0 ? "info" : undefined}
+            />
+            <KpiCard
+              title="Thumbs up"
+              value={
+                <span className="inline-flex items-center gap-2">
+                  <ThumbsUp className="size-4" style={{ color: "var(--semantic-success)" }} aria-hidden />
+                  <span className="tabular-nums">{stats.feedback.up.toLocaleString()}</span>
+                </span>
+              }
+              status={stats.feedback.up >= stats.feedback.down ? "success" : undefined}
+            />
+            <KpiCard
+              title="Thumbs down"
+              value={
+                <span className="inline-flex items-center gap-2">
+                  <ThumbsDown className="size-4" style={{ color: "var(--semantic-error)" }} aria-hidden />
+                  <span className="tabular-nums">{stats.feedback.down.toLocaleString()}</span>
+                </span>
+              }
+              status={stats.feedback.down > stats.feedback.up ? "warning" : undefined}
+            />
+            <KpiCard
+              title="Up rate"
+              value={`${stats.feedback.upRatePct.toFixed(1)}%`}
+              sub={
+                prevFeedbackUpRate !== undefined
+                  ? `Prev ${prevFeedbackUpRate.toFixed(1)}% (${feedbackUpRateDelta! >= 0 ? "+" : ""}${feedbackUpRateDelta!.toFixed(1)}pp)`
+                  : "👍 ÷ total"
+              }
+              status={
+                stats.feedback.upRatePct >= 80
+                  ? "success"
+                  : stats.feedback.upRatePct >= 60
+                    ? "warning"
+                    : stats.feedback.total > 0
+                      ? "error"
+                      : "info"
+              }
+            />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+            <figure
+              className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4"
+              style={{ minHeight: 288 }}
+            >
+              <figcaption className="sr-only">Thumbs up and thumbs down by day</figcaption>
+              {stats.feedback.total === 0 ? (
+                <div className="flex h-[240px] flex-col items-center justify-center gap-2 text-center">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">No feedback yet</p>
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Once users click 👍 or 👎 in the editor, results will appear here.
+                  </p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart
+                    data={stats.feedback.byDay}
+                    margin={{ top: 12, right: 16, left: 16, bottom: 12 }}
+                    aria-label="Build feedback by day"
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      stroke="var(--text-secondary)"
+                      fontSize={12}
+                      tick={{ fill: "var(--text-secondary)" }}
+                      tickFormatter={formatChartDate}
+                    />
+                    <YAxis
+                      stroke="var(--text-secondary)"
+                      fontSize={12}
+                      tick={{ fill: "var(--text-secondary)" }}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      content={<ThemedTooltipContent />}
+                      formatter={(value, name) => [
+                        typeof value === "number" ? value.toLocaleString() : value != null ? String(value) : "",
+                        name === "up" ? "Thumbs up" : name === "down" ? "Thumbs down" : name ?? "",
+                      ]}
+                      labelFormatter={(label) => `Date: ${label}`}
+                    />
+                    <Legend
+                      wrapperStyle={{ paddingTop: 8 }}
+                      iconType="square"
+                      iconSize={10}
+                      formatter={(value) => (
+                        <span className="inline-flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
+                          {value === "up" ? (
+                            <>
+                              <ThumbsUp className="size-3.5" style={{ color: "var(--semantic-success)" }} aria-hidden />
+                              <span>Thumbs up</span>
+                            </>
+                          ) : value === "down" ? (
+                            <>
+                              <ThumbsDown className="size-3.5" style={{ color: "var(--semantic-error)" }} aria-hidden />
+                              <span>Thumbs down</span>
+                            </>
+                          ) : (
+                            <span>{String(value)}</span>
+                          )}
+                        </span>
+                      )}
+                    />
+                    <Bar dataKey="up" name="up" stackId="a" fill="var(--semantic-success)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="down" name="down" stackId="a" fill="var(--semantic-error)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </figure>
+
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-5">
+              <p className="text-caption font-medium uppercase tracking-wider text-[var(--text-secondary)]">
+                Designer view
+              </p>
+              <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                Use this as a quick sentiment check:
+              </p>
+              <ul className="mt-3 space-y-2 text-sm text-[var(--text-secondary)]">
+                <li className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2">
+                  <span className="inline-flex items-center gap-2">
+                    <ThumbsUp className="size-4" style={{ color: "var(--semantic-success)" }} aria-hidden />
+                    <span>Positive</span>
+                  </span>
+                  <span className="tabular-nums font-medium text-[var(--text-primary)]">
+                    {stats.feedback.up.toLocaleString()}
+                  </span>
+                </li>
+                <li className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2">
+                  <span className="inline-flex items-center gap-2">
+                    <ThumbsDown className="size-4" style={{ color: "var(--semantic-error)" }} aria-hidden />
+                    <span>Negative</span>
+                  </span>
+                  <span className="tabular-nums font-medium text-[var(--text-primary)]">
+                    {stats.feedback.down.toLocaleString()}
+                  </span>
+                </li>
+                <li className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2">
+                  <span>Up rate</span>
+                  <span className="tabular-nums font-medium text-[var(--text-primary)]">
+                    {stats.feedback.upRatePct.toFixed(1)}%
+                  </span>
+                </li>
+              </ul>
+              <p className="mt-4 text-xs text-[var(--text-tertiary)]">
+                Data source: editor thumbs up/down (“How did the build turn out?”).
+              </p>
             </div>
           </div>
         </section>

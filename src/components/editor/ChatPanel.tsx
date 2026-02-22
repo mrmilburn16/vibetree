@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button, Textarea, DropdownSelect } from "@/components/ui";
-import { Send, Sparkles } from "lucide-react";
+import { Send, Sparkles, Square } from "lucide-react";
 import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { BuildingIndicator } from "./BuildingIndicator";
@@ -45,6 +45,7 @@ export function ChatPanel({
   onOutOfCredits,
   onError,
   onProBuildComplete,
+  onProjectRenamed,
 }: {
   projectId: string;
   projectName?: string;
@@ -58,6 +59,7 @@ export function ChatPanel({
     projectId: string,
     onProgress?: (status: string) => void
   ) => Promise<{ status: "succeeded" | "failed"; error?: string }>;
+  onProjectRenamed?: (name: string) => void;
 }) {
   const [llm, setLlm] = useState(DEFAULT_LLM);
   const [projectType, setProjectType] = useState<"standard" | "pro">("standard");
@@ -106,7 +108,9 @@ export function ChatPanel({
   const {
     messages,
     isTyping,
+    isValidating,
     sendMessage,
+    cancelCurrent,
     buildStatus,
     input,
     setInput,
@@ -115,6 +119,7 @@ export function ChatPanel({
   } = useChat(projectId, {
     onError,
     projectName,
+    onProjectRenamed,
     onMessageSuccess: featureFlags.useRealLLM ? () => deduct(1) : undefined,
     onProBuildComplete,
   });
@@ -167,10 +172,17 @@ export function ChatPanel({
   const canSendWithCredits = canSend && hasCreditsForMessage;
   const showCharCount = input.length > 0 && input.length >= 0.8 * maxMessageLength;
   const placeholderIndex = messages.length % CHAT_PLACEHOLDERS.length;
+  const placeholderText =
+    messages.length === 0
+      ? CHAT_PLACEHOLDERS[placeholderIndex]
+      : projectType === "pro"
+        ? "Send a follow-up change (edits this app)… e.g. add a button, tweak layout, change colors"
+        : "Send a follow-up change… e.g. add a screen, tweak styling, change behavior";
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const busy = isTyping || isValidating;
   const sendButtonTitle =
-    !canSend ? "Building…" : !hasCreditsForMessage ? "Out of credits" : "Send message (1 credit)";
+    busy ? "Stop" : !canSend ? "Building…" : !hasCreditsForMessage ? "Out of credits" : "Send message (1 credit)";
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -237,7 +249,7 @@ export function ChatPanel({
               id="chat-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={CHAT_PLACEHOLDERS[placeholderIndex]}
+              placeholder={placeholderText}
               className="!border-0 !min-h-[38px] max-h-[112px] w-full resize-none bg-transparent pt-2 pb-3 pr-2 text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none"
               style={{ resize: "none" }}
               rows={1}
@@ -250,15 +262,21 @@ export function ChatPanel({
               }}
             />
             <Button
-              type="submit"
-              variant="primary"
-              disabled={!canSendWithCredits || !input.trim() || input.length > maxMessageLength}
+              type={busy ? "button" : "submit"}
+              variant={busy ? "secondary" : "primary"}
+              disabled={busy ? false : (!canSendWithCredits || !input.trim() || input.length > maxMessageLength)}
+              onClick={busy ? cancelCurrent : undefined}
               className={`!flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 transition-transform duration-75 ${justSent ? "scale-95" : "scale-100"}`}
               aria-label={sendButtonTitle}
               title={sendButtonTitle}
             >
               <span className="flex size-full items-center justify-center">
-                {canSend ? (
+                {busy ? (
+                  <span
+                    className="h-5 w-5 shrink-0 rounded-[4px] bg-[var(--border-default)]"
+                    aria-hidden
+                  />
+                ) : canSend ? (
                   <Send className="h-6 w-6 shrink-0" aria-hidden size={24} />
                 ) : (
                   <span className="h-6 w-6 shrink-0 rounded-sm bg-current opacity-90" aria-hidden />

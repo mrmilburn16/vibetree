@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { featureFlags } from "@/lib/featureFlags";
+import { updateProject } from "@/lib/projects";
 
 export type MessageRole = "user" | "assistant";
 
@@ -17,6 +18,7 @@ export interface ChatMessage {
 }
 
 const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
+const CHAT_MESSAGES_STORAGE_PREFIX = "vibetree-chat-messages:";
 
 function saveProjectFilesToLocalStorage(
   projectId: string,
@@ -27,6 +29,69 @@ function saveProjectFilesToLocalStorage(
     localStorage.setItem(
       `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`,
       JSON.stringify({ updatedAt: Date.now(), files })
+    );
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function loadChatMessagesFromLocalStorage(projectId: string): ChatMessage[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(`${CHAT_MESSAGES_STORAGE_PREFIX}${projectId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { messages?: unknown };
+    if (!parsed || !Array.isArray(parsed.messages)) return null;
+
+    const msgs: ChatMessage[] = parsed.messages
+      .map((m) => m as Partial<ChatMessage>)
+      .filter(
+        (m) =>
+          (m.role === "user" || m.role === "assistant") &&
+          typeof m.content === "string" &&
+          typeof m.id === "string"
+      )
+      .map((m) => ({
+        id: m.id!,
+        role: m.role as MessageRole,
+        content: m.content ?? "",
+        ...(Array.isArray(m.editedFiles) ? { editedFiles: m.editedFiles as string[] } : {}),
+        ...(m.usage &&
+        typeof (m.usage as any).input_tokens === "number" &&
+        typeof (m.usage as any).output_tokens === "number"
+          ? { usage: m.usage as { input_tokens: number; output_tokens: number } }
+          : {}),
+        ...(typeof m.estimatedCostUsd === "number" ? { estimatedCostUsd: m.estimatedCostUsd } : {}),
+      }));
+
+    // Drop stale in-flight progress messages on restore.
+    return msgs.filter((m) => {
+      if (m.id.startsWith("stream-progress-")) return false;
+      const c = (m.content ?? "").trim();
+      const looksLikeLiveProgress =
+        c.startsWith("Connecting…") ||
+        c.startsWith("Validating build on Mac…") ||
+        c.startsWith("Thinking…");
+      const hasMeta =
+        (m.editedFiles?.length ?? 0) > 0 ||
+        !!m.usage ||
+        typeof m.estimatedCostUsd === "number";
+      if (m.role === "assistant" && looksLikeLiveProgress && !hasMeta) return false;
+      return true;
+    });
+  } catch {
+    return null;
+  }
+}
+
+function saveChatMessagesToLocalStorage(projectId: string, messages: ChatMessage[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    const stable = messages.filter((m) => !m.id.startsWith("stream-progress-"));
+    const capped = stable.slice(-200);
+    localStorage.setItem(
+      `${CHAT_MESSAGES_STORAGE_PREFIX}${projectId}`,
+      JSON.stringify({ updatedAt: Date.now(), messages: capped })
     );
   } catch {
     // ignore quota errors
@@ -53,6 +118,61 @@ const MOCK_RESPONSES = [
 const CONNECTING_TIMEOUT_MS = 180_000;
 const NO_OUTPUT_TIMEOUT_MS = 240_000;
 const TOKEN_STALL_TIMEOUT_MS = 6 * 60_000;
+const USER_CANCEL_REASON = "Stopped by user";
+const PROJECTS_STORAGE_KEY = "vibetree-projects";
+
+function titleCase(s: string): string {
+  return s
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.slice(0, 1).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function deriveTitleFromPrompt(prompt: string): string | null {
+  const p = (prompt ?? "").trim().replace(/\s+/g, " ");
+  if (!p) return null;
+  const m = p.match(/^(?:build|create|make|design)\s+(?:an?|the)\s+(.+?)(?:[.\n,]| with | that | which | where |$)/i);
+  const raw = (m?.[1] ?? "").trim();
+  const candidate = raw.replace(/\b(app|application)\b/gi, "").trim();
+  if (candidate.length < 3) return null;
+  return titleCase(candidate).slice(0, 42);
+}
+
+function deriveTitleFromSummary(summary: string): string | null {
+  const s = (summary ?? "").trim().replace(/\s+/g, " ");
+  if (!s) return null;
+  const m = s.match(/^(?:built|created|made)\s+(?:an?|the)\s+(.+?)(?:[.\n,]| with | that | which | where |$)/i);
+  const raw = (m?.[1] ?? "").trim();
+  const candidate = raw.replace(/\b(app|application)\b/gi, "").trim();
+  if (candidate.length < 3) return null;
+  return titleCase(candidate).slice(0, 42);
+}
+
+function isUntitledName(name: string | undefined | null): boolean {
+  const n = (name ?? "").trim().toLowerCase();
+  return !n || n === "untitled app" || n === "untitled";
+}
+
+function updateProjectNameInLocalStorage(projectId: string, name: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    updateProject(projectId, { name });
+    return;
+  } catch {
+    // fall back to best-effort manual update below
+  }
+  try {
+    const raw = localStorage.getItem(PROJECTS_STORAGE_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    const next = Array.isArray(arr) ? [...arr] : [];
+    const idx = next.findIndex((p: any) => p && p.id === projectId);
+    if (idx >= 0) next[idx] = { ...next[idx], name, updatedAt: Date.now() };
+    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
 
 interface QueuedMessage {
   text: string;
@@ -65,6 +185,8 @@ export function useChat(
   options?: {
     onError?: (message: string) => void;
     projectName?: string;
+    /** Called when the project is auto-renamed from the first prompt. */
+    onProjectRenamed?: (name: string) => void;
     /** Called when the message API returns 200 (real LLM path only). Use for deduct-on-success. */
     onMessageSuccess?: () => void;
     /** When a Pro (Swift) build completes, run validate on Mac and return result. Used to auto-validate and post result in chat. */
@@ -81,9 +203,10 @@ export function useChat(
     }>;
   }
 ) {
-  const { onError, projectName, onMessageSuccess, onProBuildComplete } = options ?? {};
+  const { onError, projectName, onProjectRenamed, onMessageSuccess, onProBuildComplete } = options ?? {};
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [buildStatus, setBuildStatus] = useState<"idle" | "building" | "live" | "failed">("idle");
   const [input, setInput] = useState("");
   const [canSend, setCanSend] = useState(true);
@@ -97,18 +220,70 @@ export function useChat(
     intervalId: ReturnType<typeof setInterval> | null;
   } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const abortWithReasonRef = useRef<((reason: string) => void) | null>(null);
+  const cancelValidationRef = useRef(false);
   const queueRef = useRef<QueuedMessage[]>([]);
   const processingRef = useRef(false);
+  const hydratedRef = useRef(false);
 
   useEffect(() => {
     return () => {
       timeoutIdsRef.current.forEach((id) => clearTimeout(id));
       timeoutIdsRef.current = [];
       abortControllerRef.current?.abort();
+      if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
+      validateTickRef.current = null;
+      abortWithReasonRef.current = null;
+      cancelValidationRef.current = false;
       setCanSend(true);
       setIsTyping(false);
+      setIsValidating(false);
     };
   }, []);
+
+  const cancelCurrent = useCallback(() => {
+    // Clear any queued follow-ups too.
+    queueRef.current = [];
+    cancelValidationRef.current = true;
+
+    // If we're in the "Validating build on Mac…" phase, cancel UI updates and ignore completion.
+    if (validateTickRef.current) {
+      const messageId = validateTickRef.current.messageId;
+      if (validateTickRef.current.intervalId) clearInterval(validateTickRef.current.intervalId);
+      validateTickRef.current = null;
+      setIsValidating(false);
+      setBuildStatus("idle");
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, content: "Build validation stopped." } : m
+        )
+      );
+      return;
+    }
+
+    // Otherwise, cancel the streaming request (generation/edit).
+    abortWithReasonRef.current?.(USER_CANCEL_REASON);
+  }, []);
+
+  // Restore chat history when returning to the editor for the same project.
+  useEffect(() => {
+    hydratedRef.current = false;
+    const restored = loadChatMessagesFromLocalStorage(projectId);
+    if (restored && restored.length > 0) {
+      setMessages(restored);
+      // If we have history, default to ready.
+      setBuildStatus("live");
+    } else {
+      setMessages([]);
+    }
+    hydratedRef.current = true;
+  }, [projectId]);
+
+  // Persist chat history per project id.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    saveChatMessagesToLocalStorage(projectId, messages);
+  }, [projectId, messages]);
 
   const runClientMock = useCallback(
     (trimmed: string) => {
@@ -185,6 +360,8 @@ export function useChat(
         // ignore
       }
     };
+    abortWithReasonRef.current = abortWithReason;
+    cancelValidationRef.current = false;
 
     setBuildStatus("building");
 
@@ -300,6 +477,7 @@ export function useChat(
     const finish = (opts: { success?: boolean; error?: string }) => {
       clearInterval(watchdog);
       abortControllerRef.current = null;
+      abortWithReasonRef.current = null;
       if (opts.error) {
         setBuildStatus("failed");
         removeStreamMessage();
@@ -501,6 +679,21 @@ export function useChat(
               : undefined;
           const estimatedCostUsd =
             typeof am?.estimatedCostUsd === "number" ? am.estimatedCostUsd : undefined;
+
+          const autoTitle =
+            isUntitledName(projectName)
+              ? deriveTitleFromPrompt(trimmed) ?? deriveTitleFromSummary(rawContent)
+              : null;
+          if (autoTitle && !isUntitledName(autoTitle)) {
+            updateProjectNameInLocalStorage(projectId, autoTitle);
+            onProjectRenamed?.(autoTitle);
+            fetch("/api/projects", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: projectId, name: autoTitle }),
+            }).catch(() => {});
+          }
+          const projectNameForLogs = autoTitle ?? projectName ?? "Unknown";
           const isProBuild =
             Array.isArray(doneEvent.projectFiles) &&
             doneEvent.projectFiles.some((f: { path: string }) => f.path.endsWith(".swift"));
@@ -515,6 +708,7 @@ export function useChat(
           };
 
           if (isProBuild && onProBuildComplete) {
+            setIsValidating(true);
             // Don't show "App built" yet; show one message after validation with app description + result.
             // Placeholder has no editedFiles/usage so it renders as progress (muted, same as "Generating..." / "Validating structured output").
             setMessages((prev) => [
@@ -557,9 +751,15 @@ export function useChat(
               }
             )
               .then((result) => {
+                if (cancelValidationRef.current) {
+                  setIsValidating(false);
+                  cancelValidationRef.current = false;
+                  return;
+                }
                 if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
                 const buildDuration = validateTickRef.current ? Date.now() - validateTickRef.current.startTime : 0;
                 validateTickRef.current = null;
+                setIsValidating(false);
                 if (result.fixedFiles && result.fixedFiles.length > 0) {
                   saveProjectFilesToLocalStorage(projectId, result.fixedFiles);
                   editedFiles = result.fixedFiles.map((f) => f.path);
@@ -569,7 +769,7 @@ export function useChat(
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     projectId,
-                    projectName: projectName ?? "Unknown",
+                    projectName: projectNameForLogs,
                     prompt: trimmed,
                     tier: "custom",
                     category: "",
@@ -599,14 +799,20 @@ export function useChat(
                 );
               })
               .catch(() => {
+                if (cancelValidationRef.current) {
+                  setIsValidating(false);
+                  cancelValidationRef.current = false;
+                  return;
+                }
                 if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
                 validateTickRef.current = null;
+                setIsValidating(false);
                 fetch("/api/build-results", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     projectId,
-                    projectName: projectName ?? "Unknown",
+                    projectName: projectNameForLogs,
                     prompt: trimmed,
                     tier: "custom",
                     category: "",
@@ -638,12 +844,20 @@ export function useChat(
       })
       .catch((err) => {
         if (err?.name === "AbortError") {
+          if (abortReason === USER_CANCEL_REASON) {
+            removeStreamMessage();
+            abortControllerRef.current = null;
+            abortWithReasonRef.current = null;
+            setBuildStatus(queueRef.current.length > 0 ? "building" : "idle");
+            processQueue();
+            return;
+          }
           finish({ error: abortReason ?? "Request timed out. Try again." });
         } else {
           finish({ error: err?.message ?? "Something went wrong. Please try again." });
         }
       });
-  }, [projectId, projectName, onError, onMessageSuccess, onProBuildComplete]);
+  }, [projectId, projectName, onProjectRenamed, onError, onMessageSuccess, onProBuildComplete]);
 
   const sendMessage = useCallback(
     (text: string, model?: string, projectType: "standard" | "pro" = "standard") => {
@@ -681,7 +895,9 @@ export function useChat(
   return {
     messages,
     isTyping,
+    isValidating,
     sendMessage,
+    cancelCurrent,
     buildStatus,
     input,
     setInput,

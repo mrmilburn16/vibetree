@@ -138,6 +138,8 @@ export function PreviewPane({
 }
 
 const SIMULATOR_POLL_MS = 250;
+const SIMULATOR_POLL_BACKOFF_START_MS = 750;
+const SIMULATOR_POLL_BACKOFF_MAX_MS = 5000;
 
 function CSSDeviceFrame({
   buildStatus,
@@ -159,26 +161,47 @@ function CSSDeviceFrame({
       return;
     }
     let cancelled = false;
+    let inFlight = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let delayMs = SIMULATOR_POLL_BACKOFF_START_MS;
+
+    const scheduleNext = (nextDelay: number) => {
+      if (cancelled) return;
+      delayMs = Math.max(0, Math.min(SIMULATOR_POLL_BACKOFF_MAX_MS, nextDelay));
+      timeoutId = setTimeout(poll, delayMs);
+    };
+
     const poll = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
       try {
         const res = await fetch(`/api/projects/${projectId}/simulator-preview?t=${Date.now()}`, {
           cache: "no-store",
         });
-        if (!res.ok || cancelled) return;
+        if (cancelled) return;
+        // No frame yet: back off to avoid hammering the server (and your laptop).
+        if (!res.ok) {
+          scheduleNext(Math.min(SIMULATOR_POLL_BACKOFF_MAX_MS, Math.max(delayMs * 1.35, SIMULATOR_POLL_BACKOFF_START_MS)));
+          return;
+        }
         const blob = await res.blob();
         if (cancelled) return;
         if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = URL.createObjectURL(blob);
         setSimulatorPreviewUrl(blobUrlRef.current);
+        // Got a frame: return to fast polling for smoother updates.
+        scheduleNext(SIMULATOR_POLL_MS);
       } catch {
-        // ignore
+        scheduleNext(Math.min(SIMULATOR_POLL_BACKOFF_MAX_MS, Math.max(delayMs * 1.35, SIMULATOR_POLL_BACKOFF_START_MS)));
+      } finally {
+        inFlight = false;
       }
     };
+
     poll();
-    const id = setInterval(poll, SIMULATOR_POLL_MS);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      if (timeoutId) clearTimeout(timeoutId);
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = null;

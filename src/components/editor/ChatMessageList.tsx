@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowDown, Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
 import type { ChatMessage } from "./useChat";
 
 const STREAM_WORD_DELAY_MS = 45;
@@ -92,12 +92,53 @@ export function ChatMessageList({
   buildStatus?: string;
   projectId?: string;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [streamedContent, setStreamedContent] = useState("");
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const shouldAutoScrollRef = useRef(true);
+  const lastForcedScrollUserMessageIdRef = useRef<string | null>(null);
+  const lastScrollTopRef = useRef(0);
+
+  const updateAutoScrollFlag = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distanceFromBottom < 12;
+    const scrollingUp = el.scrollTop < lastScrollTopRef.current;
+    lastScrollTopRef.current = el.scrollTop;
+
+    setIsAtBottom(atBottom);
+
+    // Priority: if the user scrolls up, stop pinning to bottom immediately.
+    if (scrollingUp && !atBottom) {
+      shouldAutoScrollRef.current = false;
+      return;
+    }
+    // Only re-enable auto-scroll once they've returned to the bottom.
+    if (atBottom) shouldAutoScrollRef.current = true;
+  };
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    updateAutoScrollFlag();
+  }, []);
+
+  useLayoutEffect(() => {
+    const last = messages[messages.length - 1];
+    const lastIsNewUserMessage =
+      last?.role === "user" && last.id !== lastForcedScrollUserMessageIdRef.current;
+
+    if (lastIsNewUserMessage) {
+      shouldAutoScrollRef.current = true;
+      lastForcedScrollUserMessageIdRef.current = last.id;
+    }
+
+    if (!shouldAutoScrollRef.current) return;
+    bottomRef.current?.scrollIntoView({
+      behavior: lastIsNewUserMessage ? "smooth" : "auto",
+      block: "end",
+    });
   }, [messages, isTyping, streamedContent]);
 
   // Stream assistant messages that have content (word-by-word)
@@ -146,7 +187,11 @@ export function ChatMessageList({
   }, [messages]);
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto p-5">
+    <div
+      ref={scrollRef}
+      onScroll={updateAutoScrollFlag}
+      className="flex flex-1 flex-col overflow-y-auto p-5"
+    >
       {messages.length === 0 && !isTyping && (
         <div className="flex flex-1 flex-col items-center justify-center py-12 text-center animate-fade-in" style={{ animationDelay: "50ms" }}>
           <h2 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">
@@ -242,6 +287,24 @@ export function ChatMessageList({
           );
         })}
       </div>
+
+      {!isAtBottom && (
+        <div className="sticky bottom-3 z-10 flex justify-center pointer-events-none">
+          <button
+            type="button"
+            onClick={() => {
+              shouldAutoScrollRef.current = true;
+              bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+            }}
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--panel-bg)]/90 px-3 py-1.5 text-xs text-[var(--text-secondary)] shadow-sm backdrop-blur hover:text-[var(--text-primary)] hover:border-[var(--button-primary-bg)]/40 transition-colors"
+            aria-label="Jump to latest message"
+            title="Jump to latest"
+          >
+            <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+            Jump to latest
+          </button>
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   );

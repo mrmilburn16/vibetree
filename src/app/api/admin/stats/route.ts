@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/adminAuth";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +46,87 @@ function generateTimeSeries(days: number, base: number, variance: number) {
   }));
 }
 
+type FeedbackEntry = {
+  timestamp: string;
+  projectId?: string;
+  rating: "up" | "down";
+};
+
+const FEEDBACK_LOG_PATH = join(process.cwd(), "data", "build-feedback.jsonl");
+
+function parseFeedbackEntries(): FeedbackEntry[] {
+  if (!existsSync(FEEDBACK_LOG_PATH)) return [];
+  try {
+    const raw = readFileSync(FEEDBACK_LOG_PATH, "utf8");
+    const lines = raw.split(/\r?\n/).filter(Boolean);
+    const entries: FeedbackEntry[] = [];
+    for (const line of lines) {
+      try {
+        const obj = JSON.parse(line) as FeedbackEntry;
+        if (!obj || (obj.rating !== "up" && obj.rating !== "down")) continue;
+        if (typeof obj.timestamp !== "string") continue;
+        entries.push(obj);
+      } catch {
+        // ignore bad lines
+      }
+    }
+    return entries;
+  } catch {
+    return [];
+  }
+}
+
+function dateKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(d: Date, days: number): Date {
+  const next = new Date(d);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function buildFeedbackStats(entries: FeedbackEntry[], start: Date, end: Date) {
+  const startKey = dateKey(start);
+  const endKey = dateKey(end);
+
+  const filtered = entries.filter((e) => {
+    const t = new Date(e.timestamp);
+    if (Number.isNaN(t.getTime())) return false;
+    const k = dateKey(t);
+    return k >= startKey && k <= endKey;
+  });
+
+  const byDayMap = new Map<string, { date: string; up: number; down: number; total: number }>();
+  for (const e of filtered) {
+    const k = dateKey(new Date(e.timestamp));
+    const cur = byDayMap.get(k) ?? { date: k, up: 0, down: 0, total: 0 };
+    if (e.rating === "up") cur.up += 1;
+    if (e.rating === "down") cur.down += 1;
+    cur.total += 1;
+    byDayMap.set(k, cur);
+  }
+
+  // Fill every day in range so charts are stable.
+  const days: Array<{ date: string; up: number; down: number; total: number }> = [];
+  const cursor = new Date(start);
+  cursor.setHours(0, 0, 0, 0);
+  const endCursor = new Date(end);
+  endCursor.setHours(0, 0, 0, 0);
+  while (cursor <= endCursor) {
+    const k = dateKey(cursor);
+    days.push(byDayMap.get(k) ?? { date: k, up: 0, down: 0, total: 0 });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const up = filtered.filter((e) => e.rating === "up").length;
+  const down = filtered.filter((e) => e.rating === "down").length;
+  const total = up + down;
+  const upRatePct = total > 0 ? (up / total) * 100 : 0;
+
+  return { total, up, down, upRatePct, byDay: days };
+}
+
 export async function GET(request: Request) {
   const session = await getAdminSession();
   if (!session) {
@@ -54,6 +137,12 @@ export async function GET(request: Request) {
   const range = (searchParams.get("range") as Range) || "30d";
   const { start, end } = getDateRange(range);
   const days = Math.max(7, Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)));
+
+  const feedbackEntries = parseFeedbackEntries();
+  const feedback = buildFeedbackStats(feedbackEntries, start, end);
+  const prevStart = addDays(start, -days);
+  const prevEnd = addDays(end, -days);
+  const prevFeedback = buildFeedbackStats(feedbackEntries, prevStart, prevEnd);
 
   // Mock data: revenue, cost by model, credits, growth, fraud, alerts
   const mrr = 12400;
@@ -120,6 +209,8 @@ export async function GET(request: Request) {
     cost: totalCost * 1.05,
     marginPct: grossMarginPct - 2,
     churnPct: churnRatePct + 0.5,
+    feedbackTotal: prevFeedback.total,
+    feedbackUpRatePct: prevFeedback.upRatePct,
   };
 
   return NextResponse.json({
@@ -174,6 +265,7 @@ export async function GET(request: Request) {
       projectedRevenueMonth,
       projectedMarginPct: projectedRevenueMonth > 0 ? ((projectedRevenueMonth - projectedCostMonth) / projectedRevenueMonth) * 100 : 0,
     },
+    feedback,
     alerts,
     prevPeriod,
   });
