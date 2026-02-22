@@ -1,8 +1,8 @@
-import { getAllBuildJobs } from "@/lib/buildJobs";
+import { getAllBuildJobs, type BuildJobRecord } from "@/lib/buildJobs";
 
 export async function GET() {
-  const all = getAllBuildJobs();
-  const active = all.filter((j) => j.status === "queued" || j.status === "running");
-  active.sort((a, b) => b.createdAt - a.createdAt);
+  const all: BuildJobRecord[] = getAllBuildJobs();
+  const active = all.filter((j: BuildJobRecord) => j.status === "queued" || j.status === "running");
+  active.sort((a: BuildJobRecord, b: BuildJobRecord) => b.createdAt - a.createdAt);
   return Response.json({ jobs: active });
 }

@@ -13,6 +13,8 @@
 		2B312C98057A6E564DB66925 /* BuildMonitorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4594439F625337748D4216F6 /* BuildMonitorService.swift */; };
 		2DC1BFECDBAB854674B48A21 /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5FE2F1AB33665D416AA659 /* APIService.swift */; };
 		3067FD8B0ED4A1027B041240 /* BuildActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FED07D6232FE087B1224451 /* BuildActivityAttributes.swift */; };
+		3C4F8CCD3D19913B6B258BFF /* SharedColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3985B8CAAECA5E854F1BEA68 /* SharedColors.swift */; };
+		44CB16D22E5BA586610EFDBB /* SharedColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3985B8CAAECA5E854F1BEA68 /* SharedColors.swift */; };
 		4624A1C61226F35B80B8C56A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DFDC9B9B76EC9453D045AEE /* SettingsView.swift */; };
 		4EBF4517811C49ADC9888DFF /* BuildDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B47BF93A1F3DCA1621B5163 /* BuildDetailView.swift */; };
 		630C0A40BCDC93E6250A608F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D6781229B2A081691BE45AF4 /* Assets.xcassets */; };
@@ -54,6 +56,7 @@
 		0DFDC9B9B76EC9453D045AEE /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		1B47BF93A1F3DCA1621B5163 /* BuildDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildDetailView.swift; sourceTree = "<group>"; };
 		20AEF76C37A0B4D2220D1397 /* BuildActivityExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BuildActivityExtension.entitlements; sourceTree = "<group>"; };
+		3985B8CAAECA5E854F1BEA68 /* SharedColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedColors.swift; sourceTree = "<group>"; };
 		3ECCC0AC2325B08A4E20BC44 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		404C28E5DECA9AAF2C058C6D /* VibTreeCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VibTreeCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4594439F625337748D4216F6 /* BuildMonitorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildMonitorService.swift; sourceTree = "<group>"; };
@@ -150,6 +153,7 @@
 			isa = PBXGroup;
 			children = (
 				4FED07D6232FE087B1224451 /* BuildActivityAttributes.swift */,
+				3985B8CAAECA5E854F1BEA68 /* SharedColors.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -249,6 +253,7 @@
 			files = (
 				7DAB6AD6BA4F5C5B5EFB9256 /* BuildActivityAttributes.swift in Sources */,
 				FB81E6D1220FC7E2746ACB98 /* BuildActivityLiveActivity.swift in Sources */,
+				3C4F8CCD3D19913B6B258BFF /* SharedColors.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -266,6 +271,7 @@
 				2ACBF02EB569FE4D3D2ADF6E /* ForestTheme.swift in Sources */,
 				CF2622EBCF4BF232F81514C0 /* NotificationService.swift in Sources */,
 				4624A1C61226F35B80B8C56A /* SettingsView.swift in Sources */,
+				44CB16D22E5BA586610EFDBB /* SharedColors.swift in Sources */,
 				020E76B9B6864BD601F47EDB /* VibTreeCompanionApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
