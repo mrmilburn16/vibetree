@@ -7,6 +7,7 @@ import {
 } from "@/lib/buildJobs";
 import { sendBackgroundRefreshPush, sendBuildNotification } from "@/lib/apns";
 import { setProjectIPA } from "@/lib/ipaStore";
+import { getProject } from "@/lib/projectStore";
 
 function requireRunnerAuth(request: Request): { ok: true } | { ok: false; response: Response } {
   const token = process.env.MAC_RUNNER_TOKEN;
@@ -102,8 +103,9 @@ export async function POST(
     sendBackgroundRefreshPush(`build_succeeded:${id}`).catch((err) =>
       console.error("[apns] Error sending background refresh push:", err)
     );
+    const displayName = getProject(freshJob.request.projectId)?.name?.trim() || freshJob.request.projectName;
     sendBuildNotification(
-      freshJob.request.projectName,
+      displayName,
       "succeeded"
     ).catch((err) => console.error("[apns] Error sending success notification:", err));
   }
@@ -135,8 +137,9 @@ export async function POST(
     sendBackgroundRefreshPush(`build_failed:${id}`).catch((err) =>
       console.error("[apns] Error sending background refresh push:", err)
     );
+    const displayName = getProject(freshJob.request.projectId)?.name?.trim() || freshJob.request.projectName;
     sendBuildNotification(
-      freshJob.request.projectName,
+      displayName,
       "failed",
       freshJob.error ?? "Build failed after all attempts"
     ).catch((err) => console.error("[apns] Error sending failure notification:", err));

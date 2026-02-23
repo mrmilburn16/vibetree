@@ -1,5 +1,7 @@
 import { readFileSync, appendFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
+import { recordBuildForSkill, addGoldenExample } from "@/lib/skills/registry";
+import { getProjectFiles } from "@/lib/projectFileStore";
 
 const LOG_PATH = join(process.cwd(), "data", "build-results.jsonl");
 
@@ -23,6 +25,8 @@ export type BuildResult = {
   userFunctionalScore: number | null;
   /** Filename in data/build-results-images/ (e.g. br_xxx.png) for optional screenshot. */
   userImagePath: string | null;
+  /** Skill IDs that were injected into the system prompt for this build. */
+  skillsUsed: string[];
 };
 
 function generateId(): string {
@@ -30,7 +34,7 @@ function generateId(): string {
 }
 
 export function logBuildResult(
-  partial: Omit<BuildResult, "id" | "timestamp" | "userNotes" | "userDesignScore" | "userFunctionalScore" | "userImagePath">
+  partial: Omit<BuildResult, "id" | "timestamp" | "userNotes" | "userDesignScore" | "userFunctionalScore" | "userImagePath" | "skillsUsed"> & { skillsUsed?: string[] }
 ): BuildResult {
   const result: BuildResult = {
     id: generateId(),
@@ -39,6 +43,7 @@ export function logBuildResult(
     userDesignScore: null,
     userFunctionalScore: null,
     userImagePath: null,
+    skillsUsed: [],
     ...partial,
   };
   try {
@@ -48,6 +53,22 @@ export function logBuildResult(
   } catch (e) {
     console.error("[build-results] Failed to write:", e);
   }
+
+  // Update per-skill stats
+  for (const skillId of result.skillsUsed) {
+    try {
+      recordBuildForSkill(
+        skillId,
+        result.compiled,
+        result.attempts === 1,
+        null,
+        result.compilerErrors,
+      );
+    } catch {
+      // Skill tracking is best-effort
+    }
+  }
+
   return result;
 }
 
@@ -58,6 +79,7 @@ export function getAllBuildResults(): BuildResult[] {
     return lines.map((l) => {
       const r = JSON.parse(l) as BuildResult;
       if (r.userImagePath === undefined) r.userImagePath = null;
+      if (!Array.isArray(r.skillsUsed)) r.skillsUsed = [];
       return r;
     }).reverse();
   } catch {
@@ -88,8 +110,46 @@ export function updateBuildResult(
       }
       return JSON.stringify(r);
     });
-    if (found) writeFileSync(LOG_PATH, updated.join("\n") + "\n", "utf8");
-    return found;
+    const result = found as BuildResult | null;
+    if (result) {
+      writeFileSync(LOG_PATH, updated.join("\n") + "\n", "utf8");
+
+      if (updates.userFunctionalScore !== undefined && result.skillsUsed?.length) {
+        for (const skillId of result.skillsUsed) {
+          try {
+            recordBuildForSkill(
+              skillId,
+              result.compiled,
+              result.attempts === 1,
+              updates.userFunctionalScore,
+              [],
+            );
+          } catch {
+            // best-effort
+          }
+        }
+
+        // Save golden example when: compiled on first attempt + high functional score
+        if (
+          result.compiled &&
+          result.attempts === 1 &&
+          updates.userFunctionalScore !== null &&
+          updates.userFunctionalScore >= 4
+        ) {
+          try {
+            const projFiles = getProjectFiles(result.projectId);
+            if (projFiles && Object.keys(projFiles).length > 0) {
+              for (const skillId of result.skillsUsed) {
+                addGoldenExample(skillId, result.id, projFiles);
+              }
+            }
+          } catch {
+            // best-effort
+          }
+        }
+      }
+    }
+    return result;
   } catch {
     return null;
   }

@@ -266,6 +266,9 @@ export default function DocsPage() {
               <p>
                 You can ask the AI to add a Live Activity to your app—for example, &quot;Add a Live Activity for order tracking&quot; or &quot;Show delivery status on the Lock Screen.&quot; The AI will generate the Swift code (ActivityAttributes, Widget Extension, update calls). Your app can then show live updates without the user opening the app. This is available when your project targets a supported iOS version (e.g. iOS 16.1+ for Dynamic Island on iPhone 14 Pro and later).
               </p>
+              <p>
+                <strong>VibeTree Companion app:</strong> If you use the companion app for build status, you can simulate a Live Activity from the app (Settings → Live Activities → Start Test) or from the web: <Link href="/dev/live-activity-test">Test Live Activity</Link>. Open the companion app, trigger the test, then lock your phone to see the widget.
+              </p>
             </DocSection>
 
             <DocSection id="liquid-glass" title="Liquid Glass (iOS 26)">

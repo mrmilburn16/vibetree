@@ -25,6 +25,7 @@ export async function POST(request: Request) {
     fileCount: typeof body.fileCount === "number" ? body.fileCount : 0,
     fileNames: Array.isArray(body.fileNames) ? body.fileNames : [],
     durationMs: typeof body.durationMs === "number" ? body.durationMs : 0,
+    skillsUsed: Array.isArray(body.skillsUsed) ? body.skillsUsed : [],
   });
   return Response.json({ result });
 }

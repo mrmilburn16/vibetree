@@ -121,13 +121,17 @@ Rules:
    - "Extra trailing closure passed in call": Remove the trailing closure syntax and use explicit parameter labels instead.
    - "Value of type 'X' has no member 'Y'": The API doesn't exist. Use the correct SwiftUI API.
    - "Missing return in closure": Add explicit return statement.
-   - "Type 'X' does not conform to protocol 'Y'": Implement required protocol methods/properties.
+   - "Type 'X' does not conform to protocol 'Y'": Implement required protocol methods/properties. For NavigationLink(value:) and .navigationDestination(for:), the type MUST conform to Hashable. Add ": Hashable" to the struct/class declaration.
    - "Cannot convert value of type 'X' to expected type 'Y'": Use proper type conversion.
    - "$viewModel" without a property: Use viewModel (no $) unless binding a specific property like $viewModel.isRunning.
    - String interpolation escaping: Write .currency(code: "USD") not .currency(code: \\"USD\\").
+   - "type '()' cannot conform to 'View'": A non-View statement (assignment, function call) is inside a SwiftUI body/content closure. Wrap it in an if/let or move it to .onAppear/.task.
+   - "Multiple commands produce": Duplicate Swift files with the same name in different directories. Remove the duplicate.
 3. Every file you return must be COMPLETE (full file content, not just the changed parts).
 4. Return ALL files that you modified. For files you didn't change, do NOT return them.
 5. Preserve all imports, all types, all function signatures unless a signature itself is the error.
+6. CRITICAL: Use the EXACT SAME file paths as the input. If a file is at "Models/Debt.swift", return it at "Models/Debt.swift" — never change it to "VibetreeApp/Models/Debt.swift" or any other path. Changing paths creates duplicate files that break the build.
+7. Model types used with NavigationLink(value:label:) or .navigationDestination(for:destination:) MUST conform to Hashable. If the error mentions Hashable, add it to the type declaration.
 
 Output: JSON { "explanation": "what you fixed", "files": [{ "path": "...", "content": "..." }] }`;
 
@@ -298,13 +302,28 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
     ]);
 
     const fixedPathSet = new Set(fixedFiles.map((f) => f.path));
+    const originalBasenames = new Set(currentFiles.map((f) => f.path.split("/").pop()!));
+
+    const normalizedFixed = fixedFiles.map((f) => {
+      const base = f.path.split("/").pop()!;
+      if (!fixedPathSet.has(f.path) || currentFiles.some((o) => o.path === f.path)) return f;
+      const origMatch = currentFiles.find((o) => o.path.split("/").pop() === base);
+      if (origMatch && origMatch.path !== f.path) {
+        return { ...f, path: origMatch.path };
+      }
+      return f;
+    });
+
     const mergedFiles: SwiftFile[] = currentFiles.map((orig) => {
-      const fixed = fixedFiles.find((f) => f.path === orig.path);
+      const fixed = normalizedFixed.find((f) => f.path === orig.path);
       return fixed ?? orig;
     });
-    for (const f of fixedFiles) {
+    for (const f of normalizedFixed) {
       if (!mergedFiles.find((m) => m.path === f.path)) {
-        mergedFiles.push(f);
+        const base = f.path.split("/").pop()!;
+        if (!originalBasenames.has(base)) {
+          mergedFiles.push(f);
+        }
       }
     }
 

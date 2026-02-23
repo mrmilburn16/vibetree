@@ -47,6 +47,14 @@ interface UniversalDefaults {
   deviceFamily: string;
 }
 
+type RunnerDevicesResponse = {
+  connected: boolean;
+  runnerId: string | null;
+  updatedAt: number | null;
+  physical: Array<{ name: string }>;
+  simulators: Array<{ name: string }>;
+};
+
 const FACTORY_DEFAULTS: UniversalDefaults = {
   teamId: "",
   preferredRunDevice: "",
@@ -228,6 +236,8 @@ export function ProjectSettingsModal({
 
   const [universalDefaults, setUniversalDefaults] = useState<UniversalDefaults>(() => loadUniversalDefaults());
   const [settings, setSettings] = useState<ProjectSettings>(() => loadSettings(project.id, universalDefaults));
+  const [runnerDevices, setRunnerDevices] = useState<RunnerDevicesResponse | null>(null);
+  const [devicesLoading, setDevicesLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -240,6 +250,27 @@ export function ProjectSettingsModal({
       setSettings(loadSettings(project.id, ud));
     }
   }, [isOpen, project.name, project.bundleId, project.id]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setDevicesLoading(true);
+    fetch("/api/macos/devices", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        if (!data || typeof data !== "object") return;
+        setRunnerDevices(data as RunnerDevicesResponse);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (cancelled) return;
+        setDevicesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   const isValidBundleId = (value: string) =>
     /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/i.test(value);
@@ -435,7 +466,7 @@ export function ProjectSettingsModal({
                 spellCheck={false}
               />
               <HelpTip>
-                Your 10-character Apple Developer Team ID. Set it once and it applies to all projects. Find it in Xcode → Signing &amp; Capabilities → Team, or search for <span className="font-mono">DEVELOPMENT_TEAM</span> in any .xcodeproj file.
+                Your 10-character Apple Developer Team ID. Set it once and it applies to all projects. Easiest: Apple Developer → Account → Membership details → copy <span className="font-mono">Team ID</span> (e.g. from developer.apple.com/account). Alternative: in Xcode, pick your team once, then search your <span className="font-mono">project.pbxproj</span> for <span className="font-mono">DEVELOPMENT_TEAM</span>.
               </HelpTip>
             </div>
             <div>
@@ -448,12 +479,53 @@ export function ProjectSettingsModal({
                   onReset={() => resetToDefault("preferredRunDevice")}
                 />
               </div>
+              {runnerDevices?.connected &&
+                (runnerDevices.physical.length > 0 || runnerDevices.simulators.length > 0) && (
+                  <div className="mb-2 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-[var(--text-tertiary)]">
+                        Detected from Mac runner{runnerDevices.runnerId ? ` (${runnerDevices.runnerId})` : ""}.
+                      </p>
+                      {devicesLoading && (
+                        <p className="text-xs text-[var(--text-tertiary)]">Refreshing…</p>
+                      )}
+                    </div>
+                    <DropdownSelect
+                      options={[
+                        { value: "__header_device__", label: "My device", disabled: true },
+                        ...(runnerDevices.physical.length > 0
+                          ? runnerDevices.physical.map((d) => ({ value: d.name, label: d.name }))
+                          : [{ value: "__none_device__", label: "No device detected", disabled: true }]),
+                        { value: "__header_sim__", label: "Simulators", disabled: true },
+                        ...(runnerDevices.simulators.length > 0
+                          ? runnerDevices.simulators.slice(0, 25).map((d) => ({ value: d.name, label: d.name }))
+                          : [{ value: "__none_sim__", label: "No simulators detected", disabled: true }]),
+                      ]}
+                      value={
+                        settings.preferredRunDevice &&
+                        (runnerDevices.physical.some((d) => d.name === settings.preferredRunDevice) ||
+                          runnerDevices.simulators.some((d) => d.name === settings.preferredRunDevice))
+                          ? settings.preferredRunDevice
+                          : runnerDevices.physical[0]?.name ??
+                            runnerDevices.simulators[0]?.name ??
+                            "__none_device__"
+                      }
+                      onChange={(v) => handleUniversalOrOverride("preferredRunDevice", v)}
+                      aria-label="Preferred run device"
+                      className="w-full"
+                    />
+                    <p className="text-[11px] text-[var(--text-tertiary)]">
+                      Selecting a device sets the value below (you can still edit it). Note: Xcode remembers the last Run destination you used — an exported project can’t force Xcode to switch destinations automatically.
+                    </p>
+                  </div>
+                )}
               <Input
                 id="preferred-device"
                 value={settings.preferredRunDevice}
                 onChange={(e) => {
-                  const v = e.target.value.trim();
-                  handleUniversalOrOverride("preferredRunDevice", v);
+                  // Don't trim on every keystroke — it prevents typing spaces (e.g. "iPhone (9)").
+                  // We trim at export time instead.
+                  handleUniversalOrOverride("preferredRunDevice", e.target.value);
                 }}
                 placeholder="e.g. iPhone (9)"
                 inputMode="text"
@@ -461,7 +533,7 @@ export function ProjectSettingsModal({
                 spellCheck={false}
               />
               <HelpTip>
-                Your physical iPhone or device name as shown in Xcode’s device dropdown. When you open the project in Xcode, select this device once so Xcode remembers it and stops defaulting to the simulator.
+                Your physical iPhone or device name as shown in Xcode’s device dropdown. We include this name in the exported zip as a reminder, but Xcode still opens with whatever Run destination you last used. Select your iPhone once in Xcode and it will remember it for future runs.
               </HelpTip>
             </div>
             <div>

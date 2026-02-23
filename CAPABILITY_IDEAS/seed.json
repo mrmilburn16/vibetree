@@ -1,0 +1,1165 @@
+{
+  "version": 1,
+  "capabilities": [
+    {
+      "folder": "Barcode & QR scanning (AVFoundation)",
+      "frameworks": ["AVFoundation"],
+      "notes": "Fast metadata scanning from the live camera. Works offline.",
+      "ideas": [
+        {
+          "slug": "pantry-scanner",
+          "title": "Pantry Scanner (Barcode + inventory)",
+          "tier": "medium",
+          "prompt": "Build a pantry inventory app that scans UPC/EAN barcodes using AVFoundation metadata scanning. Main screen: live camera preview with a large scan reticle and torch toggle. On scan, look up the item from a local stub map (include 20 sample barcodes -> names) and let the user set quantity + category. Inventory screen: searchable list grouped by category, low-stock badges, swipe to delete, edit quantity. History screen: recent scans with timestamps. Persist with Codable + UserDefaults. Include camera permission handling and a fallback 'Enter barcode manually' field."
+        },
+        {
+          "slug": "event-checkin",
+          "title": "Event Check-in (QR scanner)",
+          "tier": "medium",
+          "prompt": "Build an event check-in app that scans QR codes using AVFoundation metadata scanning. QR payload format: JSON with fields {\"name\":\"...\",\"ticketId\":\"...\"}. Main screen: camera scanner with a big status label. When a code is scanned, show a confirmation sheet (name + ticketId) and mark as checked-in; prevent duplicates with a clear 'Already checked in' state. Checked-in list screen with filter/search and export-to-text button (copy to clipboard). Persist checked-ins with Codable + UserDefaults. Include camera permission UI and a demo mode that uses a sample QR payload string."
+        }
+      ]
+    },
+    {
+      "folder": "Barcode & QR detection (Vision)",
+      "frameworks": ["Vision"],
+      "notes": "Detect barcodes/QRs from images (still frames) rather than live metadata scanning.",
+      "ideas": [
+        {
+          "slug": "receipt-qr-finder",
+          "title": "Receipt QR Finder (Photo import + Vision)",
+          "tier": "medium",
+          "prompt": "Build a utility that imports an image from Photos (PhotosUI) and detects QR codes in the image using Vision. Show the image preview, highlight detected codes with overlays, and list decoded values below. Tapping a decoded value copies it with a toast. Keep a history of imported images (store only decoded values + date, not images) using UserDefaults."
+        },
+        {
+          "slug": "package-label-helper",
+          "title": "Package Label Helper (Scan saved label images)",
+          "tier": "medium",
+          "prompt": "Build a package label helper: user selects a saved label image, Vision detects barcodes (Code128/QR). Show tracking number and a button to open a web view to a carrier tracking URL (construct from tracking number with a simple chooser). Persist a list of tracked packages, allow marking delivered, and show delivered vs active tabs."
+        }
+      ]
+    },
+    {
+      "folder": "Text recognition OCR (Vision)",
+      "frameworks": ["Vision"],
+      "notes": "On-device OCR via VNRecognizeTextRequest.",
+      "ideas": [
+        {
+          "slug": "whiteboard-to-notes",
+          "title": "Whiteboard to Notes (OCR)",
+          "tier": "hard",
+          "prompt": "Build an OCR notes app using Vision text recognition. User picks a photo, app extracts text (best effort), shows editable text with detected line breaks, and lets user save as a note. Notes list supports search, tags, and share/copy. Persist notes with Codable + UserDefaults. Include a 'confidence' indicator and a manual correction flow."
+        },
+        {
+          "slug": "ingredient-extractor",
+          "title": "Ingredient Extractor (OCR + highlight)",
+          "tier": "hard",
+          "prompt": "Build an ingredient extractor: user imports a photo of a nutrition label, OCR it with Vision, then try to extract an 'Ingredients:' section (simple heuristic). Show OCR text with the extracted section highlighted. Let the user copy the extracted ingredients and save to a list of products. Persist products with name, date, and ingredients string."
+        }
+      ]
+    },
+    {
+      "folder": "Document scanning (VisionKit)",
+      "frameworks": ["VisionKit", "Vision"],
+      "notes": "System document camera UI for scanning documents; often pairs with Vision OCR.",
+      "ideas": [
+        {
+          "slug": "doc-scan-to-pdf",
+          "title": "Scan to PDF Organizer",
+          "tier": "hard",
+          "prompt": "Build a scan-to-PDF organizer using VisionKit document camera. After scanning, generate a PDF and store it in app sandbox. Show a library with folders, search by title, and a PDF preview screen (use PDFKit). Add share and rename. Persist metadata (title, folder, date, file path) with Codable + UserDefaults."
+        },
+        {
+          "slug": "scan-and-ocr",
+          "title": "Scan + OCR Study Cards",
+          "tier": "hard",
+          "prompt": "Build a study helper: scan a page with VisionKit, run OCR (Vision), then let the user select lines and convert them into flashcards (front/back). Provide a review mode. Persist flashcards with Codable + UserDefaults."
+        }
+      ]
+    },
+    {
+      "folder": "Face landmarks (Vision)",
+      "frameworks": ["Vision"],
+      "notes": "Detect faces and facial landmarks. Great for fun filters and UX features.",
+      "ideas": [
+        {
+          "slug": "blink-timer",
+          "title": "Blink Reminder (Face landmarks)",
+          "tier": "hard",
+          "prompt": "Build a blink reminder app that uses the front camera and Vision face landmarks to estimate blink rate. Show a live preview, blink count per minute, and a gentle reminder if blink rate drops below a threshold. Include a calibration step, and a privacy-first explanation. Persist daily blink stats."
+        },
+        {
+          "slug": "focus-posture-coach",
+          "title": "Focus Posture Coach (Face position)",
+          "tier": "hard",
+          "prompt": "Build a posture coach: using front camera + Vision face detection, estimate if the user is too close to the screen (face bounding box size). Show a subtle indicator (green/yellow/red) and track total 'good posture' time per day. Provide settings for sensitivity. Persist stats with UserDefaults."
+        }
+      ]
+    },
+    {
+      "folder": "Hand pose tracking (Vision)",
+      "frameworks": ["Vision"],
+      "notes": "Recognize hand landmarks; useful for gestures and fitness reps.",
+      "ideas": [
+        {
+          "slug": "gesture-remote",
+          "title": "Gesture Remote (Play/Pause with hand pose)",
+          "tier": "hard",
+          "prompt": "Build a gesture remote that uses the front camera and Vision hand pose to detect an open palm vs fist gesture. Use this to toggle a simple in-app media playback demo (play/pause a bundled sound). Show live camera preview and a gesture confidence label. Include a tutorial screen explaining lighting and positioning."
+        },
+        {
+          "slug": "hand-rehab-counter",
+          "title": "Hand Rehab Counter (Pinch reps)",
+          "tier": "hard",
+          "prompt": "Build a hand rehab counter: use Vision hand pose to detect pinch (thumb-index distance) opening/closing and count reps. Show a big rep counter, session timer, and a per-day history chart. Persist sessions with Codable + UserDefaults."
+        }
+      ]
+    },
+    {
+      "folder": "Body pose tracking (Vision)",
+      "frameworks": ["Vision"],
+      "notes": "Human body pose estimation; best for camera-in-front workout counting.",
+      "ideas": [
+        {
+          "slug": "pushup-counter-pose",
+          "title": "Push-up Counter (Camera + Pose)",
+          "tier": "hard",
+          "prompt": "Build a push-up counter that uses the front camera and Vision human body pose estimation. Phone is placed in front of the user. Show a FaceTime-style preview, a huge rep counter readable from 6–8 feet, and a flip-camera button. Count reps by tracking a stable metric (e.g. shoulder/hip vertical position or elbow angle) with smoothing, hysteresis thresholds, and a rep state machine (down -> up + cooldown). Include on-screen guidance if the body isn’t fully visible. Add tabs: Session (live), History (by day), Goals (daily target with progress bar). Persist history/goals with Codable + UserDefaults. Include camera permission handling."
+        },
+        {
+          "slug": "squat-coach",
+          "title": "Squat Coach (Depth + form cues)",
+          "tier": "hard",
+          "prompt": "Build a squat coach using Vision body pose. Show a live preview, count reps, and provide simple form cues (e.g. 'go lower', 'stand tall') based on hip and knee angles. Include a calibration step and a sensitivity slider. Persist rep history and show a weekly summary."
+        }
+      ]
+    },
+    {
+      "folder": "Core Motion (accelerometer/gyro)",
+      "frameworks": ["CoreMotion"],
+      "notes": "Detect patterns from device motion; best when the phone/watch is on the body.",
+      "ideas": [
+        {
+          "slug": "pocket-step-rep-counter",
+          "title": "Pocket Rep Counter (Core Motion)",
+          "tier": "medium",
+          "prompt": "Build a rep counter that uses Core Motion accelerometer updates to count a repetitive motion when the phone is in a pocket or armband (e.g. bicep curls). Show a big counter, start/stop, and a debug waveform view. Use smoothing + thresholds + cooldown. Persist sessions and show history."
+        },
+        {
+          "slug": "jump-rope",
+          "title": "Jump Rope Counter (Core Motion)",
+          "tier": "medium",
+          "prompt": "Build a jump rope counter using Core Motion. Phone stays in pocket. Count jumps based on periodic vertical acceleration peaks. Show session duration, jumps per minute, and a goal progress ring. Persist daily totals with UserDefaults."
+        }
+      ]
+    },
+    {
+      "folder": "Pedometer & activity (Core Motion CMPedometer)",
+      "frameworks": ["CoreMotion"],
+      "notes": "Step counts and distance; can query historical data (permission-dependent).",
+      "ideas": [
+        {
+          "slug": "daily-steps-dashboard",
+          "title": "Daily Steps Dashboard",
+          "tier": "medium",
+          "prompt": "Build a steps dashboard using CMPedometer. Show today’s steps, distance, floors, and a weekly trend. Include a daily step goal with progress. Handle permission denied with a helpful UI. Persist goal settings with UserDefaults."
+        },
+        {
+          "slug": "walking-streaks",
+          "title": "Walking Streaks",
+          "tier": "medium",
+          "prompt": "Build a walking streaks app using CMPedometer. Define a daily threshold (e.g. 6000 steps). Show current streak, calendar view of past 30 days, and weekly summary. Persist settings locally."
+        }
+      ]
+    },
+    {
+      "folder": "Haptics (Core Haptics)",
+      "frameworks": ["CoreHaptics"],
+      "notes": "Custom haptic patterns for feedback, timers, games.",
+      "ideas": [
+        {
+          "slug": "haptic-metronome",
+          "title": "Haptic Metronome",
+          "tier": "medium",
+          "prompt": "Build a haptic metronome using Core Haptics. Let the user set BPM (40–200) and choose patterns (tap, double, accent). Provide start/stop and a visual beat indicator. Include graceful fallback if haptics aren’t supported."
+        },
+        {
+          "slug": "habit-nudges",
+          "title": "Habit Nudges (Haptic cues)",
+          "tier": "medium",
+          "prompt": "Build a habit nudge timer that uses subtle haptic patterns at intervals (e.g. breathe, posture). Provide interval settings, pattern selection, and a session log. Persist settings and history."
+        }
+      ]
+    },
+    {
+      "folder": "Local authentication (Face ID / Touch ID)",
+      "frameworks": ["LocalAuthentication"],
+      "notes": "Lock sensitive screens, authenticate actions.",
+      "ideas": [
+        {
+          "slug": "vault-notes",
+          "title": "Vault Notes (Face ID lock)",
+          "tier": "medium",
+          "prompt": "Build a secure notes vault that requires Face ID/Touch ID to open. Provide a locked screen with unlock button, then a notes list with add/edit/delete. Store notes in UserDefaults (demo) but structure code so it’s easy to swap to Keychain later. Include a setting to require auth on every launch."
+        },
+        {
+          "slug": "spending-approval",
+          "title": "Spending Approval (Auth before reveal)",
+          "tier": "medium",
+          "prompt": "Build a spending tracker where amounts are hidden until Face ID unlock. Show a list of transactions with redacted amounts; on unlock, reveal totals. Persist transactions with Codable + UserDefaults."
+        }
+      ]
+    },
+    {
+      "folder": "Notifications (UserNotifications)",
+      "frameworks": ["UserNotifications"],
+      "notes": "Local notifications, reminders, scheduled nudges.",
+      "ideas": [
+        {
+          "slug": "water-reminders",
+          "title": "Water Reminders",
+          "tier": "medium",
+          "prompt": "Build a water reminder app using local notifications. Setup screen: start/end hours, interval, daily goal. Main screen: log cups and show progress. Schedule notifications with UNUserNotificationCenter. Persist settings and logs."
+        },
+        {
+          "slug": "task-deadline-alerts",
+          "title": "Task Deadline Alerts",
+          "tier": "medium",
+          "prompt": "Build a task list that schedules a local notification at the due time. Add task with title, due date/time, priority. List with filters. Persist tasks and notification identifiers so they can be canceled on delete."
+        }
+      ]
+    },
+    {
+      "folder": "Live Activities (ActivityKit)",
+      "frameworks": ["ActivityKit", "WidgetKit"],
+      "notes": "Lock screen / Dynamic Island live updates. Requires entitlements and device support.",
+      "ideas": [
+        {
+          "slug": "workout-live-activity",
+          "title": "Workout Live Activity",
+          "tier": "hard",
+          "prompt": "Build a workout timer app that starts a Live Activity showing elapsed time and rep count. Main app: start/stop and adjust target. Live Activity: compact and expanded layouts. Provide a demo update loop in-app (no server). Include clear notes about entitlements and that Live Activities require a device."
+        },
+        {
+          "slug": "delivery-tracker",
+          "title": "Delivery Tracker Live Activity",
+          "tier": "hard",
+          "prompt": "Build a delivery tracker that starts a Live Activity for an active delivery (ETA, status, progress). App screen: create a mock delivery and update status through steps. Live Activity updates in real time. Persist deliveries; only one active at a time."
+        }
+      ]
+    },
+    {
+      "folder": "Widgets (WidgetKit)",
+      "frameworks": ["WidgetKit"],
+      "notes": "Home screen widgets. Uses timelines/snapshots.",
+      "ideas": [
+        {
+          "slug": "streak-widget",
+          "title": "Streak Widget (Habit tracker widget)",
+          "tier": "hard",
+          "prompt": "Build a habit tracker app with a WidgetKit widget that shows today’s streak and a quick status. Main app lets you mark habit done. Widget reads shared data via App Group UserDefaults. Include instructions and fallback UI if not configured."
+        },
+        {
+          "slug": "budget-widget",
+          "title": "Budget Widget (Daily spend)",
+          "tier": "hard",
+          "prompt": "Build a simple budget app with a widget that shows remaining daily budget. App supports logging spending and sets daily budget. Widget updates via timeline and app group storage."
+        }
+      ]
+    },
+    {
+      "folder": "Location & maps (CoreLocation + MapKit)",
+      "frameworks": ["CoreLocation", "MapKit"],
+      "notes": "GPS, maps, geofencing, routes.",
+      "ideas": [
+        {
+          "slug": "coffee-map",
+          "title": "Coffee Map (Pins + favorites)",
+          "tier": "medium",
+          "prompt": "Build a coffee shop map with MapKit. Show user location (permission handling), allow dropping pins, saving favorites with name + note, and a list view. Persist favorites with UserDefaults."
+        },
+        {
+          "slug": "geo-reminders",
+          "title": "Geo Reminders (Arrive/leave)",
+          "tier": "hard",
+          "prompt": "Build a geo-reminders app: create reminders that trigger when entering/exiting a region (geofence). Use CoreLocation region monitoring. Provide a map to pick location + radius. Persist reminders; show status and last-triggered time."
+        }
+      ]
+    },
+    {
+      "folder": "Bluetooth LE (CoreBluetooth)",
+      "frameworks": ["CoreBluetooth"],
+      "notes": "Scan/connect to BLE devices. Requires real device.",
+      "ideas": [
+        {
+          "slug": "ble-device-browser",
+          "title": "BLE Device Browser",
+          "tier": "hard",
+          "prompt": "Build a BLE device browser using CoreBluetooth. Scan for peripherals, show RSSI, connect/disconnect, and list discovered services/characteristics. Include a clear 'Simulator not supported' screen. Persist known devices list."
+        },
+        {
+          "slug": "ble-button-remote",
+          "title": "BLE Button Remote (Mock actions)",
+          "tier": "hard",
+          "prompt": "Build a BLE remote controller: connect to a device, subscribe to a characteristic, and trigger app actions when notifications arrive (mock mapping). Provide a config screen to map characteristic values to actions. Real-device only."
+        }
+      ]
+    },
+    {
+      "folder": "NFC (Core NFC)",
+      "frameworks": ["CoreNFC"],
+      "notes": "Read/write NFC tags. Requires entitlements + real device.",
+      "ideas": [
+        {
+          "slug": "nfc-inventory-tags",
+          "title": "NFC Inventory Tags",
+          "tier": "hard",
+          "prompt": "Build an NFC inventory tagger. Scan an NFC tag, assign it to an item with name + category, then later scanning shows the item details. Include entitlements notes and real-device requirement. Persist items with UserDefaults."
+        },
+        {
+          "slug": "nfc-habit-trigger",
+          "title": "NFC Habit Trigger",
+          "tier": "hard",
+          "prompt": "Build a habit trigger app: scanning a specific NFC tag marks a habit complete (e.g. 'Took vitamins'). Show streaks and history. Include setup flow for registering a tag ID."
+        }
+      ]
+    },
+    {
+      "folder": "Apple Pay / Wallet (PassKit)",
+      "frameworks": ["PassKit"],
+      "notes": "Apple Pay payments and passes. Requires entitlements and merchant setup.",
+      "ideas": [
+        {
+          "slug": "donation-checkout",
+          "title": "Donation Checkout (Apple Pay UI)",
+          "tier": "hard",
+          "prompt": "Build a donation checkout demo that shows Apple Pay sheet using PassKit (no real backend, mock success). Let user choose amount and cause. Include clear notes about merchant IDs and production setup."
+        },
+        {
+          "slug": "membership-pass",
+          "title": "Membership Pass Wallet (Concept)",
+          "tier": "hard",
+          "prompt": "Build a membership pass manager concept UI: create a digital membership card with QR code and details, and include placeholder buttons for adding to Wallet (explain that real passes require server-generated .pkpass). Persist membership cards locally."
+        }
+      ]
+    },
+    {
+      "folder": "In-app purchases (StoreKit)",
+      "frameworks": ["StoreKit"],
+      "notes": "Subscriptions / consumables. Requires App Store Connect configuration for real use.",
+      "ideas": [
+        {
+          "slug": "pro-upgrade-screen",
+          "title": "Pro Upgrade Screen (StoreKit 2 scaffolding)",
+          "tier": "hard",
+          "prompt": "Build a Pro upgrade screen using StoreKit 2 patterns (Products, purchase, restore). Use placeholder product IDs and show clear UI states (loading, purchased, error). Gate one feature behind Pro. Include notes that real products require App Store Connect."
+        },
+        {
+          "slug": "tip-jar",
+          "title": "Tip Jar (Consumables demo)",
+          "tier": "hard",
+          "prompt": "Build a tip jar screen with 3 consumable purchase options (small/medium/large). Show purchase status and a thank-you view. Use placeholder IDs and explain setup."
+        }
+      ]
+    },
+    {
+      "folder": "Shortcuts / App Intents",
+      "frameworks": ["AppIntents"],
+      "notes": "Expose actions to Shortcuts and Siri suggestions (modern approach).",
+      "ideas": [
+        {
+          "slug": "quick-log-water",
+          "title": "Quick Log Water (Shortcut action)",
+          "tier": "hard",
+          "prompt": "Build a water tracker that exposes an App Intent to log 1 cup from Shortcuts. App shows daily progress. Store data in UserDefaults. Include intent parameters for amount and an 'open app' behavior."
+        },
+        {
+          "slug": "start-timer-intent",
+          "title": "Start Timer Intent",
+          "tier": "hard",
+          "prompt": "Build a focus timer app that exposes an App Intent to start a session of a specified length. App shows running timer and history. Persist sessions."
+        }
+      ]
+    },
+    {
+      "folder": "Speech recognition (Speech)",
+      "frameworks": ["Speech", "AVFoundation"],
+      "notes": "On-device + server speech recognition; needs mic permission.",
+      "ideas": [
+        {
+          "slug": "voice-journal",
+          "title": "Voice Journal (Speech to text)",
+          "tier": "hard",
+          "prompt": "Build a voice journal app that records audio and transcribes to text using Speech framework. Provide mic permission handling, recording UI, live partial transcription, and a saved entries list. Persist entries and optionally keep audio files."
+        },
+        {
+          "slug": "voice-todo",
+          "title": "Voice Todo (Dictation)",
+          "tier": "hard",
+          "prompt": "Build a todo list where you can add items by speaking. Use Speech recognition to turn speech into a todo item, then confirm before saving. Include error states for permission and recognition availability."
+        }
+      ]
+    },
+    {
+      "folder": "Text-to-speech (AVSpeechSynthesizer)",
+      "frameworks": ["AVFoundation"],
+      "notes": "Read content aloud; accessibility and language learning.",
+      "ideas": [
+        {
+          "slug": "read-aloud-reader",
+          "title": "Read Aloud Reader",
+          "tier": "medium",
+          "prompt": "Build a read-aloud app: paste text, pick voice + speed, play/pause/stop. Highlight the current spoken range (best effort). Save recent texts. Use AVSpeechSynthesizer."
+        },
+        {
+          "slug": "flashcard-pronouncer",
+          "title": "Flashcard Pronouncer",
+          "tier": "medium",
+          "prompt": "Build language flashcards that can speak the front/back. Provide voice selection per language, shuffle, and a quiz mode. Persist decks with UserDefaults."
+        }
+      ]
+    },
+    {
+      "folder": "Audio recording & playback (AVAudio)",
+      "frameworks": ["AVFoundation"],
+      "notes": "Record voice memos, play audio, manage files.",
+      "ideas": [
+        {
+          "slug": "voice-memos-lite",
+          "title": "Voice Memos Lite",
+          "tier": "hard",
+          "prompt": "Build a voice memos app: record, pause/resume, save with title, play back with scrubber. Handle mic permission. Persist list of recordings and file URLs."
+        },
+        {
+          "slug": "soundboard",
+          "title": "Soundboard (Custom clips)",
+          "tier": "medium",
+          "prompt": "Build a soundboard: import audio files, arrange into a grid, play overlapping sounds, and allow renaming. Persist layout and file references."
+        }
+      ]
+    },
+    {
+      "folder": "Music recognition (ShazamKit)",
+      "frameworks": ["ShazamKit", "AVFoundation"],
+      "notes": "Identify music from microphone input (ShazamKit).",
+      "ideas": [
+        {
+          "slug": "song-id",
+          "title": "Song ID (ShazamKit)",
+          "tier": "hard",
+          "prompt": "Build a Song ID app using ShazamKit. One screen: big 'Listen' button, mic permission handling, and results view with song title/artist/artwork if available. Keep a history list. Include notes about simulator limitations."
+        },
+        {
+          "slug": "playlist-ideas",
+          "title": "Playlist Ideas (Recognize + categorize)",
+          "tier": "hard",
+          "prompt": "Build a music journal: recognize a song with ShazamKit, then let user tag the mood (happy/chill/energy) and save. Show mood filters and stats."
+        }
+      ]
+    },
+    {
+      "folder": "Photos picker (PhotosUI)",
+      "frameworks": ["PhotosUI"],
+      "notes": "Import photos/videos with modern picker.",
+      "ideas": [
+        {
+          "slug": "moodboard",
+          "title": "Moodboard Builder",
+          "tier": "medium",
+          "prompt": "Build a moodboard app: pick photos, arrange in a grid, reorder via drag and drop, add captions, and export a combined image. Persist boards with metadata."
+        },
+        {
+          "slug": "before-after",
+          "title": "Before/After Tracker",
+          "tier": "medium",
+          "prompt": "Build a before/after tracker: pick two photos, show swipe/slider compare, add notes/date. Persist entries and show a timeline list."
+        }
+      ]
+    },
+    {
+      "folder": "File import/export (UIDocumentPicker + UTType)",
+      "frameworks": ["UniformTypeIdentifiers"],
+      "notes": "Import documents, export generated files, iCloud Drive access.",
+      "ideas": [
+        {
+          "slug": "csv-viewer",
+          "title": "CSV Viewer",
+          "tier": "hard",
+          "prompt": "Build a CSV viewer: import a .csv file, parse into rows/columns, show a table, allow search and column sorting. Add export of filtered rows. Handle errors gracefully."
+        },
+        {
+          "slug": "markdown-notes-export",
+          "title": "Markdown Notes Exporter",
+          "tier": "hard",
+          "prompt": "Build a markdown notes app that can export a note as a .md file via share/export sheet. Support import to create a note. Persist notes with UserDefaults."
+        }
+      ]
+    },
+    {
+      "folder": "Web views (WebKit)",
+      "frameworks": ["WebKit"],
+      "notes": "Embed web content with WKWebView.",
+      "ideas": [
+        {
+          "slug": "in-app-browser",
+          "title": "In-app Browser (Tabs + bookmarks)",
+          "tier": "hard",
+          "prompt": "Build an in-app browser using WKWebView with a URL bar, back/forward, reload, and a bookmarks list. Support multiple tabs (simple model). Persist bookmarks and recent tabs."
+        },
+        {
+          "slug": "help-center",
+          "title": "Help Center (Embedded docs)",
+          "tier": "medium",
+          "prompt": "Build a help center screen that loads a static website in WKWebView and provides a search UI over a local list of FAQ items. Include a contact button and a 'copy diagnostics' feature."
+        }
+      ]
+    },
+    {
+      "folder": "Augmented Reality plane detection (ARKit)",
+      "frameworks": ["ARKit", "RealityKit"],
+      "notes": "World tracking and plane detection; real device required.",
+      "ideas": [
+        {
+          "slug": "ar-measure",
+          "title": "AR Measure Lite",
+          "tier": "hard",
+          "prompt": "Build an AR measuring app using ARKit + RealityKit. Detect planes, tap to place two points, show distance. Include UI to reset and switch units. Add a 'device required' state for simulator."
+        },
+        {
+          "slug": "ar-furniture-preview",
+          "title": "AR Furniture Preview (Mock models)",
+          "tier": "hard",
+          "prompt": "Build an AR furniture preview where user selects from 3 placeholder objects (box, sphere, chair-like). Place on detected plane, allow rotate/scale gestures. Persist last selected object."
+        }
+      ]
+    },
+    {
+      "folder": "Core ML image classification (CoreML + Vision)",
+      "frameworks": ["CoreML", "Vision"],
+      "notes": "Run an on-device ML model on camera frames or images.",
+      "ideas": [
+        {
+          "slug": "plant-detector",
+          "title": "Plant Detector (ML classifier scaffold)",
+          "tier": "hard",
+          "prompt": "Build a plant detector scaffold: user picks a photo, run a Core ML image classifier (use a placeholder model interface; if no model, mock results). Show top 3 predictions with confidence and allow saving to a collection."
+        },
+        {
+          "slug": "trash-sorter",
+          "title": "Trash Sorter (Camera + ML)",
+          "tier": "hard",
+          "prompt": "Build a trash sorting assistant: live camera preview, classify the frame using CoreML+Vision (mock allowed), and display 'Recycle/Compost/Landfill' with confidence. Include tips screen and a saved scans history."
+        }
+      ]
+    },
+    {
+      "folder": "Nearby share (MultipeerConnectivity)",
+      "frameworks": ["MultipeerConnectivity"],
+      "notes": "Local peer-to-peer sharing without internet.",
+      "ideas": [
+        {
+          "slug": "nearby-notes",
+          "title": "Nearby Notes Share",
+          "tier": "hard",
+          "prompt": "Build a nearby notes share app using MultipeerConnectivity. Create a note and send to nearby peers. Show peers list, connection state, and received notes inbox. Persist notes."
+        },
+        {
+          "slug": "party-polls",
+          "title": "Party Polls (Local network)",
+          "tier": "hard",
+          "prompt": "Build party polls: host creates a poll, peers join and vote via MultipeerConnectivity. Show live results chart. Include reconnect handling and a host-only control to end poll."
+        }
+      ]
+    },
+    {
+      "folder": "Contacts (Contacts framework)",
+      "frameworks": ["Contacts"],
+      "notes": "Read contacts, create/contact picker; permission-gated.",
+      "ideas": [
+        {
+          "slug": "contact-groups",
+          "title": "Contact Groups (Favorites lists)",
+          "tier": "hard",
+          "prompt": "Build a contact groups app: request Contacts permission, list contacts, allow selecting and saving into custom groups (Family, Work). Provide group detail screen and quick actions (call/message placeholders). Persist group membership identifiers."
+        },
+        {
+          "slug": "birthday-reminders",
+          "title": "Birthday Reminders",
+          "tier": "hard",
+          "prompt": "Build a birthday reminders app: read contacts with birthdays, show upcoming list, and schedule local notifications. Include permission UI and a manual add fallback."
+        }
+      ]
+    },
+    {
+      "folder": "Calendar & reminders (EventKit)",
+      "frameworks": ["EventKit"],
+      "notes": "Read/write calendar events and reminders; permission-gated.",
+      "ideas": [
+        {
+          "slug": "quick-event",
+          "title": "Quick Event Creator",
+          "tier": "hard",
+          "prompt": "Build a quick event creator: request EventKit permission, create events with title, date/time, calendar selection, and reminders. Show upcoming events list and allow delete."
+        },
+        {
+          "slug": "study-planner",
+          "title": "Study Planner (Calendar blocks)",
+          "tier": "hard",
+          "prompt": "Build a study planner that generates calendar blocks for a goal (e.g. 10 hours this week). Let user choose days/time windows, then create events in their calendar. Provide preview and confirm."
+        }
+      ]
+    },
+    {
+      "folder": "Health data (HealthKit)",
+      "frameworks": ["HealthKit"],
+      "notes": "Read health metrics; requires entitlements and real device.",
+      "ideas": [
+        {
+          "slug": "sleep-summary",
+          "title": "Sleep Summary Dashboard",
+          "tier": "hard",
+          "prompt": "Build a sleep summary dashboard using HealthKit (request permission). Show last 7 nights duration and a simple chart. Provide a fallback demo dataset if permission denied. Include clear privacy UI."
+        },
+        {
+          "slug": "workout-log",
+          "title": "Workout Log Viewer",
+          "tier": "hard",
+          "prompt": "Build a workout log viewer: read recent workouts (type, duration, calories) from HealthKit. Show list + detail screen. Provide filters and a weekly summary."
+        }
+      ]
+    },
+    {
+      "folder": "Background tasks (BGTaskScheduler)",
+      "frameworks": ["BackgroundTasks"],
+      "notes": "Periodic background refresh and processing; needs configuration.",
+      "ideas": [
+        {
+          "slug": "daily-summary-refresh",
+          "title": "Daily Summary Refresh",
+          "tier": "hard",
+          "prompt": "Build an app that schedules a background refresh task daily to recompute a summary (mock data). Provide UI to show last refresh time and status. Include setup notes for BGTaskScheduler identifiers."
+        },
+        {
+          "slug": "offline-sync-queue",
+          "title": "Offline Sync Queue (Background processing)",
+          "tier": "hard",
+          "prompt": "Build an offline sync queue demo: user creates items, app queues them for upload (mock). Use BGProcessingTask to 'sync' when conditions allow. Show queue status and logs."
+        }
+      ]
+    },
+    {
+      "folder": "Networking & reachability (Network)",
+      "frameworks": ["Network"],
+      "notes": "Detect online/offline, monitor path changes.",
+      "ideas": [
+        {
+          "slug": "offline-first-notes",
+          "title": "Offline-first Notes (Reachability UI)",
+          "tier": "medium",
+          "prompt": "Build an offline-first notes app with a clear online/offline indicator using NWPathMonitor. Show a banner when offline and queue a mock 'sync' when back online. Persist notes locally."
+        },
+        {
+          "slug": "download-manager",
+          "title": "Download Manager (Retry/backoff)",
+          "tier": "hard",
+          "prompt": "Build a download manager UI that downloads sample URLs (mock allowed) and shows progress, pause/resume, and retry with exponential backoff. Include online/offline handling via NWPathMonitor."
+        }
+      ]
+    },
+    {
+      "folder": "Secure storage (Keychain + CryptoKit)",
+      "frameworks": ["Security", "CryptoKit"],
+      "notes": "Store secrets/tokens safely; encrypt data at rest.",
+      "ideas": [
+        {
+          "slug": "api-token-vault",
+          "title": "API Token Vault",
+          "tier": "hard",
+          "prompt": "Build a token vault screen that stores an API token in Keychain. Provide add/edit/delete, Face ID lock option (LocalAuthentication), and a 'test request' button (mock)."
+        },
+        {
+          "slug": "encrypted-notes",
+          "title": "Encrypted Notes (CryptoKit)",
+          "tier": "hard",
+          "prompt": "Build encrypted notes: encrypt note content using CryptoKit symmetric key stored in Keychain. Provide notes list, add/edit, and a clear explanation UI about encryption."
+        }
+      ]
+    },
+    {
+      "folder": "Persistence (Core Data)",
+      "frameworks": ["CoreData"],
+      "notes": "Structured local database persistence.",
+      "ideas": [
+        {
+          "slug": "expense-coredata",
+          "title": "Expense Tracker (Core Data)",
+          "tier": "hard",
+          "prompt": "Build an expense tracker using Core Data. Entities: Expense (amount, date, category, note). Screens: list with filters, add/edit, monthly summary. Include sample data injection for first run."
+        },
+        {
+          "slug": "collection-manager",
+          "title": "Collection Manager (Core Data)",
+          "tier": "hard",
+          "prompt": "Build a collection manager using Core Data (e.g. books). Support search, sorting, detail screen with edit, and cover image placeholder. Include migration-safe setup."
+        }
+      ]
+    },
+    {
+      "folder": "Cloud sync (CloudKit)",
+      "frameworks": ["CloudKit"],
+      "notes": "Sync data across devices; requires iCloud setup.",
+      "ideas": [
+        {
+          "slug": "shared-grocery",
+          "title": "Shared Grocery List (CloudKit concept)",
+          "tier": "hard",
+          "prompt": "Build a shared grocery list concept using CloudKit (or stub if not configured). Show list, add/remove, and sync status indicator. Include setup notes for iCloud container and fallback to local storage."
+        },
+        {
+          "slug": "journal-sync",
+          "title": "Journal Sync (CloudKit)",
+          "tier": "hard",
+          "prompt": "Build a journal app that stores entries in CloudKit (or stub). Provide offline mode and a sync queue indicator."
+        }
+      ]
+    },
+    {
+      "folder": "Home automation (HomeKit)",
+      "frameworks": ["HomeKit"],
+      "notes": "Control home accessories; requires entitlements and real setup.",
+      "ideas": [
+        {
+          "slug": "scene-switcher",
+          "title": "Scene Switcher (HomeKit)",
+          "tier": "hard",
+          "prompt": "Build a HomeKit scene switcher UI: list scenes, run scene, show status. Include entitlement/setup notes and demo mode if HomeKit not available."
+        },
+        {
+          "slug": "room-dashboard",
+          "title": "Room Dashboard (HomeKit)",
+          "tier": "hard",
+          "prompt": "Build a room dashboard showing lights/thermostat accessories (HomeKit). Provide toggles and quick actions. Include fallback demo data."
+        }
+      ]
+    },
+    {
+      "folder": "Screen recording (ReplayKit)",
+      "frameworks": ["ReplayKit"],
+      "notes": "Record screen with system UI. Some restrictions apply.",
+      "ideas": [
+        {
+          "slug": "bug-recorder",
+          "title": "Bug Recorder (ReplayKit)",
+          "tier": "hard",
+          "prompt": "Build a bug reporting helper that uses ReplayKit to record the screen. Provide start/stop, show recording preview, and a share flow with metadata fields."
+        },
+        {
+          "slug": "tutorial-capture",
+          "title": "Tutorial Capture (Screen clips)",
+          "tier": "hard",
+          "prompt": "Build a tutorial capture app: record short screen clips, tag them, and export. Include a library view and search."
+        }
+      ]
+    },
+    {
+      "folder": "Drawing & handwriting (PencilKit)",
+      "frameworks": ["PencilKit"],
+      "notes": "Canvas drawing, Apple Pencil support on iPad.",
+      "ideas": [
+        {
+          "slug": "sketch-notes",
+          "title": "Sketch Notes (PencilKit)",
+          "tier": "hard",
+          "prompt": "Build sketch notes with PencilKit: canvas with tools, add title, list of sketches, and export as image/PDF. Persist drawings to disk and metadata in UserDefaults."
+        },
+        {
+          "slug": "math-scratchpad",
+          "title": "Math Scratchpad",
+          "tier": "hard",
+          "prompt": "Build a math scratchpad with PencilKit and a simple organizer (folders, dates). Include quick copy/share."
+        }
+      ]
+    },
+    {
+      "folder": "PDF viewing & markup (PDFKit)",
+      "frameworks": ["PDFKit"],
+      "notes": "Render PDFs, highlight, annotate.",
+      "ideas": [
+        {
+          "slug": "pdf-highlighter",
+          "title": "PDF Highlighter",
+          "tier": "hard",
+          "prompt": "Build a PDF highlighter: import PDF, view pages, add highlights and notes, and save. Provide a sidebar list of annotations and search over annotation text."
+        },
+        {
+          "slug": "study-reader",
+          "title": "Study Reader (Bookmarks + annotations)",
+          "tier": "hard",
+          "prompt": "Build a study reader: PDF view with bookmarks, reading progress, and a notes panel. Persist reading position per PDF."
+        }
+      ]
+    },
+    {
+      "folder": "Camera capture & video (AVFoundation)",
+      "frameworks": ["AVFoundation"],
+      "notes": "Build your own camera UI, take photos/record video.",
+      "ideas": [
+        {
+          "slug": "mini-camera",
+          "title": "Mini Camera (Photo + gallery)",
+          "tier": "hard",
+          "prompt": "Build a custom camera app with AVFoundation: live preview, shutter button, flip camera, flash toggle, and a gallery grid of captured photos. Persist photos to disk and metadata. Handle camera permission UI."
+        },
+        {
+          "slug": "timelapse-coach",
+          "title": "Timelapse Coach",
+          "tier": "hard",
+          "prompt": "Build a timelapse coach: record short clips, show a playback timeline, and allow adding captions and exporting. Include camera permission and storage management."
+        }
+      ]
+    },
+    {
+      "folder": "Depth / TrueDepth (AVDepthData)",
+      "frameworks": ["AVFoundation"],
+      "notes": "Use depth data when available (front TrueDepth or LiDAR). Device-dependent.",
+      "ideas": [
+        {
+          "slug": "distance-meter",
+          "title": "Distance Meter (Depth demo)",
+          "tier": "hard",
+          "prompt": "Build a distance meter demo that uses depth data (when available) to estimate distance to the closest object. Show live preview and a big distance label. Include clear fallback when depth is unavailable."
+        },
+        {
+          "slug": "focus-peaking",
+          "title": "Focus Peaking (Depth overlay concept)",
+          "tier": "hard",
+          "prompt": "Build a focus peaking concept: show live camera preview and overlay a heatmap based on depth (mock if needed). Provide toggles and explanation."
+        }
+      ]
+    },
+    {
+      "folder": "Biometrics & secure enclave (CryptoKit)",
+      "frameworks": ["CryptoKit", "LocalAuthentication"],
+      "notes": "Use biometric gating + crypto for secure flows.",
+      "ideas": [
+        {
+          "slug": "signing-demo",
+          "title": "Signing Demo (CryptoKit)",
+          "tier": "hard",
+          "prompt": "Build a signing demo: generate a key pair (Secure Enclave if available), sign a message, and verify it. Show UI steps and store keys securely. Include educational copy."
+        },
+        {
+          "slug": "secure-share-links",
+          "title": "Secure Share Links",
+          "tier": "hard",
+          "prompt": "Build secure share links: create a note, encrypt it with CryptoKit, generate a shareable code, and allow importing/decrypting. Use Face ID gate before decrypting."
+        }
+      ]
+    },
+    {
+      "folder": "Sensors: ambient light / proximity (device sensors)",
+      "frameworks": ["UIKit"],
+      "notes": "Limited sensor access; proximity is accessible, ambient light is not directly exposed.",
+      "ideas": [
+        {
+          "slug": "pocket-mode",
+          "title": "Pocket Mode (Proximity sensor)",
+          "tier": "medium",
+          "prompt": "Build a pocket mode demo: detect proximity sensor changes (device near face) and dim UI / pause actions. Show a debug screen and explain limitations."
+        },
+        {
+          "slug": "screen-off-timer",
+          "title": "Screen-off Timer Helper",
+          "tier": "medium",
+          "prompt": "Build a screen-off timer helper: while proximity is triggered, pause a running timer and show a paused state. Provide settings and debug."
+        }
+      ]
+    },
+    {
+      "folder": "Share sheet & extensions (UIActivityViewController)",
+      "frameworks": ["UIKit"],
+      "notes": "Share content using system share sheet.",
+      "ideas": [
+        {
+          "slug": "quote-share",
+          "title": "Quote Share Cards",
+          "tier": "medium",
+          "prompt": "Build a quote app that generates a shareable image card (SwiftUI render to image) and opens the share sheet. Allow themes and watermark toggle. Persist favorites."
+        },
+        {
+          "slug": "receipt-share-pdf",
+          "title": "Receipt Share PDF",
+          "tier": "hard",
+          "prompt": "Build a receipt organizer: create a simple receipt record (amount, merchant, date) and export a PDF summary via share sheet. Persist receipts and allow filtering."
+        }
+      ]
+    },
+    {
+      "folder": "Live Text scanning UI (VisionKit DataScanner)",
+      "frameworks": ["VisionKit"],
+      "notes": "System scanner UI for text + barcode extraction (device-dependent).",
+      "ideas": [
+        {
+          "slug": "quick-copy-scanner",
+          "title": "Quick Copy Scanner (Live Text)",
+          "tier": "hard",
+          "prompt": "Build a quick copy scanner using VisionKit DataScannerViewController. Allow scanning text and selecting detected items to copy. Include a history of copied snippets (date + source type) persisted with UserDefaults. Provide a fallback UI for unsupported devices."
+        },
+        {
+          "slug": "meeting-notes-scanner",
+          "title": "Meeting Notes Scanner (Live Text + tags)",
+          "tier": "hard",
+          "prompt": "Build a meeting notes scanner that uses VisionKit DataScanner to capture bullet points from a whiteboard or paper. Let the user tag a scan (project name) and save. Notes list supports search and share."
+        }
+      ]
+    },
+    {
+      "folder": "Sound classification (SoundAnalysis)",
+      "frameworks": ["SoundAnalysis", "AVFoundation"],
+      "notes": "On-device sound classification from microphone audio buffers.",
+      "ideas": [
+        {
+          "slug": "baby-cry-detector",
+          "title": "Baby Cry Detector (SoundAnalysis scaffold)",
+          "tier": "hard",
+          "prompt": "Build a sound classification scaffold using SoundAnalysis. Capture mic audio, run a classifier (mock results if no model), and show detected labels with confidence. Include permission handling and a quiet, clear UI. Save a timeline of detections."
+        },
+        {
+          "slug": "room-noise-meter",
+          "title": "Room Noise Meter (Levels + alerts)",
+          "tier": "hard",
+          "prompt": "Build a room noise meter: show live audio level (dB-ish), detect spikes, and optionally schedule a notification if noise exceeds a threshold for N seconds. Include calibration and persistence."
+        }
+      ]
+    },
+    {
+      "folder": "Natural language (NaturalLanguage)",
+      "frameworks": ["NaturalLanguage"],
+      "notes": "Tokenization, language ID, sentiment (where supported), embeddings.",
+      "ideas": [
+        {
+          "slug": "mood-journal-nlp",
+          "title": "Mood Journal (Sentiment helper)",
+          "tier": "medium",
+          "prompt": "Build a mood journal where the user writes an entry and the app uses NaturalLanguage to estimate sentiment and key topics (simple heuristics). Show a mood trend over 7 days and a word cloud-like list. Persist entries."
+        },
+        {
+          "slug": "language-detector",
+          "title": "Language Detector (Paste text)",
+          "tier": "medium",
+          "prompt": "Build a language detector utility: paste text, show detected language, tokenize into words, and provide quick actions (copy tokens, count words, reading time). Persist recent texts."
+        }
+      ]
+    },
+    {
+      "folder": "Translation (Translation framework)",
+      "frameworks": ["Translation"],
+      "notes": "On-device translation where supported (iOS version dependent).",
+      "ideas": [
+        {
+          "slug": "travel-phrasebook",
+          "title": "Travel Phrasebook (Translate + favorites)",
+          "tier": "hard",
+          "prompt": "Build a travel phrasebook app: type a phrase, translate to a selected language, and save favorites. Include offline/unsupported handling and a clean UI. Persist favorites."
+        },
+        {
+          "slug": "camera-translate-stub",
+          "title": "Camera Translate (Concept UI)",
+          "tier": "hard",
+          "prompt": "Build a camera translate concept: show camera preview and an overlay text box. For now, let user capture a frame and run OCR (optional) then translate the text. If frameworks aren’t available, stub translation with a fake dictionary."
+        }
+      ]
+    },
+    {
+      "folder": "Charts (Swift Charts)",
+      "frameworks": ["Charts"],
+      "notes": "Beautiful, native charts for analytics screens.",
+      "ideas": [
+        {
+          "slug": "workout-analytics",
+          "title": "Workout Analytics Dashboard",
+          "tier": "hard",
+          "prompt": "Build a workout analytics dashboard using Swift Charts. Use sample data: reps per day, best set, and weekly totals. Include filters (7d/30d) and a detail drill-down screen. Persist mock workouts in UserDefaults."
+        },
+        {
+          "slug": "spending-charts",
+          "title": "Spending Charts (Category breakdown)",
+          "tier": "hard",
+          "prompt": "Build a spending tracker with a bar chart and donut-style category breakdown using Swift Charts. Add transactions, categorize, and show monthly summary. Persist transactions with Codable + UserDefaults."
+        }
+      ]
+    },
+    {
+      "folder": "Image processing (Core Image)",
+      "frameworks": ["CoreImage"],
+      "notes": "Filters, color adjustments, blur, edge detection, QR generation.",
+      "ideas": [
+        {
+          "slug": "filter-lab",
+          "title": "Filter Lab (Core Image)",
+          "tier": "hard",
+          "prompt": "Build a photo filter lab: pick a photo, apply Core Image filters (B&W, sepia, bloom, vignette, sharpen) with sliders, and export. Include before/after toggle and presets."
+        },
+        {
+          "slug": "document-enhancer",
+          "title": "Document Enhancer (Contrast + edge)",
+          "tier": "hard",
+          "prompt": "Build a document enhancer: import an image, apply Core Image to improve readability (contrast, edge/threshold-like effect), and export a cleaned image. Provide presets and explain what each does."
+        }
+      ]
+    },
+    {
+      "folder": "Weather (WeatherKit)",
+      "frameworks": ["WeatherKit", "CoreLocation"],
+      "notes": "Weather data for current location or selected cities.",
+      "ideas": [
+        {
+          "slug": "weather-routine",
+          "title": "Weather Routine (Morning brief)",
+          "tier": "hard",
+          "prompt": "Build a morning weather brief using WeatherKit + CoreLocation. Show current conditions, hourly forecast, and a 'what to wear' hint. Allow saving favorite cities. Include permission handling and a demo mode if WeatherKit isn’t configured."
+        },
+        {
+          "slug": "run-planner",
+          "title": "Run Planner (Best hour to run)",
+          "tier": "hard",
+          "prompt": "Build a run planner: using WeatherKit hourly forecast, highlight the best window (coolest + lowest precip chance). Show a chart and a suggested time. Persist preferences (temperature tolerance)."
+        }
+      ]
+    },
+    {
+      "folder": "SharePlay / group sessions (GroupActivities)",
+      "frameworks": ["GroupActivities"],
+      "notes": "Shared experiences over FaceTime (complex; often needs a real environment).",
+      "ideas": [
+        {
+          "slug": "shared-timer",
+          "title": "Shared Timer (SharePlay concept)",
+          "tier": "hard",
+          "prompt": "Build a shared timer concept UI that can synchronize a countdown across participants using GroupActivities (or stub). Show join/create session, participant list, and synced start/pause. Include notes about testing."
+        },
+        {
+          "slug": "shared-quiz",
+          "title": "Shared Quiz Night (Concept)",
+          "tier": "hard",
+          "prompt": "Build a shared quiz concept: host starts a group activity, questions appear for everyone, answers sync, and results show. Provide a demo/local mode for single device."
+        }
+      ]
+    },
+    {
+      "folder": "Search indexing (CoreSpotlight)",
+      "frameworks": ["CoreSpotlight"],
+      "notes": "Index user content for Spotlight search.",
+      "ideas": [
+        {
+          "slug": "spotlight-notes",
+          "title": "Spotlight Notes (Index + deep link)",
+          "tier": "hard",
+          "prompt": "Build a notes app that indexes notes into Spotlight using CoreSpotlight and supports deep linking to open a note. Include add/edit/delete and reindex on changes. Persist notes locally."
+        },
+        {
+          "slug": "recipe-index",
+          "title": "Recipe Index (Spotlight searchable)",
+          "tier": "hard",
+          "prompt": "Build a recipe organizer that indexes recipe titles/ingredients into Spotlight. Provide recipe list, detail, and tags. Deep link from Spotlight into recipe detail."
+        }
+      ]
+    },
+    {
+      "folder": "Game controller input (GameController)",
+      "frameworks": ["GameController"],
+      "notes": "Support Xbox/PS controllers; great for games and accessibility.",
+      "ideas": [
+        {
+          "slug": "controller-tester",
+          "title": "Controller Tester",
+          "tier": "hard",
+          "prompt": "Build a controller tester using GameController framework. Show connected controllers, live button/axis states, and a calibration screen. Include a 'no controller connected' empty state."
+        },
+        {
+          "slug": "controller-navigator",
+          "title": "Controller Navigator (UI control)",
+          "tier": "hard",
+          "prompt": "Build a demo app where a controller can navigate a list and trigger actions (select, back). Show on-screen hints for mapped buttons. Persist mapping preferences."
+        }
+      ]
+    },
+    {
+      "folder": "GPU rendering (Metal / MetalKit)",
+      "frameworks": ["MetalKit"],
+      "notes": "High-performance rendering; advanced.",
+      "ideas": [
+        {
+          "slug": "shader-playground",
+          "title": "Shader Playground (MetalKit)",
+          "tier": "hard",
+          "prompt": "Build a simple MetalKit shader playground that renders an animated gradient/noise fragment shader. Provide sliders for speed and color. Include an explanation and fallback if Metal isn’t available."
+        },
+        {
+          "slug": "particle-splash",
+          "title": "Particle Splash (GPU particles)",
+          "tier": "hard",
+          "prompt": "Build a particle splash demo with MetalKit: tap to emit particles, show FPS, and allow changing particle count. Keep it minimal but smooth."
+        }
+      ]
+    },
+    {
+      "folder": "Messages & mail compose (MessageUI)",
+      "frameworks": ["MessageUI"],
+      "notes": "Compose SMS/email with system composer UI (UIKit bridging).",
+      "ideas": [
+        {
+          "slug": "share-progress-sms",
+          "title": "Share Progress via SMS",
+          "tier": "hard",
+          "prompt": "Build a fitness progress share screen that opens the SMS composer (MessageUI) with a prefilled message and optional generated image attachment. Include fallback when composer is unavailable."
+        },
+        {
+          "slug": "support-email",
+          "title": "Support Email Composer",
+          "tier": "hard",
+          "prompt": "Build a support screen with a 'Contact support' button that opens a mail composer with diagnostics included. Provide copy-to-clipboard fallback."
+        }
+      ]
+    },
+    {
+      "folder": "Passkeys / Sign in with Apple (AuthenticationServices)",
+      "frameworks": ["AuthenticationServices"],
+      "notes": "Modern auth UI; passkeys and Apple ID sign-in.",
+      "ideas": [
+        {
+          "slug": "signin-with-apple",
+          "title": "Sign in with Apple (UI scaffold)",
+          "tier": "hard",
+          "prompt": "Build a sign-in flow with Sign in with Apple using AuthenticationServices. Show signed-out screen, sign-in button, and a signed-in profile. Persist a mock user profile locally (no backend)."
+        },
+        {
+          "slug": "passkey-demo",
+          "title": "Passkey Demo (Concept)",
+          "tier": "hard",
+          "prompt": "Build a passkey demo UI: register/login screens with placeholders that explain how passkeys work. Include a local-only session store and clear errors (implementation can be scaffolded)."
+        }
+      ]
+    },
+    {
+      "folder": "Remote push notifications (APNs)",
+      "frameworks": ["UserNotifications"],
+      "notes": "Server-driven notifications; requires APNs keys/cert setup and a backend.",
+      "ideas": [
+        {
+          "slug": "build-ready-push",
+          "title": "Build Ready Push (Backend-driven)",
+          "tier": "hard",
+          "prompt": "Build a companion notification feature: app registers for remote push notifications and displays a 'Build completed' notification that deep-links into a project screen. Include token registration API call (mock) and deep link handling."
+        },
+        {
+          "slug": "shipping-updates",
+          "title": "Shipping Updates (Push + status)",
+          "tier": "hard",
+          "prompt": "Build a shipping tracker app that receives remote push updates to change delivery status. Provide a demo mode with local notifications. Include deep links and a status timeline UI."
+        }
+      ]
+    }
+  ]
+}
+

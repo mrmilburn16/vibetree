@@ -1,0 +1,45 @@
+{
+  "id": "document-scanning",
+  "name": "Document Scanning (VisionKit)",
+  "frameworks": ["VisionKit"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "scan document",
+      "document scanner",
+      "scan page",
+      "scan receipt",
+      "scan to pdf",
+      "document camera",
+      "VNDocumentCameraViewController",
+      "VisionKit scanner",
+      "scan paper",
+      "scan whiteboard",
+      "scan notes",
+      "camera scan page"
+    ],
+    "excludeKeywords": ["barcode scan", "qr scan", "live text", "DataScanner"]
+  },
+  "promptInjection": "CAPABILITY: Document Scanning (VisionKit)\n\nAPPROACH:\n- Use VNDocumentCameraViewController (VisionKit) for the system document scanning UI.\n- This is a UIKit view controller — wrap it with UIViewControllerRepresentable for SwiftUI.\n- The system handles edge detection, perspective correction, and image enhancement automatically.\n- Returns VNDocumentCameraScan with one or more page images.\n\nIMPLEMENTATION:\n1. Create a struct conforming to UIViewControllerRepresentable.\n2. In makeUIViewController, return VNDocumentCameraViewController() with delegate set to coordinator.\n3. Coordinator implements VNDocumentCameraViewControllerDelegate with three methods:\n   - documentCameraViewController(_:didFinishWith scan: VNDocumentCameraScan) — success, get pages.\n   - documentCameraViewControllerDidCancel(_:) — user cancelled.\n   - documentCameraViewController(_:didFailWithError:) — error occurred.\n4. Access pages: scan.pageCount, scan.imageOfPage(at: index) returns UIImage.\n\nSAVING SCANNED PAGES:\n- Save UIImages as JPEG/PNG to the documents directory.\n- For PDF generation: use UIGraphicsPDFRenderer to create a PDF from the scanned page images.\n- Store metadata (title, date, page count, file paths) with Codable + UserDefaults.\n\nPDF GENERATION (common companion task):\n  let renderer = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: pageSize))\n  let data = renderer.pdfData { ctx in\n      for i in 0..<scan.pageCount {\n          let image = scan.imageOfPage(at: i)\n          ctx.beginPage()\n          image.draw(in: CGRect(origin: .zero, size: pageSize))\n      }\n  }\n  try data.write(to: pdfURL)\n\nOCR PAIRING:\n- After scanning, optionally run VNRecognizeTextRequest on each page image to extract text.\n- This combines document-scanning (VisionKit) with text-recognition (Vision) for a full scan-to-text flow.\n\nPRESENTATION:\n- Present via .sheet(isPresented:) { DocumentScannerView(...) }\n- The scanner UI is full-screen and managed by the system.\n\nDEVICE REQUIREMENT:\n- VNDocumentCameraViewController requires a real device with a camera.\n- Check VNDocumentCameraViewController.isSupported before presenting.\n- Show a clear fallback UI on Simulator or unsupported devices.\n\nANTI-PATTERNS:\n- Do NOT try to build a custom document scanner with AVFoundation — use VisionKit's built-in UI.\n- Do NOT forget to dismiss the scanner in the delegate methods.\n- Do NOT assume scan.pageCount is always 1 — users can scan multiple pages.\n- Do NOT store raw UIImages in memory for many pages — save to disk and load on demand.\n- Do NOT import VisionKit AND try to use DataScannerViewController for document scanning — they are different APIs.",
+  "canonicalCode": {
+    "DocumentScannerView.swift": "import SwiftUI\nimport VisionKit\n\nstruct DocumentScannerView: UIViewControllerRepresentable {\n    @Binding var scannedPages: [UIImage]\n    @Environment(\\.dismiss) private var dismiss\n\n    func makeUIViewController(context: Context) -> VNDocumentCameraViewController {\n        let scanner = VNDocumentCameraViewController()\n        scanner.delegate = context.coordinator\n        return scanner\n    }\n\n    func updateUIViewController(_ uiViewController: VNDocumentCameraViewController, context: Context) {}\n\n    func makeCoordinator() -> Coordinator {\n        Coordinator(self)\n    }\n\n    class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {\n        let parent: DocumentScannerView\n\n        init(_ parent: DocumentScannerView) {\n            self.parent = parent\n        }\n\n        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {\n            var pages: [UIImage] = []\n            for i in 0..<scan.pageCount {\n                pages.append(scan.imageOfPage(at: i))\n            }\n            parent.scannedPages = pages\n            parent.dismiss()\n        }\n\n        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {\n            parent.dismiss()\n        }\n\n        func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {\n            parent.dismiss()\n        }\n    }\n}\n",
+    "PDFGenerator.swift": "import UIKit\n\nenum PDFGenerator {\n    static func generatePDF(from pages: [UIImage]) -> Data? {\n        guard !pages.isEmpty else { return nil }\n\n        let pageSize = CGSize(width: 612, height: 792)\n        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: pageSize))\n\n        return renderer.pdfData { context in\n            for page in pages {\n                context.beginPage()\n                let aspectRatio = page.size.width / page.size.height\n                var drawRect = CGRect(origin: .zero, size: pageSize)\n                if aspectRatio > pageSize.width / pageSize.height {\n                    drawRect.size.height = pageSize.width / aspectRatio\n                } else {\n                    drawRect.size.width = pageSize.height * aspectRatio\n                }\n                drawRect.origin.x = (pageSize.width - drawRect.width) / 2\n                drawRect.origin.y = (pageSize.height - drawRect.height) / 2\n                page.draw(in: drawRect)\n            }\n        }\n    }\n}\n"
+  },
+  "antiPatterns": [
+    "Building a custom document scanner with AVFoundation instead of using VisionKit",
+    "Not dismissing the scanner in delegate methods",
+    "Assuming scan always has exactly 1 page",
+    "Holding many full-resolution UIImages in memory (save to disk instead)",
+    "Confusing VNDocumentCameraViewController with DataScannerViewController"
+  ],
+  "requiredPermissions": ["NSCameraUsageDescription"],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

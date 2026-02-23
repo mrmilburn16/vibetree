@@ -14,6 +14,9 @@ final class BuildMonitorService: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var liveActivities: [String: String] = [:] // jobId -> activityId
     private let pollInterval: TimeInterval = 2.0
+    private let pollIntervalIdle: TimeInterval = 5.0
+    private let notifiedJobIdsKey = "vibetree_notified_job_ids"
+    private let maxNotifiedJobIds = 100
 
     private var averageBuildTime: TimeInterval {
         let stored = UserDefaults.standard.double(forKey: "averageBuildTime")
@@ -28,7 +31,7 @@ final class BuildMonitorService: ObservableObject {
                 await self?.poll()
                 let seconds: TimeInterval = {
                     guard let self else { return 2.0 }
-                    return self.activeBuilds.isEmpty ? 10.0 : self.pollInterval
+                    return self.activeBuilds.isEmpty ? self.pollIntervalIdle : self.pollInterval
                 }()
                 try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             }
@@ -66,9 +69,36 @@ final class BuildMonitorService: ObservableObject {
                     await endLiveActivity(for: finished)
                 }
             }
+
+            notifyForCompletedBuildsIfNeeded(recent: recent)
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    /// Show local notification for any completed build we haven't notified for yet (so background fetch or any poll can trigger notifications).
+    private func notifyForCompletedBuildsIfNeeded(recent: [BuildJob]) {
+        var notifiedIds = UserDefaults.standard.stringArray(forKey: notifiedJobIdsKey) ?? []
+        let notifiedSet = Set(notifiedIds)
+        for job in recent where job.status.isTerminal {
+            guard !notifiedSet.contains(job.id) else { continue }
+            if job.status == .succeeded {
+                NotificationService.shared.showLocalNotification(
+                    title: "Your app is ready!",
+                    body: "\(job.projectName) built successfully in \(job.elapsedFormatted)."
+                )
+            } else {
+                NotificationService.shared.showLocalNotification(
+                    title: "Build failed",
+                    body: "\(job.projectName) failed: \(job.error ?? "Unknown error")"
+                )
+            }
+            notifiedIds.append(job.id)
+        }
+        if notifiedIds.count > maxNotifiedJobIds {
+            notifiedIds = Array(notifiedIds.suffix(maxNotifiedJobIds))
+        }
+        UserDefaults.standard.set(notifiedIds, forKey: notifiedJobIdsKey)
     }
 
     // MARK: - Live Activities
@@ -157,6 +187,15 @@ final class BuildMonitorService: ObservableObject {
                 body: "\(job.projectName) failed: \(job.error ?? "Unknown error")"
             )
         }
+        markJobAsNotified(job.id)
+    }
+
+    private func markJobAsNotified(_ jobId: String) {
+        var list = UserDefaults.standard.stringArray(forKey: notifiedJobIdsKey) ?? []
+        guard !list.contains(jobId) else { return }
+        list.append(jobId)
+        if list.count > maxNotifiedJobIds { list = Array(list.suffix(maxNotifiedJobIds)) }
+        UserDefaults.standard.set(list, forKey: notifiedJobIdsKey)
     }
 
     private func recordBuildTime(_ seconds: Int) {

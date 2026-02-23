@@ -19,6 +19,7 @@ import {
   BarChart3,
   Trash2,
   Shuffle,
+  Zap,
 } from "lucide-react";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
@@ -1038,6 +1039,7 @@ export default function TestSuitePage() {
             fileCount,
             fileNames: projectFiles.map((f) => f.path),
             durationMs,
+            skillsUsed: Array.isArray(done?.skillIds) ? done.skillIds : [],
           }),
         });
 
@@ -1362,6 +1364,47 @@ export default function TestSuitePage() {
                 >
                   <Shuffle className="h-4 w-4" aria-hidden />
                   Add 10 ideas
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/skills/test-prompts");
+                      const data = await res.json();
+                      if (!Array.isArray(data.skills)) return;
+                      const capIdeas: AppIdea[] = [];
+                      for (const sk of data.skills as Array<{ skillId: string; skillName: string; ideas: Array<{ title: string; prompt: string; tier: "easy" | "medium" | "hard"; category: string }> }>) {
+                        for (const idea of sk.ideas) {
+                          capIdeas.push({
+                            title: `[${sk.skillName}] ${idea.title}`,
+                            prompt: idea.prompt,
+                            tier: idea.tier,
+                            category: idea.category,
+                          });
+                        }
+                      }
+                      if (capIdeas.length === 0) return;
+                      setIdeas((prev) => {
+                        const seen = new Set(prev.map((i) => `${i.title}::${i.prompt}`));
+                        const toAdd = capIdeas.filter((i) => !seen.has(`${i.title}::${i.prompt}`));
+                        return [...prev, ...toAdd];
+                      });
+                      setResults((prev) => {
+                        const seen = new Set(prev.map((r) => `${r.idea.title}::${r.idea.prompt}`));
+                        const toAdd = capIdeas
+                          .filter((i) => !seen.has(`${i.title}::${i.prompt}`))
+                          .map((idea) => makeInitialResults([idea])[0]!);
+                        return [...prev, ...toAdd];
+                      });
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                  className="gap-2"
+                  title="Load test prompts for all active skills from capability seed data"
+                >
+                  <Zap className="h-4 w-4" aria-hidden />
+                  Load skill tests
                 </Button>
               </>
             ) : (

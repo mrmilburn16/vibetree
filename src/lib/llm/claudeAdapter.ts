@@ -62,13 +62,19 @@ Rules:
 - Layout rules: Minimum touch target 44×44pt for all interactive elements. Always use at least 16pt horizontal padding on all screens—text must never touch screen edges. Use ScrollView on any screen whose content could overflow. Never stack Text views without spacing—use VStack(spacing: 8) or more. Cards should use 12–16pt corner radius, consistent shadow, and 16pt internal padding.
 - Typography scale: Use .largeTitle for hero numbers or primary values, .title2/.title3 for section headers, .body for content, .caption for metadata. Never use .body for everything—establish clear hierarchy.
 - Empty and loading states: Every list or data screen must handle the empty case—show an SF Symbol icon + message + action button, never a blank screen. When async work happens, show ProgressView(). Do not leave screens blank while data loads.
-- Architecture (for apps with 3+ screens or data persistence): Organize into Models/ for data types (conforming to Codable and Identifiable), ViewModels/ for logic (use @Observable for iOS 17+), and Views/ for UI. Use NavigationStack with NavigationLink(value:) for type-safe navigation. Tab bars: use TabView with .tabItem { Label("Title", systemImage: "icon") }. Sheets: prefer .sheet(item:) with an identifiable binding. Persistence: use a dedicated Storage class wrapping UserDefaults with Codable encode/decode. Never put business logic in View bodies—extract to methods or ViewModel.
+- Architecture (for apps with 3+ screens or data persistence): Organize into Models/ for data types (conforming to Codable, Identifiable, AND Hashable), ViewModels/ for logic (use @Observable for iOS 17+), and Views/ for UI. Use NavigationStack with NavigationLink(value:) for type-safe navigation. IMPORTANT: Any type used with NavigationLink(value:) or .navigationDestination(for:) MUST conform to Hashable — this is a compiler requirement, not optional. Tab bars: use TabView with .tabItem { Label("Title", systemImage: "icon") }. Sheets: prefer .sheet(item:) with an identifiable binding. Persistence: use a dedicated Storage class wrapping UserDefaults with Codable encode/decode. Never put business logic in View bodies—extract to methods or ViewModel.
+- Unnecessary frameworks (NEVER add these unless the user explicitly asks): Do NOT add Apple Pay (PassKit), StoreKit, In-App Purchase, or subscription code unless the user specifically requests payments or purchases. Do NOT import PassKit or StoreKit. These require special provisioning profiles, merchant IDs, and entitlements that break builds. A receipt-scanning app, expense tracker, or budget app does NOT need Apple Pay — it needs OCR and data entry.
 - Anti-patterns (NEVER do these): Never use GeometryReader unless absolutely necessary—it causes overlaps and sizing bugs. Never use .frame(width: UIScreen.main.bounds.width)—use maxWidth: .infinity instead. Never use fixed frame sizes for text—let text size itself. Never use ZStack for layout that should be VStack/HStack—it causes overlaps. Never use .offset() for positioning—it does not affect layout. Never put a NavigationStack inside another NavigationStack. Never use .onAppear for data that should be in init or @State default. Never create buttons with empty actions ({ } or { /* TODO */ })—every button must have a real action or at minimum an alert.
 - File planning: For apps with 3+ files, plan your file structure before writing code. Create separate files for each View, Model, and ViewModel. Every screen must be reachable via navigation—no orphaned views. Every button/action must have an implementation (alert, navigation, state change, or data mutation). If data is created in Screen A and shown in Screen B, ensure the same source of truth connects them.
 - Avoid emojis in user-facing UI text (titles, buttons, labels, empty states). Do not use emoji-only icons. Prefer clean typography. If an icon is genuinely helpful, prefer SF Symbols via Image(systemName:) and use them sparingly and intentionally (no “icon soup”).
 - Keep the app simple and single-window unless the user asks for multiple screens or navigation. No explanations outside the summary.
 - If the user asks for Liquid Glass, iOS 26 design, or glass effect: set deployment target to iOS 26 and use the real iOS 26 APIs like \`.glassEffect()\` (and GlassEffectContainer / \`.glassEffectID()\` where appropriate) so the UI matches the new design language.
 - Privacy permissions: When using privacy-sensitive APIs (camera, microphone, photo library, location, contacts, calendar, health, Face ID, speech recognition, Bluetooth, motion, NFC), the build system will automatically detect the API usage and add the corresponding Info.plist usage description keys. You do NOT need to generate an Info.plist file. However, you MUST properly request permission at runtime using the appropriate API (e.g. \`AVCaptureDevice.requestAccess(for: .video)\`, \`CLLocationManager().requestWhenInUseAuthorization()\`, etc.) before accessing the hardware. Always handle the case where the user denies permission gracefully.
+
+- Sensing strategy (workout rep counting / detection): Choose the sensing approach that matches the user's described setup. Do NOT guess.
+  - If the phone is placed in front of the user (selfie / FaceTime-style camera on tripod/table, “watching me”, “6–8 feet away”), Core Motion will NOT reliably detect reps because the device is stationary. In this setup, use AVFoundation camera frames + Vision human body pose estimation to detect down/up phases with smoothing + hysteresis thresholds + cooldown. Provide on-screen guidance when the body isn’t visible enough, plus a manual +1 fallback button.
+  - If the phone/watch moves with the body (pocket/armband/Apple Watch), use Core Motion (accelerometer/gyro or CMPedometer) with filtering + thresholds + cooldown. Do not claim form-aware camera detection unless you are actually using Vision pose estimation.
+  - If the setup is ambiguous, infer from phrasing: “selfie/FaceTime/tripod/watching me” => Vision pose; “pocket/armband/watch” => Core Motion. Make a clear assumption in the summary and implement accordingly.
 
 Produce the full set of files (new or updated) in one reply. No markdown, no code fences around the JSON—only the raw JSON object.`;
 
@@ -118,6 +124,8 @@ export interface GetClaudeResponseOptions {
   currentFiles?: Array<{ path: string; content: string }>;
   /** When "pro", use Swift/SwiftUI system prompt; otherwise use Standard (Expo). */
   projectType?: ProjectType;
+  /** Extra system-prompt text generated by the skills system (appended after the base prompt). */
+  skillPromptBlock?: string;
 }
 
 /**
@@ -148,8 +156,11 @@ export async function getClaudeResponse(
     userContent = message;
   }
 
-  const systemPrompt =
+  const basePrompt =
     options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
+  const systemPrompt = options?.skillPromptBlock
+    ? basePrompt + options.skillPromptBlock
+    : basePrompt;
 
   const response = await client.messages.create({
     model,
@@ -219,8 +230,11 @@ async function getClaudeResponseStream(
     userContent = message;
   }
 
-  const systemPrompt =
+  const basePrompt =
     options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
+  const systemPrompt = options?.skillPromptBlock
+    ? basePrompt + options.skillPromptBlock
+    : basePrompt;
 
   let lastReported = 0;
   const throttleChars = 80;

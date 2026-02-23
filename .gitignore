@@ -35,6 +35,7 @@ ios/**/DerivedData/
 
 # local run artifacts
 data/*.jsonl
+data/project-chats/
 
 # debug
 npm-debug.log*

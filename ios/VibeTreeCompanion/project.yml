@@ -32,6 +32,7 @@ targets:
         NSSupportsLiveActivities: true
         UIBackgroundModes:
           - remote-notification
+          - fetch
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vibetree.companion

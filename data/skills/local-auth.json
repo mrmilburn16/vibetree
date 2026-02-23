@@ -1,0 +1,45 @@
+{
+  "id": "local-auth",
+  "name": "Local Authentication (Face ID / Touch ID)",
+  "frameworks": ["LocalAuthentication"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "face id",
+      "touch id",
+      "biometric",
+      "authenticate",
+      "lock screen",
+      "unlock",
+      "secure vault",
+      "vault",
+      "protected",
+      "fingerprint",
+      "biometrics",
+      "lock app",
+      "require auth"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "CAPABILITY: Local Authentication (Face ID / Touch ID)\n\nUSAGE:\n- import LocalAuthentication\n- Create a new LAContext() for EACH authentication attempt (do not reuse across calls).\n- Check canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) to see if biometrics are available.\n- Call evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: \"Unlock your data\") { success, error in ... }\n- The localizedReason string appears in the Face ID dialog — make it clear and user-friendly.\n- Dispatch UI updates to main thread inside the completion handler.\n\nFALLBACK:\n- Use .deviceOwnerAuthentication (without \"WithBiometrics\") to allow device passcode as fallback.\n- Also provide an in-app manual PIN/password option for accessibility.\n\nPERMISSION:\n- NSFaceIDUsageDescription is required in Info.plist for Face ID (build system auto-detects).\n- Touch ID does not require a usage description.\n\nSIMULATOR SUPPORT:\n- Face ID works in Simulator via Features > Face ID > Enrolled.\n- Provide a bypass/demo mode so the app is testable without Face ID enrollment.\n\nERROR HANDLING:\n- Handle LAError.userCancel — user dismissed the dialog.\n- Handle LAError.userFallback — user tapped \"Enter Password\".\n- Handle LAError.biometryNotAvailable — device doesn't support biometrics.\n- Handle LAError.biometryNotEnrolled — no fingerprint/face registered.\n\nANTI-PATTERNS:\n- Do NOT reuse an LAContext across multiple evaluatePolicy calls — create a fresh one each time.\n- Do NOT block the main thread waiting for evaluatePolicy — it is async.\n- Do NOT forget to handle all LAError cases gracefully.\n- Do NOT hide the \"Go to Settings\" path when biometrics are not enrolled.",
+  "canonicalCode": {
+    "BiometricAuth.swift": "import LocalAuthentication\nimport SwiftUI\n\nclass AuthManager: ObservableObject {\n    @Published var isUnlocked = false\n    @Published var biometricsAvailable = false\n    @Published var errorMessage: String?\n\n    func checkBiometrics() {\n        let context = LAContext()\n        var error: NSError?\n        biometricsAvailable = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)\n    }\n\n    func authenticate() {\n        let context = LAContext()\n        context.localizedFallbackTitle = \"Use Passcode\"\n\n        context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: \"Unlock your data\") { [weak self] success, error in\n            DispatchQueue.main.async {\n                if success {\n                    self?.isUnlocked = true\n                    self?.errorMessage = nil\n                } else if let error = error as? LAError {\n                    switch error.code {\n                    case .userCancel:\n                        self?.errorMessage = nil\n                    case .userFallback:\n                        self?.errorMessage = \"Enter your passcode\"\n                    case .biometryNotEnrolled:\n                        self?.errorMessage = \"No biometrics enrolled. Go to Settings to set up.\"\n                    default:\n                        self?.errorMessage = \"Authentication failed\"\n                    }\n                }\n            }\n        }\n    }\n\n    func lock() {\n        isUnlocked = false\n    }\n}"
+  },
+  "antiPatterns": [
+    "Reusing LAContext across multiple evaluatePolicy calls (create a fresh one each time)",
+    "Blocking the main thread with evaluatePolicy",
+    "Not handling LAError.userCancel, .userFallback, and .biometryNotEnrolled cases",
+    "Forgetting NSFaceIDUsageDescription for Face ID",
+    "Not providing a passcode fallback option"
+  ],
+  "requiredPermissions": ["NSFaceIDUsageDescription"],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

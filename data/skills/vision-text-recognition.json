@@ -1,0 +1,48 @@
+{
+  "id": "vision-text-recognition",
+  "name": "Text Recognition / OCR (Vision)",
+  "frameworks": ["Vision"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "ocr",
+      "text recognition",
+      "recognize text",
+      "extract text",
+      "read text from image",
+      "scan text",
+      "text from photo",
+      "detect text",
+      "whiteboard",
+      "ingredient",
+      "receipt scan",
+      "receipt ocr",
+      "label reader",
+      "business card scan",
+      "document text",
+      "VNRecognizeTextRequest"
+    ],
+    "excludeKeywords": ["barcode", "qr code", "body pose"]
+  },
+  "promptInjection": "CAPABILITY: Text Recognition / OCR (Vision Framework)\n\nAPPROACH:\n- Use VNRecognizeTextRequest with VNImageRequestHandler to extract text from a CGImage.\n- The accurate path (default) is best for most use cases. Use .fast only when latency matters more than accuracy.\n- Convert UIImage to CGImage via .cgImage before passing to VNImageRequestHandler.\n\nCRITICAL IMPLEMENTATION DETAILS:\n1. Create a VNImageRequestHandler(cgImage:) — NOT a VNSequenceRequestHandler (that's for video).\n2. Call handler.perform([request]) on a background queue — it is synchronous and blocks the calling thread.\n3. Results arrive as [VNRecognizedTextObservation]. Each observation has topCandidates(1) which returns [VNRecognizedText].\n4. Use observation.topCandidates(1).first?.string to get the recognized string.\n5. To get bounding boxes: use candidate.boundingBox(for: range) which returns VNRectangleObservation?. The boundingBox is in normalized coordinates (0..1, origin bottom-left). Convert with VNImageRectForNormalizedRect(box, imageWidth, imageHeight).\n\nLANGUAGE SETTINGS:\n- Set request.recognitionLanguages = [\"en-US\"] (or appropriate language codes) to optimize accuracy.\n- Enable language correction: request.usesLanguageCorrection = true (default) for better results on natural text.\n- For domain-specific terms, set request.customWords = [\"myTerm\"] to boost recognition of jargon.\n\nPHOTO INPUT:\n- Use PhotosUI PhotosPicker to let the user select an image. Load the image as UIImage, then convert to CGImage.\n- Also support camera capture if appropriate (present UIImagePickerController or AVCaptureSession).\n\nRESULT PROCESSING:\n- Join recognized strings with newlines to reconstruct document text.\n- Show a confidence indicator per line if useful (observation.confidence is 0..1).\n- Provide an editable text view so users can correct OCR mistakes.\n- Include a copy-to-clipboard button.\n\nERROR HANDLING:\n- If cgImage is nil (e.g. HEIF without CGImage support), show a clear error.\n- If no text is found, show \"No text detected\" rather than an empty screen.\n- Wrap perform() in do/catch and show the error message.\n\nANTI-PATTERNS:\n- Do NOT run VNImageRequestHandler.perform() on the main thread — it blocks UI.\n- Do NOT use VNDetectTextRectanglesRequest (legacy) — use VNRecognizeTextRequest.\n- Do NOT forget to set recognitionLanguages — omitting it biases toward English but may miss other scripts.\n- Do NOT assume the recognized text preserves exact formatting — OCR output is best-effort line-by-line.\n- Do NOT import StoreKit or add Apple Pay for apps that just scan receipts — OCR is not a payment feature.",
+  "canonicalCode": {
+    "TextRecognizer.swift": "import Vision\nimport UIKit\n\nstruct RecognizedLine: Identifiable {\n    let id = UUID()\n    let text: String\n    let confidence: Float\n    let boundingBox: CGRect\n}\n\nenum TextRecognizer {\n    static func recognizeText(in image: UIImage, languages: [String] = [\"en-US\"]) async -> [RecognizedLine] {\n        guard let cgImage = image.cgImage else { return [] }\n\n        return await withCheckedContinuation { continuation in\n            let request = VNRecognizeTextRequest { request, error in\n                guard let observations = request.results as? [VNRecognizedTextObservation] else {\n                    continuation.resume(returning: [])\n                    return\n                }\n\n                let lines: [RecognizedLine] = observations.compactMap { obs in\n                    guard let candidate = obs.topCandidates(1).first else { return nil }\n                    return RecognizedLine(\n                        text: candidate.string,\n                        confidence: obs.confidence,\n                        boundingBox: obs.boundingBox\n                    )\n                }\n                continuation.resume(returning: lines)\n            }\n\n            request.recognitionLevel = .accurate\n            request.recognitionLanguages = languages\n            request.usesLanguageCorrection = true\n\n            let handler = VNImageRequestHandler(cgImage: cgImage)\n            DispatchQueue.global(qos: .userInitiated).async {\n                try? handler.perform([request])\n            }\n        }\n    }\n\n    static func fullText(from lines: [RecognizedLine]) -> String {\n        lines.map { $0.text }.joined(separator: \"\\n\")\n    }\n}\n"
+  },
+  "antiPatterns": [
+    "Running VNImageRequestHandler.perform() on the main thread (blocks UI for seconds)",
+    "Using legacy VNDetectTextRectanglesRequest instead of VNRecognizeTextRequest",
+    "Treating OCR apps as payment apps and adding StoreKit/Apple Pay",
+    "Not handling the case where cgImage is nil",
+    "Assuming OCR output preserves exact document formatting"
+  ],
+  "requiredPermissions": ["NSCameraUsageDescription"],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

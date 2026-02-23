@@ -1,0 +1,45 @@
+{
+  "id": "text-to-speech",
+  "name": "Text-to-Speech (AVSpeechSynthesizer)",
+  "frameworks": ["AVFoundation"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "text to speech",
+      "speak aloud",
+      "read aloud",
+      "pronounce",
+      "tts",
+      "voice output",
+      "say text",
+      "speech synthesis",
+      "speak text",
+      "AVSpeechSynthesizer",
+      "read out loud",
+      "accessibility read",
+      "flashcard pronounce"
+    ],
+    "excludeKeywords": ["speech recognition", "voice input", "dictation", "transcribe"]
+  },
+  "promptInjection": "CAPABILITY: Text-to-Speech (AVSpeechSynthesizer)\n\nAPPROACH:\n- Use AVSpeechSynthesizer with AVSpeechUtterance to speak text aloud.\n- No special permissions required — TTS works immediately.\n- Works in Simulator and on device.\n\nBASIC USAGE:\n1. Create an AVSpeechSynthesizer instance — keep a STRONG REFERENCE (store as a property, not a local variable). If the synthesizer is deallocated, speech stops immediately.\n2. Create AVSpeechUtterance(string: \"Hello world\").\n3. Set utterance.voice = AVSpeechSynthesisVoice(language: \"en-US\") (or other locale).\n4. Optionally set utterance.rate (0.0–1.0, default ~0.5), utterance.pitchMultiplier (0.5–2.0), utterance.volume (0.0–1.0).\n5. Call synthesizer.speak(utterance).\n\nCONTROLS:\n- synthesizer.pauseSpeaking(at: .immediate) or .word — pause at current point or end of current word.\n- synthesizer.continueSpeaking() — resume after pause.\n- synthesizer.stopSpeaking(at: .immediate) — stop completely.\n- Check synthesizer.isSpeaking and synthesizer.isPaused for UI state.\n\nVOICE SELECTION:\n- AVSpeechSynthesisVoice.speechVoices() returns all available voices.\n- Each voice has .language, .name, .quality (.default, .enhanced, .premium).\n- Let users pick from available voices grouped by language.\n- Enhanced/premium voices sound much better but may need to be downloaded.\n\nHIGHLIGHTING SPOKEN TEXT:\n- Implement AVSpeechSynthesizerDelegate.\n- speechSynthesizer(_:willSpeakRangeOfSpeechString:utterance:) gives you the NSRange of the word about to be spoken.\n- Use this to highlight the current word in the UI (convert NSRange to String.Index for SwiftUI).\n\nAUDIO SESSION:\n- If the app also records or plays other audio, configure AVAudioSession category to .playback or .playAndRecord before speaking.\n- For simple TTS-only apps, the default session works fine.\n\nANTI-PATTERNS:\n- Do NOT create AVSpeechSynthesizer as a local variable in a function — it gets deallocated and speech stops. Store it as a class property.\n- Do NOT call synthesizer.speak() with the same utterance object twice — create a new AVSpeechUtterance each time.\n- Do NOT set rate to 0.0 — it means \"minimum speed\" which is extremely slow. Use 0.4–0.6 for natural speech.\n- Do NOT forget to stop speaking when the view disappears (implement onDisappear cleanup).\n- Do NOT assume all voices are available offline — some enhanced voices require download.",
+  "canonicalCode": {
+    "SpeechService.swift": "import AVFoundation\nimport SwiftUI\n\nclass SpeechService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {\n    @Published var isSpeaking = false\n    @Published var isPaused = false\n    @Published var spokenRange: NSRange?\n\n    private let synthesizer = AVSpeechSynthesizer()\n\n    override init() {\n        super.init()\n        synthesizer.delegate = self\n    }\n\n    func speak(_ text: String, language: String = \"en-US\", rate: Float = AVSpeechUtteranceDefaultSpeechRate) {\n        synthesizer.stopSpeaking(at: .immediate)\n        let utterance = AVSpeechUtterance(string: text)\n        utterance.voice = AVSpeechSynthesisVoice(language: language)\n        utterance.rate = rate\n        synthesizer.speak(utterance)\n    }\n\n    func pause() {\n        synthesizer.pauseSpeaking(at: .word)\n    }\n\n    func resume() {\n        synthesizer.continueSpeaking()\n    }\n\n    func stop() {\n        synthesizer.stopSpeaking(at: .immediate)\n    }\n\n    static var availableLanguages: [String] {\n        Array(Set(AVSpeechSynthesisVoice.speechVoices().map { $0.language })).sorted()\n    }\n\n    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {\n        DispatchQueue.main.async { self.isSpeaking = true; self.isPaused = false }\n    }\n\n    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {\n        DispatchQueue.main.async { self.isSpeaking = false; self.isPaused = false; self.spokenRange = nil }\n    }\n\n    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didPause utterance: AVSpeechUtterance) {\n        DispatchQueue.main.async { self.isPaused = true }\n    }\n\n    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didContinue utterance: AVSpeechUtterance) {\n        DispatchQueue.main.async { self.isPaused = false }\n    }\n\n    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {\n        DispatchQueue.main.async { self.spokenRange = characterRange }\n    }\n}\n"
+  },
+  "antiPatterns": [
+    "Creating AVSpeechSynthesizer as a local variable (gets deallocated, speech stops)",
+    "Reusing the same AVSpeechUtterance object for multiple speak() calls",
+    "Setting rate to 0.0 (extremely slow, effectively broken)",
+    "Not stopping speech when the view disappears",
+    "Assuming all voices are available offline"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

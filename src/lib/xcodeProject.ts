@@ -152,7 +152,7 @@ const FRAMEWORK_RULES: FrameworkRule[] = [
     framework: "MapKit",
   },
   {
-    patterns: [/\bimport StoreKit\b/, /\bProduct\b/, /\bTransaction\b/, /\bSubscriptionStoreView\b/],
+    patterns: [/\bimport StoreKit\b/, /\bSubscriptionStoreView\b/, /\bStoreKit\.Transaction\b/, /\bProduct\.SubscriptionInfo\b/],
     framework: "StoreKit",
   },
   {
@@ -233,11 +233,6 @@ interface EntitlementRule {
 }
 
 const ENTITLEMENT_RULES: EntitlementRule[] = [
-  {
-    patterns: [/\bimport StoreKit\b/, /\bProduct\b/, /\bTransaction\b/, /\bSubscriptionStoreView\b/],
-    key: "com.apple.developer.in-app-payments",
-    value: ["merchant.*"],
-  },
   {
     patterns: [/\bimport UserNotifications\b/, /\bUNUserNotificationCenter\b/, /\bUNMutableNotificationContent\b/],
     key: "aps-environment",

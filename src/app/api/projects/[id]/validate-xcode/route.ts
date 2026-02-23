@@ -19,6 +19,41 @@ function sanitizeXcodeName(name: string, fallback: string): string {
   return joined.slice(0, 32);
 }
 
+function normalizeSwiftFiles(files: SwiftFile[]): SwiftFile[] {
+  // Remove empty placeholders and prevent duplicate basenames that can cause
+  // "Multiple commands produce ... .stringsdata" failures.
+  const nonEmpty = files.filter((f) => typeof f?.path === "string" && (f.content ?? "").trim().length > 0);
+
+  const byBase = new Map<string, SwiftFile[]>();
+  for (const f of nonEmpty) {
+    const base = (f.path.split("/").pop() ?? f.path).trim();
+    const arr = byBase.get(base) ?? [];
+    arr.push(f);
+    byBase.set(base, arr);
+  }
+
+  const out: SwiftFile[] = [];
+  for (const [base, group] of byBase.entries()) {
+    if (group.length === 1) {
+      out.push(group[0]);
+      continue;
+    }
+
+    // Prefer canonical app paths.
+    const preferred =
+      group.find((f) => f.path.startsWith("VibetreeApp/")) ??
+      group.find((f) => f.path.includes("/VibetreeApp/")) ??
+      group[0];
+
+    // If there are multiple non-empty variants, keep only one to avoid build-system conflicts.
+    // (If they differ semantically, the compile step will surface missing symbols rather than
+    // failing at the build system layer.)
+    out.push({ ...preferred, path: preferred.path.trim() || base });
+  }
+
+  return out;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -30,7 +65,8 @@ export async function POST(
   const providedName = typeof body?.projectName === "string" ? body.projectName : "";
   const providedBundleId = typeof body?.bundleId === "string" ? body.bundleId : "";
   const providedTeam = typeof body?.developmentTeam === "string" ? body.developmentTeam : "";
-  const files = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : undefined;
+  const filesRaw = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : undefined;
+  const files = filesRaw ? normalizeSwiftFiles(filesRaw) : undefined;
   const userPrompt = typeof body?.userPrompt === "string" ? body.userPrompt : undefined;
 
   const project = getProject(projectId) ?? ensureProject(projectId, providedName || "Untitled app");

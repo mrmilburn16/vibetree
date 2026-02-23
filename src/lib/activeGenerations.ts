@@ -43,6 +43,20 @@ export function endGeneration(id: string): void {
   generations.delete(id);
 }
 
+/** Start a simulated build for testing Live Activities. Appears in /api/build-jobs/active for ~90s. */
+export function startSimulation(projectName = "Simulated Build"): ActiveGeneration {
+  const id = `sim_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const gen: ActiveGeneration = {
+    id,
+    projectId: id,
+    projectName,
+    startedAt: Date.now(),
+    phase: "generating",
+  };
+  generations.set(id, gen);
+  return gen;
+}
+
 export function getActiveGenerations(): ActiveGeneration[] {
   return Array.from(generations.values()).filter((g) => g.phase !== "done");
 }

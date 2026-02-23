@@ -60,7 +60,16 @@ export function RunOnDeviceModal({
     if (!isOpen || !projectId) return;
     if (typeof window !== "undefined") {
       try {
-        const t = localStorage.getItem(`${XCODE_TEAM_ID_STORAGE_PREFIX}${projectId}`) ?? "";
+        let t = localStorage.getItem(`${XCODE_TEAM_ID_STORAGE_PREFIX}${projectId}`) ?? "";
+        if (!t) {
+          const universal = localStorage.getItem("vibetree-universal-defaults");
+          if (universal) {
+            try {
+              const parsed = JSON.parse(universal);
+              if (typeof parsed.teamId === "string") t = parsed.teamId;
+            } catch {}
+          }
+        }
         let d = localStorage.getItem(`${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`) ?? "";
         if (!d) {
           const universal = localStorage.getItem("vibetree-universal-defaults");
@@ -440,7 +449,7 @@ export function RunOnDeviceModal({
           )}
           <div className="space-y-2">
             <p className="text-body-muted text-sm">
-              Pro apps are native Swift/SwiftUI. Download for Xcode (zip), unzip, double‑click the project, then Run on your iPhone or simulator. If Xcode defaults to a simulator, select your physical iPhone from the device dropdown once—Xcode will remember it.
+              Pro apps are native Swift/SwiftUI. Download for Xcode (zip), unzip, double‑click the project, then Run on your iPhone or simulator. Note: Xcode opens with whatever Run destination you last used — the exported project can’t force it to switch automatically. If Xcode defaults to a simulator, select your physical iPhone from the device dropdown once—Xcode will remember it.
             </p>
             <div className="rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-2">
               <p className="text-caption text-xs text-[var(--text-tertiary)]">
@@ -577,7 +586,7 @@ export function RunOnDeviceModal({
                     spellCheck={false}
                   />
                   <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                    Find it: in Xcode, pick your team once, then open the .xcodeproj in a text editor and search for <span className="font-mono">DEVELOPMENT_TEAM</span>—the 10-character value is your Team ID.
+                    Easiest: Apple Developer → Account → Membership details → copy <span className="font-mono">Team ID</span> (10 characters). Alternative: in Xcode, pick your team once, then open <span className="font-mono">project.pbxproj</span> and search for <span className="font-mono">DEVELOPMENT_TEAM</span>.
                   </p>
                 </div>
                 <div>
@@ -614,7 +623,7 @@ export function RunOnDeviceModal({
               Or download single .swift file
             </button>
             <p className="text-caption text-xs text-[var(--text-tertiary)]">
-              Unzip → double‑click the .xcodeproj → connect iPhone → Run. No Expo Go needed. If Xcode picks a simulator, choose your physical iPhone from the device dropdown (e.g. &quot;iPhone (9)&quot;) once—Xcode will remember it next time.
+              Unzip → double‑click the .xcodeproj → connect iPhone → Run. No Expo Go needed. Xcode may open with a simulator you used previously — select your physical iPhone from the device dropdown (e.g. &quot;iPhone (9)&quot;) once and Xcode will remember it next time.
             </p>
           </div>
         </div>

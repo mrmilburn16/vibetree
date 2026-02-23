@@ -8,6 +8,8 @@ import { getClaudeResponseStream } from "@/lib/llm/claudeAdapter";
 import { estimateCostUsd } from "@/lib/llm/usageCost";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { startGeneration, updateGenerationPhase, endGeneration } from "@/lib/activeGenerations";
+import { enrichWithSkills } from "@/lib/llm/promptEnrichment";
+import { detectSkills, buildSkillPromptBlock } from "@/lib/skills/registry";
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -45,6 +47,9 @@ export async function POST(
   const model = typeof body.model === "string" ? body.model : undefined;
   const projectType =
     body.projectType === "pro" ? "pro" : ("standard" as const);
+  const { message: enrichedMessage, skillIds } = enrichWithSkills(projectType, message);
+  const skillMatches = projectType === "pro" ? detectSkills(message) : [];
+  const skillPromptBlock = buildSkillPromptBlock(skillMatches);
 
   if (!hasApiKey) {
     return Response.json(
@@ -124,9 +129,9 @@ export async function POST(
 
           try {
             result = await getClaudeResponseStream(
-              message,
+              enrichedMessage,
               model,
-              { currentFiles, projectType },
+              { currentFiles, projectType, skillPromptBlock },
               {
                 onProgress: (data) => {
                   lastReceivedChars = data.receivedChars;
@@ -215,6 +220,7 @@ export async function POST(
           ...(projectFilesForClient && { projectFiles: projectFilesForClient }),
           buildStatus: "live",
           generationId: generation.id,
+          ...(skillIds.length > 0 && { skillIds }),
         });
       } catch (err) {
         const errorMessage =

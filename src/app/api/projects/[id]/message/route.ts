@@ -9,6 +9,8 @@ import { mockGetResponse } from "@/lib/llm/mockAdapter";
 import { getClaudeResponse } from "@/lib/llm/claudeAdapter";
 import { estimateCostUsd } from "@/lib/llm/usageCost";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
+import { enrichWithSkills } from "@/lib/llm/promptEnrichment";
+import { detectSkills, buildSkillPromptBlock } from "@/lib/skills/registry";
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -43,6 +45,9 @@ export async function POST(
   const model = typeof body.model === "string" ? body.model : undefined;
   const projectType =
     body.projectType === "pro" ? "pro" : ("standard" as const);
+  const { message: enrichedMessage, skillIds } = enrichWithSkills(projectType, message);
+  const skillMatches = projectType === "pro" ? detectSkills(message) : [];
+  const skillPromptBlock = buildSkillPromptBlock(skillMatches);
 
   if (useRealLLM && !hasApiKey) {
     return NextResponse.json(
@@ -71,9 +76,10 @@ export async function POST(
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        result = await getClaudeResponse(message, model, {
+        result = await getClaudeResponse(enrichedMessage, model, {
           currentFiles,
           projectType,
+          skillPromptBlock,
         });
         lastErr = null;
         break;
@@ -146,5 +152,6 @@ export async function POST(
       ...(projectFilesForClient && { projectFiles: projectFilesForClient }),
     },
     buildStatus: "live" as const,
+    ...(skillIds.length > 0 && { skillIds }),
   });
 }

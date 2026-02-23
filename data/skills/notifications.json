@@ -1,0 +1,46 @@
+{
+  "id": "notifications",
+  "name": "Local Notifications (UserNotifications)",
+  "frameworks": ["UserNotifications"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "notification",
+      "local notification",
+      "reminder",
+      "remind me",
+      "alert",
+      "schedule notification",
+      "push notification",
+      "notify",
+      "nudge",
+      "alarm",
+      "daily reminder",
+      "water reminder",
+      "deadline alert",
+      "UNUserNotificationCenter"
+    ],
+    "excludeKeywords": ["remote push", "APNs", "server push"]
+  },
+  "promptInjection": "CAPABILITY: Local Notifications (UserNotifications Framework)\n\nAPPROACH:\n- Use UNUserNotificationCenter for scheduling local notifications.\n- Request permission FIRST, then schedule notifications only if authorized.\n\nPERMISSION REQUEST:\n1. Call UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in ... }\n2. Check the granted flag — if false, show a clear UI explaining how to enable notifications in Settings.\n3. Request permission early but at a contextually appropriate time (e.g. when user creates their first reminder).\n\nSCHEDULING NOTIFICATIONS:\n1. Create UNMutableNotificationContent — set title, body, sound (.default), and optionally badge, categoryIdentifier.\n2. Create a trigger:\n   - UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: Bool) — fire after a delay.\n   - UNCalendarNotificationTrigger(dateMatching: DateComponents, repeats: Bool) — fire at specific date/time.\n   - UNLocationNotificationTrigger(region: CLCircularRegion, repeats: Bool) — fire at a location.\n3. Create UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger).\n4. Add to center: try await UNUserNotificationCenter.current().add(request).\n\nCANCELLING:\n- Store the notification identifier (UUID string) so it can be cancelled later.\n- UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])\n- To cancel ALL: removeAllPendingNotificationRequests()\n\nFOREGROUND DELIVERY:\n- By default, notifications don't show UI when the app is in the foreground.\n- Implement UNUserNotificationCenterDelegate.userNotificationCenter(_:willPresent:withCompletionHandler:) and call completionHandler([.banner, .sound]) to show them.\n- Set the delegate EARLY (in app init or onAppear of root view).\n\nREPEATING NOTIFICATIONS:\n- UNCalendarNotificationTrigger with repeats: true — ensure DateComponents only contains the repeating fields (e.g. hour + minute for daily, weekday + hour for weekly).\n- UNTimeIntervalNotificationTrigger with repeats: true — minimum interval is 60 seconds.\n\nACTIONABLE NOTIFICATIONS:\n- Define UNNotificationCategory with UNNotificationAction items.\n- Register categories: UNUserNotificationCenter.current().setNotificationCategories(categories).\n- Set content.categoryIdentifier to match.\n\nANTI-PATTERNS:\n- Do NOT schedule notifications without checking authorization status first.\n- Do NOT use repeating UNTimeIntervalNotificationTrigger with interval < 60 (crashes).\n- Do NOT forget to store notification identifiers for cancellation.\n- Do NOT assume notifications display in foreground — implement the delegate method.\n- Do NOT request notification permission on first launch with no context — explain WHY first.",
+  "canonicalCode": {
+    "NotificationManager.swift": "import UserNotifications\nimport SwiftUI\n\nclass NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate {\n    @Published var isAuthorized = false\n\n    override init() {\n        super.init()\n        UNUserNotificationCenter.current().delegate = self\n    }\n\n    func requestPermission() {\n        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in\n            DispatchQueue.main.async {\n                self.isAuthorized = granted\n            }\n        }\n    }\n\n    func scheduleNotification(title: String, body: String, at date: Date, id: String = UUID().uuidString) {\n        let content = UNMutableNotificationContent()\n        content.title = title\n        content.body = body\n        content.sound = .default\n\n        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)\n        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)\n        let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)\n\n        UNUserNotificationCenter.current().add(request)\n    }\n\n    func scheduleDailyReminder(title: String, body: String, hour: Int, minute: Int, id: String) {\n        let content = UNMutableNotificationContent()\n        content.title = title\n        content.body = body\n        content.sound = .default\n\n        var components = DateComponents()\n        components.hour = hour\n        components.minute = minute\n        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)\n        let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)\n\n        UNUserNotificationCenter.current().add(request)\n    }\n\n    func cancel(id: String) {\n        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])\n    }\n\n    func cancelAll() {\n        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()\n    }\n\n    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {\n        completionHandler([.banner, .sound])\n    }\n}\n"
+  },
+  "antiPatterns": [
+    "Scheduling notifications without checking authorization",
+    "Using repeating UNTimeIntervalNotificationTrigger with interval < 60 seconds (crashes)",
+    "Not storing notification identifiers for later cancellation",
+    "Assuming notifications show in foreground without implementing the delegate",
+    "Requesting notification permission on launch with no user context"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

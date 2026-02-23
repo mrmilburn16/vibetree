@@ -78,6 +78,49 @@ async function api(path, opts = {}) {
   return res;
 }
 
+function parseXcdeviceList(raw) {
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return { physical: [], simulators: [] };
+    const ios = arr.filter((d) => {
+      const plat = String(d?.platform ?? "");
+      return plat.includes("iOS") || plat.includes("com.apple.platform.iphone");
+    });
+    const mapped = ios
+      .filter((d) => d && typeof d.name === "string")
+      .map((d) => {
+        const plat = String(d.platform ?? "");
+        const isSim =
+          plat.includes("iphonesimulator") ||
+          plat.includes("iOS Simulator") ||
+          String(d.simulator ?? "") === "true";
+        const osVersion = typeof d.operatingSystemVersion === "string" ? d.operatingSystemVersion : (typeof d.osVersion === "string" ? d.osVersion : undefined);
+        const id = typeof d.identifier === "string" ? d.identifier : undefined;
+        return { name: d.name, id, platform: plat, osVersion, kind: isSim ? "simulator" : "physical" };
+      });
+    const physical = mapped.filter((d) => d.kind === "physical");
+    const simulators = mapped.filter((d) => d.kind === "simulator");
+    return { physical, simulators };
+  } catch (_) {
+    return { physical: [], simulators: [] };
+  }
+}
+
+async function reportRunnerDevices() {
+  try {
+    // xcdevice is the most reliable single-source list for both connected devices and simulators.
+    const raw = execSync("xcrun xcdevice list --timeout 2", { encoding: "utf8", shell: true });
+    const { physical, simulators } = parseXcdeviceList(raw);
+    await api("/api/macos/devices/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ physical, simulators }),
+    });
+  } catch (_) {
+    // Ignore reporting errors; build runner still works without device list.
+  }
+}
+
 async function claimJob() {
   const res = await api("/api/build-jobs/claim", { method: "POST" });
   if (res.status === 204) return null;
@@ -469,6 +512,11 @@ async function validateJob(job) {
 
 async function main() {
   console.log(`Mac runner ${RUNNER_ID} polling ${SERVER_URL}`);
+  // Report device list periodically so the web app can offer a dropdown.
+  reportRunnerDevices().catch(() => {});
+  setInterval(() => {
+    reportRunnerDevices().catch(() => {});
+  }, 15000);
   while (true) {
     try {
       const job = await claimJob();

@@ -1,0 +1,52 @@
+{
+  "id": "core-image",
+  "name": "Image Processing & Filters (Core Image)",
+  "frameworks": ["CoreImage"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "photo filter",
+      "image filter",
+      "sepia",
+      "blur",
+      "vignette",
+      "black and white",
+      "monochrome",
+      "sharpen",
+      "bloom",
+      "core image",
+      "CIFilter",
+      "photo edit",
+      "image effect",
+      "image processing",
+      "contrast",
+      "brightness",
+      "color adjust",
+      "filter lab",
+      "photo enhance",
+      "document enhance"
+    ],
+    "excludeKeywords": ["barcode", "face detection", "body pose", "ocr"]
+  },
+  "promptInjection": "CAPABILITY: Image Processing & Filters (Core Image)\n\nAPPROACH:\n- Use CIFilter (Core Image built-in filters) to apply effects to images.\n- Import CoreImage AND CoreImage.CIFilterBuiltins for the modern type-safe API.\n- Use CIContext for rendering — create it ONCE and reuse (expensive to create).\n\nWORKFLOW:\n1. Convert UIImage to CIImage: let ciImage = CIImage(image: uiImage)\n2. Apply filter: filter.inputImage = ciImage (or use setValue(ciImage, forKey: kCIInputImageKey))\n3. Get output: guard let output = filter.outputImage else { return }\n4. Render to CGImage: guard let cgImage = context.createCGImage(output, from: output.extent) else { return }\n5. Convert back: UIImage(cgImage: cgImage)\n\nCOMMON FILTERS (type-safe API):\n- CIFilter.sepiaTone() — .intensity: Float (0–1)\n- CIFilter.gaussianBlur() — .radius: Float (0–100)\n- CIFilter.vignette() — .intensity: Float, .radius: Float\n- CIFilter.colorMonochrome() — .color: CIColor, .intensity: Float\n- CIFilter.bloom() — .intensity: Float, .radius: Float\n- CIFilter.sharpenLuminance() — .sharpness: Float\n- CIFilter.colorControls() — .brightness: Float, .contrast: Float, .saturation: Float\n- CIFilter.photoEffectNoir() — no parameters (full B&W)\n- CIFilter.unsharpMask() — .intensity: Float, .radius: Float\n\nCHAINING FILTERS:\n- Apply multiple filters by piping output -> input:\n  let step1 = CIFilter.colorControls(); step1.inputImage = ciImage; step1.contrast = 1.2\n  let step2 = CIFilter.sharpenLuminance(); step2.inputImage = step1.outputImage; step2.sharpness = 0.5\n  let final = step2.outputImage\n\nPERFORMANCE:\n- CIContext is the expensive object — create ONCE, store as a property, reuse for all renders.\n- CIFilter chains are lazy — no pixels are computed until you call context.createCGImage().\n- For real-time preview, consider using a lower-resolution version while the user adjusts sliders.\n\nSWIFTUI INTEGRATION:\n- Use @State or @Published to hold the UIImage/Image.\n- Trigger filter application on slider changes via .onChange or Combine.\n- Show before/after with a toggle or overlay slider.\n\nANTI-PATTERNS:\n- Do NOT create a new CIContext for every filter application (extremely expensive).\n- Do NOT use the string-based API (CIFilter(name: \"CISepiaTone\")) when the type-safe API is available.\n- Do NOT forget to handle nil for CIImage(image:) — some images don't convert cleanly.\n- Do NOT apply filters on the main thread for large images — use a background queue.\n- Do NOT confuse CIImage with UIImage — they are different types and need explicit conversion.",
+  "canonicalCode": {
+    "ImageFilterService.swift": "import CoreImage\nimport CoreImage.CIFilterBuiltins\nimport UIKit\nimport SwiftUI\n\nclass ImageFilterService: ObservableObject {\n    @Published var filteredImage: UIImage?\n    private let context = CIContext()\n\n    enum FilterType: String, CaseIterable, Identifiable {\n        case original = \"Original\"\n        case sepia = \"Sepia\"\n        case noir = \"B&W\"\n        case bloom = \"Bloom\"\n        case vignette = \"Vignette\"\n        case blur = \"Blur\"\n        case sharpen = \"Sharpen\"\n\n        var id: String { rawValue }\n    }\n\n    func apply(filter: FilterType, to image: UIImage, intensity: Float = 0.5) {\n        guard let ciImage = CIImage(image: image) else { return }\n\n        let output: CIImage?\n        switch filter {\n        case .original:\n            output = ciImage\n        case .sepia:\n            let f = CIFilter.sepiaTone()\n            f.inputImage = ciImage\n            f.intensity = intensity\n            output = f.outputImage\n        case .noir:\n            let f = CIFilter.photoEffectNoir()\n            f.inputImage = ciImage\n            output = f.outputImage\n        case .bloom:\n            let f = CIFilter.bloom()\n            f.inputImage = ciImage\n            f.intensity = intensity\n            f.radius = 10\n            output = f.outputImage\n        case .vignette:\n            let f = CIFilter.vignette()\n            f.inputImage = ciImage\n            f.intensity = intensity * 2\n            f.radius = 1\n            output = f.outputImage\n        case .blur:\n            let f = CIFilter.gaussianBlur()\n            f.inputImage = ciImage\n            f.radius = intensity * 20\n            output = f.outputImage\n        case .sharpen:\n            let f = CIFilter.sharpenLuminance()\n            f.inputImage = ciImage\n            f.sharpness = intensity\n            output = f.outputImage\n        }\n\n        guard let result = output,\n              let cgImage = context.createCGImage(result, from: ciImage.extent) else {\n            filteredImage = image\n            return\n        }\n        filteredImage = UIImage(cgImage: cgImage)\n    }\n}\n"
+  },
+  "antiPatterns": [
+    "Creating a new CIContext for every filter application (extremely expensive)",
+    "Using string-based CIFilter(name:) instead of type-safe CIFilter.sepiaTone() API",
+    "Not handling nil from CIImage(image:) conversion",
+    "Applying filters to large images on the main thread",
+    "Confusing CIImage with UIImage without proper conversion"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

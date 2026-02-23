@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDown, Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
 import type { ChatMessage } from "./useChat";
 
 const STREAM_WORD_DELAY_MS = 45;
@@ -100,16 +100,44 @@ export function ChatMessageList({
   const shouldAutoScrollRef = useRef(true);
   const lastForcedScrollUserMessageIdRef = useRef<string | null>(null);
   const lastScrollTopRef = useRef(0);
+  const scrollRafRef = useRef<number | null>(null);
+  const pendingScrollBehaviorRef = useRef<ScrollBehavior>("auto");
+
+  const isNearBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return false;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // A slightly larger threshold prevents flapping when content grows during streaming.
+    return distanceFromBottom < 48;
+  };
+
+  const scheduleScrollToBottom = (behavior: ScrollBehavior) => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // Prefer smooth if any caller requested it.
+    if (behavior === "smooth") pendingScrollBehaviorRef.current = "smooth";
+
+    if (scrollRafRef.current != null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const target = scrollRef.current;
+      if (!target) return;
+      const b = pendingScrollBehaviorRef.current;
+      pendingScrollBehaviorRef.current = "auto";
+      target.scrollTo({ top: target.scrollHeight, behavior: b });
+    });
+  };
 
   const updateAutoScrollFlag = () => {
     const el = scrollRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const atBottom = distanceFromBottom < 12;
+    const atBottom = distanceFromBottom < 48;
     const scrollingUp = el.scrollTop < lastScrollTopRef.current;
     lastScrollTopRef.current = el.scrollTop;
 
-    setIsAtBottom(atBottom);
+    setIsAtBottom((prev) => (prev === atBottom ? prev : atBottom));
 
     // Priority: if the user scrolls up, stop pinning to bottom immediately.
     if (scrollingUp && !atBottom) {
@@ -135,11 +163,22 @@ export function ChatMessageList({
     }
 
     if (!shouldAutoScrollRef.current) return;
-    bottomRef.current?.scrollIntoView({
-      behavior: lastIsNewUserMessage ? "smooth" : "auto",
-      block: "end",
-    });
-  }, [messages, isTyping, streamedContent]);
+    scheduleScrollToBottom(lastIsNewUserMessage ? "smooth" : "auto");
+  }, [messages, isTyping]);
+
+  useEffect(() => {
+    if (!shouldAutoScrollRef.current) return;
+    // When streaming grows the content, follow only if the user is already near the bottom.
+    if (!isNearBottom()) return;
+    scheduleScrollToBottom("auto");
+  }, [streamedContent]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = null;
+    };
+  }, []);
 
   // Stream assistant messages that have content (word-by-word)
   const streamStartedKeyRef = useRef<string | null>(null);
@@ -187,33 +226,34 @@ export function ChatMessageList({
   }, [messages]);
 
   return (
-    <div
-      ref={scrollRef}
-      onScroll={updateAutoScrollFlag}
-      className="flex flex-1 flex-col overflow-y-auto p-5"
-    >
-      {messages.length === 0 && !isTyping && (
-        <div className="flex flex-1 flex-col items-center justify-center py-12 text-center animate-fade-in" style={{ animationDelay: "50ms" }}>
-          <h2 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">
-            What do you want to build?
-          </h2>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Describe your app in plain language—AI writes Swift and you preview live.
-          </p>
-          {onEnterGuidedMode && (
-            <button
-              type="button"
-              onClick={onEnterGuidedMode}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[var(--button-primary-bg)]/30 bg-[var(--button-primary-bg)]/10 px-4 py-2 text-xs font-medium text-[var(--button-primary-bg)] hover:bg-[var(--button-primary-bg)]/20 transition-colors"
-            >
-              <Sparkles className="h-3.5 w-3.5" aria-hidden />
-              Try Guided Mode
-            </button>
-          )}
-        </div>
-      )}
-      <div className="space-y-1">
-        {messages.map((msg, index) => {
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div
+        ref={scrollRef}
+        onScroll={updateAutoScrollFlag}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5"
+      >
+        {messages.length === 0 && !isTyping && (
+          <div className="flex flex-1 flex-col items-center justify-center py-12 text-center animate-fade-in" style={{ animationDelay: "50ms" }}>
+            <h2 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">
+              What do you want to build?
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Describe your app in plain language—AI writes Swift and you preview live.
+            </p>
+            {onEnterGuidedMode && (
+              <button
+                type="button"
+                onClick={onEnterGuidedMode}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[var(--button-primary-bg)]/30 bg-[var(--button-primary-bg)]/10 px-4 py-2 text-xs font-medium text-[var(--button-primary-bg)] hover:bg-[var(--button-primary-bg)]/20 transition-colors"
+              >
+                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                Try Guided Mode
+              </button>
+            )}
+          </div>
+        )}
+        <div className="space-y-1">
+          {messages.map((msg, index) => {
           const isStreamingThis = msg.role === "assistant" && msg.id === streamingMessageId;
           const displayContent = isStreamingThis ? streamedContent : msg.content;
           const streamingComplete = !isStreamingThis || streamedContent === msg.content;
@@ -286,26 +326,9 @@ export function ChatMessageList({
           </div>
           );
         })}
-      </div>
-
-      {!isAtBottom && (
-        <div className="sticky bottom-3 z-10 flex justify-center pointer-events-none">
-          <button
-            type="button"
-            onClick={() => {
-              shouldAutoScrollRef.current = true;
-              bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-            }}
-            className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--panel-bg)]/90 px-3 py-1.5 text-xs text-[var(--text-secondary)] shadow-sm backdrop-blur hover:text-[var(--text-primary)] hover:border-[var(--button-primary-bg)]/40 transition-colors"
-            aria-label="Jump to latest message"
-            title="Jump to latest"
-          >
-            <ArrowDown className="h-3.5 w-3.5" aria-hidden />
-            Jump to latest
-          </button>
         </div>
-      )}
-      <div ref={bottomRef} />
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }

@@ -262,6 +262,11 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: Forest.space3) {
             sectionLabel("Live Activities")
 
+            Text("Simulate a build so you can see the Live Activity on the lock screen or Dynamic Island without running a real build.")
+                .font(.system(size: Forest.textXs))
+                .foregroundColor(Forest.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Lock Screen & Dynamic Island")
@@ -284,7 +289,7 @@ struct SettingsView: View {
             }
 
             HStack {
-                Button(testActivityId == nil ? "End Test" : "End Test") {
+                Button("End Test") {
                     Task { await endTestLiveActivity() }
                 }
                 .font(.system(size: Forest.textSm, weight: .semibold))
@@ -293,6 +298,7 @@ struct SettingsView: View {
                 .padding(.vertical, Forest.space2)
                 .background(Forest.backgroundSecondary)
                 .cornerRadius(Forest.radiusSm)
+                .disabled(testActivityId == nil)
 
                 Button("Refresh Status") {
                     refreshLiveActivityDebugInfo()

@@ -154,6 +154,65 @@ function isUntitledName(name: string | undefined | null): boolean {
   return !n || n === "untitled app" || n === "untitled";
 }
 
+function getStableMessagesForPersistence(messages: ChatMessage[]): ChatMessage[] {
+  return messages.filter((m) => {
+    if (m.id.startsWith("stream-progress-")) return false;
+    const c = (m.content ?? "").trim();
+    const looksLikeLiveProgress =
+      c.startsWith("Connecting…") ||
+      c.startsWith("Validating build on Mac…") ||
+      c.startsWith("Thinking…");
+    const hasMeta =
+      (m.editedFiles?.length ?? 0) > 0 ||
+      !!m.usage ||
+      typeof m.estimatedCostUsd === "number";
+    if (m.role === "assistant" && looksLikeLiveProgress && !hasMeta) return false;
+    return true;
+  });
+}
+
+function formatDurationShort(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  if (m <= 0) return `${sec}s`;
+  if (m < 60) return `${m}m ${sec}s`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${h}h ${mm}m ${sec}s`;
+}
+
+function formatStatusDurations(status: string): string {
+  return status.replace(/\((\d+)s\)/g, (_match, n) => {
+    const seconds = Number.parseInt(String(n), 10);
+    if (!Number.isFinite(seconds)) return _match;
+    return `(${formatDurationShort(seconds)})`;
+  });
+}
+
+function persistChatToServer(projectId: string, messages: ChatMessage[]): void {
+  if (typeof window === "undefined") return;
+  const stable = getStableMessagesForPersistence(messages);
+  if (stable.length === 0) return;
+  const url = `/api/projects/${projectId}/chat`;
+  try {
+    if (typeof navigator !== "undefined" && "sendBeacon" in navigator) {
+      const blob = new Blob([JSON.stringify({ messages: stable })], { type: "application/json" });
+      // sendBeacon is best-effort and survives refresh/pagehide.
+      (navigator as any).sendBeacon(url, blob);
+      return;
+    }
+  } catch {
+    // fall through to fetch
+  }
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: stable }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
 function updateProjectNameInLocalStorage(projectId: string, name: string): void {
   if (typeof window === "undefined") return;
   try {
@@ -225,6 +284,12 @@ export function useChat(
   const queueRef = useRef<QueuedMessage[]>([]);
   const processingRef = useRef(false);
   const hydratedRef = useRef(false);
+  const serverPersistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     return () => {
@@ -235,11 +300,27 @@ export function useChat(
       validateTickRef.current = null;
       abortWithReasonRef.current = null;
       cancelValidationRef.current = false;
+      if (serverPersistTimeoutRef.current) clearTimeout(serverPersistTimeoutRef.current);
+      serverPersistTimeoutRef.current = null;
       setCanSend(true);
       setIsTyping(false);
       setIsValidating(false);
     };
   }, []);
+
+  // Persist chat on pagehide/refresh even if localStorage is full.
+  useEffect(() => {
+    const flush = () => persistChatToServer(projectId, messagesRef.current);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [projectId]);
 
   const cancelCurrent = useCallback(() => {
     // Clear any queued follow-ups too.
@@ -275,6 +356,17 @@ export function useChat(
       setBuildStatus("live");
     } else {
       setMessages([]);
+      // Fallback: restore from server-side persisted chat (survives reboots + cleared localStorage).
+      fetch(`/api/projects/${projectId}/chat`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const msgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
+          if (msgs.length > 0) {
+            setMessages(msgs);
+            setBuildStatus("live");
+          }
+        })
+        .catch(() => {});
     }
     hydratedRef.current = true;
   }, [projectId]);
@@ -283,6 +375,12 @@ export function useChat(
   useEffect(() => {
     if (!hydratedRef.current) return;
     saveChatMessagesToLocalStorage(projectId, messages);
+
+    // Debounced server persistence of stable messages (backup for pagehide).
+    if (serverPersistTimeoutRef.current) clearTimeout(serverPersistTimeoutRef.current);
+    serverPersistTimeoutRef.current = setTimeout(() => {
+      persistChatToServer(projectId, messages);
+    }, 250);
   }, [projectId, messages]);
 
   const runClientMock = useCallback(
@@ -391,29 +489,22 @@ export function useChat(
       if (typeof usd !== "number") return "";
       return ` · ~$${usd < 0.005 ? "<0.01" : usd.toFixed(2)}`;
     };
-    const formatElapsed = (ms: number | undefined) => {
-      if (typeof ms !== "number") return "";
-      return ` · ${Math.max(1, Math.round(ms / 1000))}s`;
-    };
     const formatTokens = (receivedChars: number) => {
       const approxTokens = Math.round(receivedChars / 4);
       if (approxTokens < 50) return "";
       return ` · ~${approxTokens >= 1000 ? (approxTokens / 1000).toFixed(1) + "k" : approxTokens} tokens`;
     };
 
-    const renderProgressLine = (opts?: { elapsedMs?: number; receivedChars?: number; costUsd?: number }) => {
-      const elapsedMs =
-        typeof opts?.elapsedMs === "number"
-          ? opts.elapsedMs
-          : typeof lastElapsedMs === "number"
-            ? lastElapsedMs
-            : undefined;
+    const renderProgressLine = (opts?: { receivedChars?: number; costUsd?: number }) => {
       const receivedChars =
         typeof opts?.receivedChars === "number" ? opts.receivedChars : lastReceivedChars;
       const costUsd =
         typeof opts?.costUsd === "number" ? opts.costUsd : lastCostUsd;
 
-      const elapsedStr = formatElapsed(elapsedMs);
+      // Single source of truth for elapsed time to avoid jumps/backtracking:
+      // always use the local stopwatch (not server-provided elapsedMs).
+      const elapsedSec = Math.max(1, Math.floor((Date.now() - localStartedAt) / 1000));
+      const elapsedStr = ` · ${formatDurationShort(elapsedSec)}`;
       const tokenStr = formatTokens(receivedChars);
       const costStr = formatCost(costUsd);
       const filesStr = discoveredFilesCount > 0 ? ` · ${discoveredFilesCount} files` : "";
@@ -435,11 +526,11 @@ export function useChat(
         prev.map((m) => {
           if (m.id !== progressMessageId) return m;
           if (!sawServerProgress) {
-            const elapsedStr = ` · ${Math.max(1, Math.round(elapsedMs / 1000))}s`;
+            const elapsedStr = ` · ${formatDurationShort(Math.max(1, Math.floor(elapsedMs / 1000)))}`;
             return { ...m, content: `Connecting…${elapsedStr}` };
           }
           // Keep the UI moving even if stream chunks are buffered.
-          return { ...m, content: renderProgressLine({ elapsedMs }) };
+          return { ...m, content: renderProgressLine() };
         })
       );
     }, 1000);
@@ -474,7 +565,7 @@ export function useChat(
       setMessages((prev) => prev.filter((m) => m.id !== progressMessageId));
     };
 
-    const finish = (opts: { success?: boolean; error?: string }) => {
+    const finish = (opts: { success?: boolean; error?: string; deferLive?: boolean }) => {
       clearInterval(watchdog);
       abortControllerRef.current = null;
       abortWithReasonRef.current = null;
@@ -482,7 +573,7 @@ export function useChat(
         setBuildStatus("failed");
         removeStreamMessage();
         onError?.(opts.error);
-      } else if (opts.success) {
+      } else if (opts.success && !opts.deferLive) {
         setBuildStatus(queueRef.current.length > 0 ? "building" : "live");
       }
       processQueue();
@@ -525,7 +616,7 @@ export function useChat(
 
         const decoder = new TextDecoder();
         let buffer = "";
-        type DoneEvent = { type: "done"; assistantMessage: unknown; buildStatus?: string; projectFiles?: Array<{ path: string; content: string }> };
+        type DoneEvent = { type: "done"; assistantMessage: unknown; buildStatus?: string; projectFiles?: Array<{ path: string; content: string }>; skillIds?: string[] };
         let doneEvent: DoneEvent | null = null;
         let errorEvent: { type: "error"; error: string } | null = null;
 
@@ -573,7 +664,9 @@ export function useChat(
                   const phaseMsg: ChatMessage = {
                     id: `stream-phase-${streamRunId}-${event.phase}`,
                     role: "assistant",
-                    content: `${currentPhaseLabel}${formatElapsed(event.elapsedMs)}`,
+                    content: `${currentPhaseLabel} · ${formatDurationShort(
+                      Math.max(1, Math.floor((Date.now() - localStartedAt) / 1000))
+                    )}`,
                   };
                   setMessages((prev) => {
                     const idx = prev.findIndex((m) => m.id === progressMessageId);
@@ -605,16 +698,13 @@ export function useChat(
                 const prevChars = lastReceivedChars;
                 lastReceivedChars = event.receivedChars;
                 if (event.receivedChars > prevChars) lastIncreaseAt = Date.now();
-                lastElapsedMs = event.elapsedMs;
                 lastCostUsd = event.estimatedCostUsdSoFar;
-                lastProgressElapsedMs = event.elapsedMs;
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === progressMessageId
                       ? {
                           ...m,
                           content: renderProgressLine({
-                            elapsedMs: event.elapsedMs,
                             receivedChars: event.receivedChars,
                             costUsd: event.estimatedCostUsdSoFar,
                           }),
@@ -646,6 +736,7 @@ export function useChat(
           return;
         }
 
+        let deferLive = false;
         if (doneEvent) {
           onMessageSuccess?.();
           // Stop status updates immediately so the final assistant message can stream/render without being interrupted.
@@ -708,6 +799,7 @@ export function useChat(
           };
 
           if (isProBuild && onProBuildComplete) {
+            deferLive = true;
             setIsValidating(true);
             // Don't show "App built" yet; show one message after validation with app description + result.
             // Placeholder has no editedFiles/usage so it renders as progress (muted, same as "Generating..." / "Validating structured output").
@@ -716,7 +808,7 @@ export function useChat(
               {
                 id: validateMessageId,
                 role: "assistant",
-                content: "Validating build on Mac… Waiting for runner… (0s)",
+                content: `Validating build on Mac… Waiting for runner… (${formatDurationShort(0)})`,
               },
             ]);
             const progressBase = "Validating build on Mac… Waiting for runner…";
@@ -732,7 +824,9 @@ export function useChat(
               const elapsed = Math.floor((Date.now() - r.startTime) / 1000);
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.id === r.messageId ? { ...m, content: `${r.base} (${elapsed}s)` } : m
+                  m.id === r.messageId
+                    ? { ...m, content: `${r.base} (${formatDurationShort(elapsed)})` }
+                    : m
                 )
               );
             };
@@ -741,11 +835,18 @@ export function useChat(
             onProBuildComplete(
               projectId,
               (status) => {
-                const base = status.replace(/\s*\(\d+s\)\s*$/, "").trim();
+                // Do not trust status-provided timers; keep a single local stopwatch.
+                const formatted = formatStatusDurations(status);
+                const base = formatted.replace(/\s*\([^)]*\)\s*$/, "").trim();
                 if (validateTickRef.current) validateTickRef.current.base = base;
+                const elapsed = validateTickRef.current
+                  ? Math.floor((Date.now() - validateTickRef.current.startTime) / 1000)
+                  : 0;
                 setMessages((prev) =>
                   prev.map((m) =>
-                    m.id === validateMessageId ? { ...m, content: status } : m
+                    m.id === validateMessageId
+                      ? { ...m, content: `${base} (${formatDurationShort(elapsed)})` }
+                      : m
                   )
                 );
               }
@@ -780,6 +881,7 @@ export function useChat(
                     fileCount: editedFiles.length,
                     fileNames: result.fileNames ?? editedFiles,
                     durationMs: buildDuration,
+                    skillsUsed: doneEvent?.skillIds ?? [],
                   }),
                 }).catch(() => {});
                 const validationLine =
@@ -797,6 +899,7 @@ export function useChat(
                       : m
                   )
                 );
+                setBuildStatus(result.status === "succeeded" ? (queueRef.current.length > 0 ? "building" : "live") : "failed");
               })
               .catch(() => {
                 if (cancelValidationRef.current) {
@@ -823,6 +926,7 @@ export function useChat(
                     fileCount: editedFiles.length,
                     fileNames: editedFiles,
                     durationMs: 0,
+                    skillsUsed: doneEvent?.skillIds ?? [],
                   }),
                 }).catch(() => {});
                 setMessages((prev) =>
@@ -832,6 +936,7 @@ export function useChat(
                       : m
                   )
                 );
+                setBuildStatus("failed");
               });
           } else {
             setMessages((prev) => [
@@ -840,7 +945,7 @@ export function useChat(
             ]);
           }
         }
-        finish({ success: true });
+        finish({ success: true, deferLive });
       })
       .catch((err) => {
         if (err?.name === "AbortError") {
@@ -870,7 +975,13 @@ export function useChat(
         role: "user",
         content: trimmed.slice(0, MAX_MESSAGE_LENGTH),
       };
-      setMessages((prev) => [...prev, userMsg]);
+      setMessages((prev) => {
+        const next = [...prev, userMsg];
+        messagesRef.current = next;
+        return next;
+      });
+      // Flush the user message promptly so a quick refresh doesn't lose it.
+      persistChatToServer(projectId, messagesRef.current);
 
       if (featureFlags.useRealLLM) {
         queueRef.current.push({ text: trimmed, model, projectType });

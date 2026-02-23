@@ -1,0 +1,46 @@
+{
+  "id": "audio-recording",
+  "name": "Audio Recording & Playback (AVFoundation)",
+  "frameworks": ["AVFoundation"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "record audio",
+      "voice memo",
+      "audio recording",
+      "record sound",
+      "microphone record",
+      "play audio",
+      "audio player",
+      "voice recorder",
+      "sound recorder",
+      "soundboard",
+      "audio playback",
+      "AVAudioRecorder",
+      "AVAudioPlayer"
+    ],
+    "excludeKeywords": ["speech recognition", "transcribe", "speech to text", "dictation"]
+  },
+  "promptInjection": "CAPABILITY: Audio Recording & Playback (AVFoundation)\n\nRECORDING SETUP:\n1. Import AVFoundation.\n2. Configure AVAudioSession BEFORE creating the recorder:\n   let session = AVAudioSession.sharedInstance()\n   try session.setCategory(.playAndRecord, mode: .default)\n   try session.setActive(true)\n3. Request microphone permission: session.requestRecordPermission { granted in ... }\n4. Create a file URL in the documents directory with .m4a extension.\n5. Define recording settings:\n   let settings: [String: Any] = [\n       AVFormatIDKey: Int(kAudioFormatMPEG4AAC),\n       AVSampleRateKey: 44100,\n       AVNumberOfChannelsKey: 1,\n       AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue\n   ]\n6. Create AVAudioRecorder(url: fileURL, settings: settings), set delegate, call record().\n\nSTOPPING & SAVING:\n- Call recorder.stop() to finish. The file is automatically saved at the URL.\n- Implement AVAudioRecorderDelegate audioRecorderDidFinishRecording(_:successfully:) for cleanup.\n- Store metadata (filename, date, duration) in UserDefaults or a Codable store for the recordings list.\n\nPLAYBACK:\n1. Switch audio session category to .playback or .playAndRecord before playing.\n2. Create AVAudioPlayer(contentsOf: fileURL).\n3. Call player.prepareToPlay() then player.play().\n4. Use player.duration for total length, player.currentTime for scrubber position.\n5. Implement AVAudioPlayerDelegate audioPlayerDidFinishPlaying(_:successfully:) to reset UI.\n\nFILE MANAGEMENT:\n- Store recordings in FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!\n- Use unique filenames: \"recording-\\(Date().timeIntervalSince1970).m4a\"\n- To delete: FileManager.default.removeItem(at: fileURL)\n\nCRITICAL GOTCHAS:\n- MUST set audio session category BEFORE creating AVAudioRecorder — otherwise it silently fails.\n- MUST request microphone permission — app crashes without NSMicrophoneUsageDescription.\n- When switching from recording to playback, you may need to reconfigure the audio session category.\n- AVAudioPlayer holds a strong reference to the file — release it before deleting the file.\n- On Simulator, recording works but quality is poor (uses Mac mic). Test on device for real results.\n\nUI BEST PRACTICES:\n- Show a waveform or level meter during recording (use recorder.isMeteringEnabled = true, recorder.updateMeters(), recorder.averagePower(forChannel: 0)).\n- Show recording duration with a timer.\n- Provide pause/resume via recorder.pause() and recorder.record().\n- For playback, show a scrubber with elapsed/remaining time.\n\nANTI-PATTERNS:\n- Do NOT create AVAudioRecorder before setting the audio session category.\n- Do NOT forget NSMicrophoneUsageDescription in Info.plist.\n- Do NOT use .record category if you also need playback — use .playAndRecord.\n- Do NOT assume the file URL persists across app launches without storing it.\n- Do NOT play audio without preparing the player first (prepareToPlay).",
+  "canonicalCode": {
+    "AudioRecorder.swift": "import AVFoundation\nimport SwiftUI\n\nclass AudioRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {\n    @Published var isRecording = false\n    @Published var recordings: [RecordingItem] = []\n    @Published var permissionGranted = false\n\n    private var recorder: AVAudioRecorder?\n\n    struct RecordingItem: Identifiable, Codable, Hashable {\n        let id: UUID\n        let filename: String\n        let date: Date\n        var url: URL {\n            FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]\n                .appendingPathComponent(filename)\n        }\n    }\n\n    func requestPermission() {\n        AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in\n            DispatchQueue.main.async { self?.permissionGranted = granted }\n        }\n    }\n\n    func startRecording() {\n        let session = AVAudioSession.sharedInstance()\n        do {\n            try session.setCategory(.playAndRecord, mode: .default)\n            try session.setActive(true)\n        } catch {\n            return\n        }\n\n        let filename = \"recording-\\(Date().timeIntervalSince1970).m4a\"\n        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]\n            .appendingPathComponent(filename)\n\n        let settings: [String: Any] = [\n            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),\n            AVSampleRateKey: 44100,\n            AVNumberOfChannelsKey: 1,\n            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue\n        ]\n\n        do {\n            recorder = try AVAudioRecorder(url: url, settings: settings)\n            recorder?.delegate = self\n            recorder?.record()\n            isRecording = true\n        } catch {\n            return\n        }\n    }\n\n    func stopRecording() {\n        recorder?.stop()\n        isRecording = false\n        if let url = recorder?.url {\n            let item = RecordingItem(id: UUID(), filename: url.lastPathComponent, date: Date())\n            recordings.append(item)\n            saveRecordings()\n        }\n    }\n\n    func deleteRecording(_ item: RecordingItem) {\n        try? FileManager.default.removeItem(at: item.url)\n        recordings.removeAll { $0.id == item.id }\n        saveRecordings()\n    }\n\n    private func saveRecordings() {\n        if let data = try? JSONEncoder().encode(recordings) {\n            UserDefaults.standard.set(data, forKey: \"saved_recordings\")\n        }\n    }\n\n    func loadRecordings() {\n        guard let data = UserDefaults.standard.data(forKey: \"saved_recordings\"),\n              let items = try? JSONDecoder().decode([RecordingItem].self, from: data) else { return }\n        recordings = items.filter { FileManager.default.fileExists(atPath: $0.url.path) }\n    }\n}\n",
+    "AudioPlayerManager.swift": "import AVFoundation\nimport SwiftUI\n\nclass AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {\n    @Published var isPlaying = false\n    @Published var currentTime: TimeInterval = 0\n    @Published var duration: TimeInterval = 0\n\n    private var player: AVAudioPlayer?\n    private var timer: Timer?\n\n    func play(url: URL) {\n        do {\n            try AVAudioSession.sharedInstance().setCategory(.playback)\n            try AVAudioSession.sharedInstance().setActive(true)\n            player = try AVAudioPlayer(contentsOf: url)\n            player?.delegate = self\n            player?.prepareToPlay()\n            duration = player?.duration ?? 0\n            player?.play()\n            isPlaying = true\n            startTimer()\n        } catch {\n            return\n        }\n    }\n\n    func stop() {\n        player?.stop()\n        player = nil\n        isPlaying = false\n        currentTime = 0\n        timer?.invalidate()\n    }\n\n    func seek(to time: TimeInterval) {\n        player?.currentTime = time\n        currentTime = time\n    }\n\n    private func startTimer() {\n        timer?.invalidate()\n        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in\n            self?.currentTime = self?.player?.currentTime ?? 0\n        }\n    }\n\n    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {\n        DispatchQueue.main.async {\n            self.isPlaying = false\n            self.currentTime = 0\n            self.timer?.invalidate()\n        }\n    }\n}\n"
+  },
+  "antiPatterns": [
+    "Creating AVAudioRecorder before configuring AVAudioSession category",
+    "Forgetting NSMicrophoneUsageDescription in Info.plist (crash)",
+    "Using .record category when playback is also needed (use .playAndRecord)",
+    "Not storing recording file URLs/metadata for persistence across app launches",
+    "Playing audio without calling prepareToPlay() first"
+  ],
+  "requiredPermissions": ["NSMicrophoneUsageDescription"],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

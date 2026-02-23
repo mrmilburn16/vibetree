@@ -1,0 +1,52 @@
+{
+  "id": "barcode-scanning",
+  "name": "Barcode & QR Scanning",
+  "frameworks": [
+    "AVFoundation"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "barcode",
+      "qr code",
+      "qr scanner",
+      "scan barcode",
+      "scan qr",
+      "code scanner",
+      "upc",
+      "ean",
+      "scan code",
+      "barcode reader",
+      "qr reader"
+    ],
+    "excludeKeywords": [
+      "saved image",
+      "photo library",
+      "import image",
+      "from photos"
+    ]
+  },
+  "promptInjection": "CAPABILITY: Barcode & QR Scanning (AVFoundation Metadata)\nFor live barcode/QR scanning from the camera feed:\n\nSETUP:\n- Use AVCaptureMetadataOutput (NOT Vision framework) for real-time scanning — it is faster and purpose-built.\n- Add AVCaptureDeviceInput (.video) and AVCaptureMetadataOutput to an AVCaptureSession.\n- CRITICAL: Set metadataObjectTypes AFTER adding the output to the session: output.metadataObjectTypes = [.qr, .ean13, .ean8, .code128]. Setting them before adding the output will crash.\n- Use AVCaptureVideoPreviewLayer wrapped in UIViewRepresentable for the live preview.\n- Start session on a background queue.\n\nDELEGATE:\n- Implement AVCaptureMetadataOutputObjectsDelegate in a Coordinator or dedicated class.\n- In metadataOutput(_:didOutput:from:), extract stringValue from AVMetadataMachineReadableCodeObject.\n- Dispatch results to main thread for UI updates.\n\nDUPLICATE PREVENTION:\n- After a successful scan, set a flag and ignore scans for 1.5 seconds (cooldown timer).\n- Use UIImpactFeedbackGenerator(style: .medium).impactOccurred() for haptic feedback on scan.\n\nFALLBACK:\n- Include a \"Enter manually\" TextField below the scanner for simulator testing and accessibility.\n- Check AVCaptureDevice.default(for: .video) != nil before setup — show a placeholder on simulator.\n\nTORCH:\n- Toggle torch: device.torchMode = device.isTorchActive ? .off : .on (inside try device.lockForConfiguration() / device.unlockForConfiguration()).\n\nANTI-PATTERNS:\n- Do NOT use VisionKit DataScannerViewController for simple barcode scanning — it is heavier and less customizable.\n- Do NOT use Vision VNDetectBarcodesRequest for live scanning — AVCaptureMetadataOutput is faster.\n- Do NOT forget metadataObjectTypes — default is empty, so nothing will be detected.\n- Do NOT call session.startRunning() on the main thread.",
+  "canonicalCode": {
+    "BarcodeScannerView.swift": "import SwiftUI\nimport AVFoundation\n\nstruct BarcodeScannerView: UIViewRepresentable {\n    let session: AVCaptureSession\n    @Binding var scannedCode: String?\n    var onScan: (String) -> Void\n\n    func makeUIView(context: Context) -> ScannerUIView {\n        let view = ScannerUIView()\n        view.previewLayer.session = session\n        view.previewLayer.videoGravity = .resizeAspectFill\n\n        let metadataOutput = AVCaptureMetadataOutput()\n        if session.canAddOutput(metadataOutput) {\n            session.addOutput(metadataOutput)\n            metadataOutput.setMetadataObjectsDelegate(context.coordinator, queue: .main)\n            metadataOutput.metadataObjectTypes = [.qr, .ean13, .ean8, .code128, .code39, .upce]\n        }\n        return view\n    }\n\n    func updateUIView(_ uiView: ScannerUIView, context: Context) {}\n\n    func makeCoordinator() -> Coordinator {\n        Coordinator(onScan: onScan)\n    }\n\n    class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {\n        let onScan: (String) -> Void\n        private var lastScanTime: Date = .distantPast\n        init(onScan: @escaping (String) -> Void) { self.onScan = onScan }\n        func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput objects: [AVMetadataObject], from connection: AVCaptureConnection) {\n            guard Date().timeIntervalSince(lastScanTime) > 1.5,\n                  let obj = objects.first as? AVMetadataMachineReadableCodeObject,\n                  let value = obj.stringValue else { return }\n            lastScanTime = Date()\n            UIImpactFeedbackGenerator(style: .medium).impactOccurred()\n            onScan(value)\n        }\n    }\n\n    class ScannerUIView: UIView {\n        let previewLayer = AVCaptureVideoPreviewLayer()\n        override init(frame: CGRect) { super.init(frame: frame); layer.addSublayer(previewLayer) }\n        required init?(coder: NSCoder) { fatalError() }\n        override func layoutSubviews() { super.layoutSubviews(); previewLayer.frame = bounds }\n    }\n}"
+  },
+  "antiPatterns": [
+    "Using Vision VNDetectBarcodesRequest for live camera scanning (use AVCaptureMetadataOutput)",
+    "Setting metadataObjectTypes before adding output to session (crashes)",
+    "Calling session.startRunning() on the main thread (UI freeze)",
+    "Forgetting to set metadataObjectTypes (default is empty — nothing detected)",
+    "Not providing a manual entry fallback for simulator or accessibility"
+  ],
+  "requiredPermissions": [
+    "NSCameraUsageDescription"
+  ],
+  "stats": {
+    "totalBuilds": 2,
+    "firstAttemptCompile": 1,
+    "compileRate": 50,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "swift-charts",
+  "name": "Swift Charts",
+  "frameworks": ["Charts"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "chart",
+      "charts",
+      "bar chart",
+      "line chart",
+      "area chart",
+      "pie chart",
+      "donut chart",
+      "graph",
+      "analytics dashboard",
+      "data visualization",
+      "trend chart",
+      "swift charts",
+      "spending chart",
+      "workout analytics"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "CAPABILITY: Swift Charts\nWhen using Swift Charts (import Charts):\n\nCORRECT MARK USAGE:\n- Chart { ForEach(data) { item in BarMark(x: .value(\"Label\", item.x), y: .value(\"Value\", item.y)) } }\n- BarMark, LineMark, AreaMark, PointMark, RuleMark initializers take ONLY named parameters with PlottableValue via .value().\n- These mark structs do NOT accept trailing closures. Apply modifiers as method chains AFTER the initializer.\n\nMODIFIERS (method chain, NOT trailing closure):\n- .foregroundStyle(by: .value(\"Category\", item.category)) for color grouping.\n- .foregroundStyle(.blue) for static color.\n- .annotation(position: .top) { Text(\"label\") } — annotation DOES accept a trailing closure (it is the exception).\n- .symbol(by: .value(\"Type\", item.type)) for point differentiation.\n- .position(by: .value(\"Group\", item.group)) for grouped bar chart.\n\nCOMMON PATTERNS:\n- Grouped bar chart: BarMark with .position(by:)\n- Stacked bar: Default when using foregroundStyle(by:) on BarMark without .position(by:).\n- Date axis: .value(\"Date\", item.date) — Charts handles Date formatting automatically.\n- Custom axis labels: .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) }\n- Chart frame: .frame(height: 250) on the Chart view.\n\nDATA MODEL:\n- Chart data struct must conform to Identifiable.\n- Pass raw numeric types (Double, Int) to .value() — never format to String before charting.\n- Date values work directly — Charts auto-formats them on axes.\n\nANTI-PATTERNS:\n- NEVER add a trailing closure to BarMark(...) { } — this causes \"Extra trailing closure passed in call\" compiler error.\n- NEVER use .foregroundColor() on chart marks — use .foregroundStyle().\n- NEVER pass formatted strings to .value() when the value should be numeric.\n- NEVER nest Chart { Chart { } } — only one Chart wrapper.\n- NEVER use .chartPlotStyle { } with content that produces ambiguous types — keep it simple.",
+  "canonicalCode": {
+    "ChartExamples.swift": "import SwiftUI\nimport Charts\n\nstruct DailyData: Identifiable {\n    let id = UUID()\n    let day: String\n    let income: Double\n    let spending: Double\n}\n\nstruct BarChartView: View {\n    let data: [DailyData]\n\n    var body: some View {\n        Chart(data) { item in\n            BarMark(\n                x: .value(\"Day\", item.day),\n                y: .value(\"Income\", item.income)\n            )\n            .foregroundStyle(.green)\n\n            BarMark(\n                x: .value(\"Day\", item.day),\n                y: .value(\"Spending\", item.spending)\n            )\n            .foregroundStyle(.red)\n        }\n        .frame(height: 250)\n    }\n}\n\nstruct LineChartView: View {\n    let data: [DailyData]\n\n    var body: some View {\n        Chart(data) { item in\n            LineMark(\n                x: .value(\"Day\", item.day),\n                y: .value(\"Income\", item.income)\n            )\n            .foregroundStyle(.blue)\n            .symbol(.circle)\n        }\n        .frame(height: 200)\n    }\n}"
+  },
+  "antiPatterns": [
+    "Adding trailing closure to BarMark/LineMark/AreaMark/PointMark — causes 'Extra trailing closure passed in call'",
+    "Using .foregroundColor() on chart marks instead of .foregroundStyle()",
+    "Passing formatted String to .value() when it should be a numeric type",
+    "Nesting Chart inside another Chart",
+    "Not setting .frame(height:) on Chart — defaults to tiny size"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "id": "photos-picker",
+  "name": "Photos Picker",
+  "frameworks": ["PhotosUI"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "photo picker",
+      "pick photo",
+      "select photo",
+      "import photo",
+      "photo library",
+      "image picker",
+      "gallery",
+      "choose image",
+      "select image",
+      "import image",
+      "pick image",
+      "moodboard",
+      "before after",
+      "photos ui"
+    ],
+    "excludeKeywords": [
+      "camera",
+      "capture",
+      "take photo",
+      "selfie",
+      "viewfinder"
+    ]
+  },
+  "promptInjection": "CAPABILITY: Photos Picker (PhotosUI)\n\nIMPORT & USAGE:\n- import PhotosUI\n- @State var selectedItem: PhotosPickerItem?\n- @State var selectedImage: UIImage?\n- PhotosPicker(selection: $selectedItem, matching: .images) { Label(\"Choose Photo\", systemImage: \"photo\") }\n- Load in .onChange(of: selectedItem) — see canonical code.\n\nLOADING IMAGE FROM PhotosPickerItem:\n- Use item.loadTransferable(type: Data.self) — async/await pattern.\n- Convert Data to UIImage on success.\n- Handle loading failure gracefully with an error state.\n\nMULTI-SELECT:\n- @State var selectedItems: [PhotosPickerItem] = []\n- PhotosPicker(selection: $selectedItems, maxSelectionCount: 5, matching: .images)\n- Process each item in a loop with loadTransferable.\n\nVIDEO SELECTION:\n- matching: .videos for videos only.\n- matching: .any(of: [.images, .videos]) for both.\n\nKEY POINT: PhotosPicker does NOT require any special permission — it uses a privacy-preserving out-of-process picker. Do NOT request Photos library access (PHPhotoLibrary) unless you need full album management.\n\nANTI-PATTERNS:\n- Do NOT use UIImagePickerController — PhotosPicker is the modern SwiftUI replacement.\n- Do NOT use PHPickerViewController with UIViewControllerRepresentable — use the native SwiftUI PhotosPicker.\n- Do NOT request PHPhotoLibrary authorization just to pick photos — PhotosPicker handles privacy automatically.\n- Do NOT assume loadTransferable always succeeds — handle nil/error.",
+  "canonicalCode": {
+    "PhotoPickerExample.swift": "import SwiftUI\nimport PhotosUI\n\nstruct PhotoPickerView: View {\n    @State private var selectedItem: PhotosPickerItem?\n    @State private var selectedImage: UIImage?\n\n    var body: some View {\n        VStack {\n            if let image = selectedImage {\n                Image(uiImage: image)\n                    .resizable()\n                    .scaledToFit()\n                    .frame(maxHeight: 300)\n            }\n\n            PhotosPicker(selection: $selectedItem, matching: .images) {\n                Label(\"Choose Photo\", systemImage: \"photo.on.rectangle\")\n            }\n        }\n        .onChange(of: selectedItem) { _, newItem in\n            Task {\n                if let data = try? await newItem?.loadTransferable(type: Data.self),\n                   let uiImage = UIImage(data: data) {\n                    selectedImage = uiImage\n                }\n            }\n        }\n    }\n}"
+  },
+  "antiPatterns": [
+    "Using UIImagePickerController instead of PhotosPicker",
+    "Using PHPickerViewController with UIViewControllerRepresentable",
+    "Requesting PHPhotoLibrary authorization for simple photo picking (PhotosPicker does not need it)",
+    "Not handling loadTransferable failure (returns nil or throws)"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

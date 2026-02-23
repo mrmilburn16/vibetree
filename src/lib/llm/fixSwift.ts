@@ -57,7 +57,7 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       content = "import AVFoundation\n" + content;
     }
 
-    const usesStoreKit = /\b(Product|Transaction|StoreKit|SubscriptionStoreView)\b/.test(content);
+    const usesStoreKit = /\b(SubscriptionStoreView|StoreKit\.Transaction|Product\.SubscriptionInfo|import StoreKit)\b/.test(content);
     if (usesStoreKit && !content.includes("import StoreKit")) {
       content = "import StoreKit\n" + content;
     }

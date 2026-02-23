@@ -200,7 +200,7 @@ struct AppLiveActivityWidget: Widget {
   if (preferredDevice) {
     zip.file(
       "README.txt",
-      `To run on your device: In Xcode, select "${preferredDevice}" from the device dropdown (next to the scheme in the toolbar). Xcode will then remember it for future runs.\n`,
+      `To run on your device:\n- Xcode opens with whatever Run destination you last used (project exports cannot force it to switch automatically).\n- In Xcode, select "${preferredDevice}" from the device dropdown (next to the scheme in the toolbar).\n- Xcode will then remember it for future runs.\n`,
       zipOpt
     );
   }

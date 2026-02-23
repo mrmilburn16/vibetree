@@ -1,0 +1,56 @@
+{
+  "id": "vision-barcode-from-image",
+  "name": "Barcode/QR Detection from Photos (Vision)",
+  "frameworks": [
+    "Vision",
+    "PhotosUI"
+  ],
+  "version": 3,
+  "detection": {
+    "keywords": [
+      "saved image",
+      "from photos",
+      "photo library",
+      "import image",
+      "import photo",
+      "still frame",
+      "detect barcodes in image",
+      "detect qr in image",
+      "vision barcode",
+      "vndetectbarcodesrequest",
+      "package label",
+      "shipping label",
+      "scan label image"
+    ],
+    "excludeKeywords": [
+      "live camera",
+      "live scanning",
+      "metadata output",
+      "avcapturemetadataoutput"
+    ]
+  },
+  "promptInjection": "CAPABILITY: Barcode/QR detection from still images (Vision)\nUse this when the user wants to detect barcodes/QR codes from a photo (still frame), NOT live metadata scanning.\n\nAPPROACH:\n- Use PhotosUI PhotosPicker (preferred) to import an image.\n- Convert to CGImage and run Vision VNDetectBarcodesRequest.\n- Return all detected barcodes with: symbology, payloadStringValue, confidence, and boundingBox for overlays.\n\nCRITICAL UX REQUIREMENT:\n- Always show BOTH:\n  1) the raw payload (exact payloadStringValue)\n  2) a normalized \"display\" value suitable for humans\n- Copy button should copy the normalized value by default, but provide a \"Copy raw\" option (or a details view).\n\nNORMALIZATION (carrier-aware, fixes FedEx/USPS/UPS label codes):\n- Shipping labels (often Code 128 / PDF417) frequently encode routing/Application Identifiers. The decoded payload may be longer than the tracking number.\n- Implement carrier-aware normalization that produces a PRIMARY display value plus OPTIONAL labeled candidates.\n  - Keep the raw payload always.\n  - Build helpers:\n    - digitsOnly = raw.filter { $0.isNumber }\n    - upperAlnum = raw.uppercased().filter { $0.isLetter || $0.isNumber }\n  - UPS: if upperAlnum starts with \"1Z\" and has >= 18 chars, candidate = first 18 (label: \"UPS (1Z)\")\n  - USPS: if digitsOnly is exactly 22 digits, candidate = digitsOnly (label: \"USPS (22 digits)\")\n  - FedEx: if digitsOnly is exactly 12 digits, candidate = digitsOnly (label: \"FedEx (12 digits)\")\n          if digitsOnly is exactly 15 digits, candidate = digitsOnly (label: \"FedEx (15 digits)\")\n  - Ambiguous lengths (like 20 digits) should be labeled as \"Carrier (20 digits)\" — do NOT duplicate it as both USPS and FedEx.\n  - If digitsOnly is longer than 22:\n    - Compute last22 = suffix(22). If it starts with \"9\" (strong USPS signal), treat it as USPS and suppress shorter suffix candidates (like last20/last15/last12) to reduce noise.\n    - Otherwise, generate suffix candidates (last 22, last 20, last 15, last 12) with clear labels.\n- UI: show the primary value prominently and list candidates below; let users tap a candidate to copy it.\n\nANTI-PATTERNS:\n- Do NOT assume the decoded string is already user-friendly.\n- Do NOT permanently strip prefixes without preserving the raw payload.\n- Do NOT hardcode \"last 12\" for every label — use carrier-aware candidates.\n- Do NOT use StoreKit/Apple Pay/IAP just because the app mentions \"payments\" as ledger entries.\n",
+  "canonicalCode": {
+    "VisionBarcodeDetector.swift": "import Vision\nimport UIKit\n\nstruct DetectedCode: Identifiable, Hashable {\n    let id = UUID()\n    let rawValue: String\n    let symbology: VNBarcodeSymbology\n    let confidence: VNConfidence\n    let boundingBox: CGRect\n\n    var normalized: NormalizedCode {\n        BarcodeNormalizer.normalize(raw: rawValue, symbology: symbology)\n    }\n}\n\nenum VisionBarcodeDetector {\n    static func detect(in image: UIImage) async -> [DetectedCode] {\n        guard let cg = image.cgImage else { return [] }\n\n        return await withCheckedContinuation { cont in\n            let request = VNDetectBarcodesRequest { req, _ in\n                let results = (req.results as? [VNBarcodeObservation]) ?? []\n                let codes: [DetectedCode] = results.compactMap { obs in\n                    guard let raw = obs.payloadStringValue, !raw.isEmpty else { return nil }\n                    return DetectedCode(\n                        rawValue: raw,\n                        symbology: obs.symbology,\n                        confidence: obs.confidence,\n                        boundingBox: obs.boundingBox\n                    )\n                }\n                cont.resume(returning: codes)\n            }\n            request.symbologies = [.qr, .ean8, .ean13, .upce, .code39, .code128, .pdf417, .aztec, .dataMatrix]\n\n            let handler = VNImageRequestHandler(cgImage: cg)\n            DispatchQueue.global(qos: .userInitiated).async {\n                try? handler.perform([request])\n            }\n        }\n    }\n}\n",
+    "BarcodeNormalizer.swift": "import Foundation\nimport Vision\n\nstruct NormalizedCandidate: Hashable {\n    let label: String\n    let value: String\n}\n\nstruct NormalizedCode: Hashable {\n    /// The value you show prominently + copy by default.\n    let displayValue: String\n    /// The original payloadStringValue.\n    let rawValue: String\n    /// Optional hint shown near the primary value.\n    let note: String?\n    /// Optional labeled alternatives (e.g. UPS/FedEx/USPS candidates).\n    let candidates: [NormalizedCandidate]\n}\n\nenum BarcodeNormalizer {\n    static func normalize(raw: String, symbology: VNBarcodeSymbology) -> NormalizedCode {\n        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)\n        if trimmed.isEmpty {\n            return NormalizedCode(displayValue: \"\", rawValue: raw, note: nil, candidates: [])\n        }\n\n        let digitsOnly = trimmed.filter { $0.isNumber }\n        let upperAlnum = trimmed.uppercased().filter { $0.isLetter || $0.isNumber }\n\n        var candidates: [NormalizedCandidate] = []\n        func add(_ label: String, _ value: String) {\n            let v = value.trimmingCharacters(in: .whitespacesAndNewlines)\n            guard !v.isEmpty else { return }\n            if candidates.contains(where: { $0.value == v }) { return }\n            candidates.append(.init(label: label, value: v))\n        }\n\n        // UPS 1Z format (18 chars).\n        if upperAlnum.hasPrefix(\"1Z\"), upperAlnum.count >= 18 {\n            add(\"UPS (1Z)\", String(upperAlnum.prefix(18)))\n        }\n\n        if !digitsOnly.isEmpty {\n            switch digitsOnly.count {\n            case 12:\n                add(\"FedEx (12 digits)\", digitsOnly)\n            case 15:\n                add(\"FedEx (15 digits)\", digitsOnly)\n            case 20:\n                add(\"Carrier (20 digits)\", digitsOnly)\n            case 22:\n                add(\"USPS (22 digits)\", digitsOnly)\n            default:\n                break\n            }\n\n            if digitsOnly.count > 22 {\n                let last22 = String(digitsOnly.suffix(22))\n                add(\"USPS candidate (last 22)\", last22)\n\n                // If the last 22 starts with 9, it's very likely a USPS tracking number.\n                // Suppress shorter suffix candidates (they're usually just chopped versions) to reduce noise.\n                if !last22.hasPrefix(\"9\") {\n                    add(\"Carrier candidate (last 20)\", String(digitsOnly.suffix(20)))\n                    add(\"FedEx candidate (last 15)\", String(digitsOnly.suffix(15)))\n                    add(\"FedEx candidate (last 12)\", String(digitsOnly.suffix(12)))\n                }\n            }\n        }\n\n        if symbology == .qr {\n            return NormalizedCode(displayValue: trimmed, rawValue: trimmed, note: nil, candidates: candidates)\n        }\n\n        if let primary = candidates.first {\n            return NormalizedCode(displayValue: primary.value, rawValue: trimmed, note: primary.label, candidates: candidates)\n        }\n\n        return NormalizedCode(displayValue: trimmed, rawValue: trimmed, note: nil, candidates: [])\n    }\n}\n"
+  },
+  "antiPatterns": [
+    "Assuming payloadStringValue is always the value users want to copy (shipping labels often embed extra prefixes)",
+    "Stripping prefixes without preserving the raw payload value somewhere in the UI",
+    "Using Vision VNDetectBarcodesRequest for live camera scanning (use AVCaptureMetadataOutput for real-time)",
+    "Treating ledger \"payments\" as Apple Pay / StoreKit purchases and adding entitlements"
+  ],
+  "requiredPermissions": [
+    "NSCameraUsageDescription"
+  ],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}
+

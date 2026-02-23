@@ -141,6 +141,15 @@ export function EditorLayout({ project }: { project: Project }) {
         if (p?.name) projectName = String(p.name);
         if (p?.bundleId) bundleId = String(p.bundleId);
         teamId = localStorage.getItem(`${XCODE_TEAM_ID_PREFIX}${projectId}`) ?? "";
+        if (!teamId) {
+          const universal = localStorage.getItem("vibetree-universal-defaults");
+          if (universal) {
+            try {
+              const parsed = JSON.parse(universal);
+              if (typeof parsed.teamId === "string") teamId = parsed.teamId;
+            } catch {}
+          }
+        }
         bundleIdOverride = localStorage.getItem(`${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`) ?? "";
       } catch {
         return { status: "failed", error: "Could not read project data" };
