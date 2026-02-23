@@ -132,6 +132,13 @@ Rules:
 5. Preserve all imports, all types, all function signatures unless a signature itself is the error.
 6. CRITICAL: Use the EXACT SAME file paths as the input. If a file is at "Models/Debt.swift", return it at "Models/Debt.swift" — never change it to "VibetreeApp/Models/Debt.swift" or any other path. Changing paths creates duplicate files that break the build.
 7. Model types used with NavigationLink(value:label:) or .navigationDestination(for:destination:) MUST conform to Hashable. If the error mentions Hashable, add it to the type declaration.
+8. While fixing compilation errors, apply these low-risk HIG quality improvements ONLY when they are one-line changes along the fix path (do NOT refactor unrelated code):
+   - If you see Color.white or Color.black used as a background, replace with Color(.systemBackground) or Color(.secondarySystemBackground).
+   - If you see Color.white or Color.black used for text, replace with Color.primary or Color.secondary.
+   - If you see .system(size: N) for body-level text, prefer .font(.body) or the closest semantic style.
+   - If you touch a Button with an Image(systemName:) and no text, add .accessibilityLabel("description") if missing.
+   - If you see .animation(.linear, ...), prefer .animation(.easeInOut(duration: 0.25), ...).
+   - Do NOT restyle entire views. These are surgical one-line improvements only.
 
 Output: JSON { "explanation": "what you fixed", "files": [{ "path": "...", "content": "..." }] }`;
 

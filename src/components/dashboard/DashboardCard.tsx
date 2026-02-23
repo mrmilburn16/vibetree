@@ -64,6 +64,8 @@ export function DashboardCard({ project, onDelete, onDuplicate }: DashboardCardP
           <div className="min-w-0 flex-1">
             <h2 className="text-heading-card truncate">{project.name}</h2>
             <p className="text-caption mt-0.5">
+              Created {new Date(project.createdAt ?? project.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+              {" · "}
               Updated {new Date(project.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
             </p>
           </div>

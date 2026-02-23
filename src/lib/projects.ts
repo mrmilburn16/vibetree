@@ -2,6 +2,7 @@ export interface Project {
   id: string;
   name: string;
   bundleId: string;
+  createdAt: number;
   updatedAt: number;
 }
 
@@ -18,7 +19,11 @@ export function getProjects(): Project[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const projects: Project[] = JSON.parse(raw);
+    return projects.map((p) => ({
+      ...p,
+      createdAt: p.createdAt ?? p.updatedAt,
+    }));
   } catch {
     return [];
   }
@@ -32,11 +37,13 @@ export function saveProjects(projects: Project[]): void {
 export function createProject(name?: string): Project {
   const projects = getProjects();
   const id = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const now = Date.now();
   const project: Project = {
     id,
     name: name || "Untitled app",
     bundleId: makeDefaultBundleId(id),
-    updatedAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
   };
   projects.unshift(project);
   saveProjects(projects);

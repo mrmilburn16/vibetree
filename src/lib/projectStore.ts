@@ -2,6 +2,7 @@ export interface ProjectRecord {
   id: string;
   name: string;
   bundleId: string;
+  createdAt: number;
   updatedAt: number;
 }
 
@@ -23,7 +24,8 @@ export function ensureProject(id: string, name = "Untitled app"): ProjectRecord 
   const existing = store.get(id);
   if (existing) return existing;
   const bundleId = makeDefaultBundleId(id);
-  const project: ProjectRecord = { id, name, bundleId, updatedAt: Date.now() };
+  const now = Date.now();
+  const project: ProjectRecord = { id, name, bundleId, createdAt: now, updatedAt: now };
   store.set(id, project);
   return project;
 }
@@ -35,7 +37,8 @@ export function listProjects(): ProjectRecord[] {
 export function createProject(name: string): ProjectRecord {
   const id = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const bundleId = makeDefaultBundleId(id);
-  const project: ProjectRecord = { id, name, bundleId, updatedAt: Date.now() };
+  const now = Date.now();
+  const project: ProjectRecord = { id, name, bundleId, createdAt: now, updatedAt: now };
   store.set(id, project);
   return project;
 }

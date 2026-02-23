@@ -1,7 +1,10 @@
 {
   "id": "speech-recognition",
   "name": "Speech Recognition (Speech Framework)",
-  "frameworks": ["Speech", "AVFoundation"],
+  "frameworks": [
+    "Speech",
+    "AVFoundation"
+  ],
   "version": 1,
   "detection": {
     "keywords": [
@@ -20,7 +23,12 @@
       "microphone input text",
       "SFSpeechRecognizer"
     ],
-    "excludeKeywords": ["text to speech", "speak aloud", "read aloud", "synthesizer"]
+    "excludeKeywords": [
+      "text to speech",
+      "speak aloud",
+      "read aloud",
+      "synthesizer"
+    ]
   },
   "promptInjection": "CAPABILITY: Speech Recognition (Speech Framework)\n\nAPPROACH:\n- Use SFSpeechRecognizer for on-device speech-to-text.\n- Two modes: (a) live audio from microphone via AVAudioEngine, (b) pre-recorded audio file via SFSpeechURLRecognitionRequest.\n- For live transcription, use SFSpeechAudioBufferRecognitionRequest with AVAudioEngine.\n\nPERMISSIONS (CRITICAL — both are required for live mic):\n1. NSSpeechRecognitionUsageDescription in Info.plist — required for Speech framework.\n2. NSMicrophoneUsageDescription in Info.plist — required for AVAudioEngine microphone access.\n3. Request authorization: SFSpeechRecognizer.requestAuthorization { status in ... }\n4. Request mic permission: AVAudioSession.sharedInstance().requestRecordPermission { granted in ... }\n5. Check both before starting — show clear UI if either is denied.\n\nLIVE TRANSCRIPTION FLOW:\n1. Create AVAudioEngine and get its inputNode.\n2. Configure audio session: .setCategory(.record, mode: .measurement, options: .duckOthers), then .setActive(true).\n3. Create SFSpeechAudioBufferRecognitionRequest, set shouldReportPartialResults = true.\n4. Install a tap on inputNode: inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputNode.outputFormat(forBus: 0)) { buffer, _ in request.append(buffer) }\n5. audioEngine.prepare(); try audioEngine.start()\n6. speechRecognizer.recognitionTask(with: request) { result, error in ... } — update UI with result.bestTranscription.formattedString.\n7. On stop: audioEngine.stop(); inputNode.removeTap(onBus: 0); request.endAudio().\n\nCRITICAL GOTCHAS:\n- SFSpeechRecognizer availability can change (network-dependent for some languages). Implement SFSpeechRecognizerDelegate.speechRecognizer(_:availabilityDidChange:).\n- For on-device only: set request.requiresOnDeviceRecognition = true (iOS 13+). This limits languages but works offline.\n- Recognition tasks have a ~60-second limit for continuous recognition. For longer sessions, stop and restart the task periodically.\n- ALWAYS remove the audio tap before installing a new one — calling installTap twice without removeTap crashes.\n- Create a NEW SFSpeechAudioBufferRecognitionRequest for each recording session — do not reuse.\n\nUI BEST PRACTICES:\n- Show a pulsing mic indicator while recording.\n- Display partial results in real-time (grayed out or italic) and final results in normal text.\n- Provide a clear Start/Stop toggle button.\n- Show \"Speech recognition unavailable\" with a retry option when the recognizer reports unavailability.\n\nANTI-PATTERNS:\n- Do NOT forget NSMicrophoneUsageDescription — the app will crash on mic access without it.\n- Do NOT reuse SFSpeechAudioBufferRecognitionRequest across sessions.\n- Do NOT call installTap without first calling removeTap if a tap already exists.\n- Do NOT assume speech recognition works in Simulator — it requires a real microphone.\n- Do NOT block the main thread with audio engine operations.",
   "canonicalCode": {
@@ -33,9 +41,12 @@
     "Not handling SFSpeechRecognizer availability changes",
     "Running audio engine operations on the main thread"
   ],
-  "requiredPermissions": ["NSSpeechRecognitionUsageDescription", "NSMicrophoneUsageDescription"],
+  "requiredPermissions": [
+    "NSSpeechRecognitionUsageDescription",
+    "NSMicrophoneUsageDescription"
+  ],
   "stats": {
-    "totalBuilds": 0,
+    "totalBuilds": 1,
     "firstAttemptCompile": 0,
     "compileRate": 0,
     "functionalSuccesses": 0,

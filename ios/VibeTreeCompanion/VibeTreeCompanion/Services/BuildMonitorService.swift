@@ -13,6 +13,7 @@ final class BuildMonitorService: ObservableObject {
 
     private var pollTask: Task<Void, Never>?
     private var liveActivities: [String: String] = [:] // jobId -> activityId
+    private var liveActivityStartTimes: [String: Date] = [:] // jobId -> when Live Activity began (for stopwatch UX)
     private let pollInterval: TimeInterval = 2.0
     private let pollIntervalIdle: TimeInterval = 5.0
     private let notifiedJobIdsKey = "vibetree_notified_job_ids"
@@ -106,7 +107,7 @@ final class BuildMonitorService: ObservableObject {
     private func updateLiveActivity(for job: BuildJob) async {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
-        let progress = job.estimatedProgress(averageBuildTime: averageBuildTime)
+        let progress = liveActivityProgress(for: job)
         let estimatedLeft: Int? = {
             guard !job.status.isTerminal else { return nil }
             let elapsed = job.elapsedSeconds
@@ -118,7 +119,7 @@ final class BuildMonitorService: ObservableObject {
         let state = BuildActivityAttributes.ContentState(
             status: job.status.rawValue,
             progress: progress,
-            elapsedSeconds: job.elapsedSeconds,
+            elapsedSeconds: liveActivityElapsedSeconds(for: job),
             stepLabel: job.stepLabel,
             estimatedSecondsLeft: estimatedLeft,
             attempt: job.attempt,
@@ -136,7 +137,28 @@ final class BuildMonitorService: ObservableObject {
         }
     }
 
+    /// Milestone-based progress for Live Activities.
+    /// We keep the in-app list smoother/estimated, but make the Live Activity more "honest" and readable.
+    private func liveActivityProgress(for job: BuildJob) -> Double {
+        switch job.status {
+        case .generating:
+            return 0.20
+        case .queued:
+            return 0.40
+        case .running:
+            if job.autoFixInProgress == true { return 0.90 }
+            let fraction = min(Double(job.elapsedSeconds) / max(30, averageBuildTime), 1.0)
+            return min(0.95, 0.45 + fraction * 0.50)
+        case .succeeded:
+            return 1.0
+        case .failed:
+            // Keep it near the end but don't jump to 100%.
+            return min(0.95, max(0.45, job.estimatedProgress(averageBuildTime: averageBuildTime)))
+        }
+    }
+
     private func startLiveActivity(for job: BuildJob, state: BuildActivityAttributes.ContentState) {
+        liveActivityStartTimes[job.id] = Date()
         let attributes = BuildActivityAttributes(
             jobId: job.id,
             projectName: job.projectName
@@ -171,6 +193,7 @@ final class BuildMonitorService: ObservableObject {
             await activity.end(content, dismissalPolicy: .after(.now + 300))
         }
         liveActivities.removeValue(forKey: job.id)
+        liveActivityStartTimes.removeValue(forKey: job.id)
 
         if job.status == .succeeded {
             recordBuildTime(job.elapsedSeconds)
@@ -188,6 +211,15 @@ final class BuildMonitorService: ObservableObject {
             )
         }
         markJobAsNotified(job.id)
+    }
+
+    private func liveActivityElapsedSeconds(for job: BuildJob) -> Int {
+        // Prefer a "stopwatch since Live Activity appeared" UX (starts near 0 when it shows up).
+        // If we don't have a start time yet (before requesting), fall back to job elapsed.
+        if let start = liveActivityStartTimes[job.id] {
+            return max(0, Int(Date().timeIntervalSince(start)))
+        }
+        return job.elapsedSeconds
     }
 
     private func markJobAsNotified(_ jobId: String) {

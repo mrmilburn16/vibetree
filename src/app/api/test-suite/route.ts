@@ -2,10 +2,13 @@ import {
   getAllTestSuiteRuns,
   createTestSuiteRun,
   updateTestSuiteRun,
+  getRunsByMilestone,
 } from "@/lib/testSuiteStore";
 
-export async function GET() {
-  const runs = getAllTestSuiteRuns();
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const milestone = searchParams.get("milestone");
+  const runs = milestone ? getRunsByMilestone(milestone) : getAllTestSuiteRuns();
   return Response.json({ runs });
 }
 
@@ -16,6 +19,7 @@ export async function POST(request: Request) {
     const run = createTestSuiteRun(
       String(body.model ?? "sonnet-4.6"),
       "pro",
+      body.milestone ?? undefined,
     );
     return Response.json({ run });
   }

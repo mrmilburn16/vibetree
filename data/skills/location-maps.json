@@ -1,7 +1,10 @@
 {
   "id": "location-maps",
   "name": "Location & Maps",
-  "frameworks": ["CoreLocation", "MapKit"],
+  "frameworks": [
+    "CoreLocation",
+    "MapKit"
+  ],
   "version": 1,
   "detection": {
     "keywords": [
@@ -38,11 +41,13 @@
     "Requesting .authorizedAlways when only .whenInUse is needed",
     "Not handling the .denied authorization case with a Settings link"
   ],
-  "requiredPermissions": ["NSLocationWhenInUseUsageDescription"],
+  "requiredPermissions": [
+    "NSLocationWhenInUseUsageDescription"
+  ],
   "stats": {
-    "totalBuilds": 0,
-    "firstAttemptCompile": 0,
-    "compileRate": 0,
+    "totalBuilds": 7,
+    "firstAttemptCompile": 5,
+    "compileRate": 71,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],

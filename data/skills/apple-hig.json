@@ -1,0 +1,66 @@
+{
+  "id": "apple-hig",
+  "name": "Apple HIG Design Quality",
+  "frameworks": [
+    "SwiftUI"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "beautiful design",
+      "polished",
+      "professional looking",
+      "clean design",
+      "modern design",
+      "elegant",
+      "settings screen",
+      "settings page",
+      "profile page",
+      "onboarding flow",
+      "onboarding screen",
+      "form",
+      "sign up",
+      "sign in",
+      "login screen",
+      "dashboard",
+      "detail view",
+      "master-detail",
+      "apple design",
+      "human interface",
+      "hig",
+      "accessible",
+      "accessibility",
+      "voiceover",
+      "dark mode",
+      "light mode",
+      "dynamic type",
+      "liquid glass"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "CAPABILITY: Apple Human Interface Guidelines — Deep Design Quality\n\nThis app should exemplify Apple's Human Interface Guidelines. Follow every rule below carefully.\n\nCOLOR SYSTEM:\n- Build a small Color extension (e.g. Theme.swift) with 2-4 named colors: primary, secondary, accent, destructive. Use Color(\"AccentColor\") or define via hex extension. Reference these throughout rather than scattering raw hex.\n- Always use semantic system colors for backgrounds: Color(.systemBackground), Color(.secondarySystemBackground), Color(.systemGroupedBackground). These adapt to dark mode automatically.\n- For text: use Color.primary (auto-adapts), Color.secondary for metadata, Color(.tertiaryLabel) for hints. Never hardcode Color.white or Color.black for text.\n- Ensure 4.5:1 contrast ratio for body text, 3:1 for large titles. If your accent color is light, darken it on light backgrounds.\n\nTYPOGRAPHY HIERARCHY (strict):\n- Hero numbers / primary values: .largeTitle or .system(size: 48, weight: .bold, design: .rounded)\n- Screen titles: handled by .navigationTitle — don't duplicate.\n- Section headers: .font(.headline) or .font(.title3.weight(.semibold)).\n- Body content: .font(.body). Lists, paragraphs, descriptions.\n- Metadata / timestamps / secondary info: .font(.caption) or .font(.footnote), with .foregroundStyle(.secondary).\n- Numeric displays (timers, counters, money): use .monospacedDigit() to prevent layout jitter.\n- NEVER use .body for everything. Establish at least 3 levels of visual hierarchy on every screen.\n\nSPACING & LAYOUT:\n- Use 16pt horizontal padding (minimum) on all screens. 20pt is better for content-heavy screens.\n- VStack spacing: 8pt for tight groups, 12pt for related items, 20pt for section separation.\n- Card internal padding: 16pt all sides. Corner radius: 12-16pt. Shadow: .shadow(color: .black.opacity(0.08), radius: 8, y: 4).\n- Touch targets: 44×44pt minimum for all interactive elements. Use .frame(minWidth: 44, minHeight: 44) on small buttons.\n- Use .padding(.vertical, 12) on list rows and form fields for comfortable tapping.\n- Always use ScrollView if content might overflow. Add .safeAreaInset(edge: .bottom) for floating action buttons.\n\nNAVIGATION PATTERNS:\n- Flat apps (3-5 sections): TabView at root, each tab gets its own NavigationStack.\n- Hierarchical apps: NavigationStack with NavigationLink(value:) and .navigationDestination(for:). Show .navigationTitle and .toolbar.\n- Modal tasks (creation, editing, settings): .sheet(item:) with a toolbar containing Cancel (leading) and Done/Save (trailing, .borderedProminent).\n- Full-screen takeover (camera, media, immersive content): .fullScreenCover.\n- Search: .searchable(text:prompt:) on NavigationStack or List. System handles animation and placement.\n- Do NOT put NavigationStack inside another NavigationStack. Do NOT put TabView inside a sheet.\n\nBUTTON HIERARCHY:\n- Primary CTA (1 per screen max): Button { } label: { }.buttonStyle(.borderedProminent).controlSize(.large).\n- Secondary: .buttonStyle(.bordered).\n- Tertiary / text links: .buttonStyle(.plain) with accent foregroundStyle.\n- Destructive: Button(role: .destructive) — gets red automatically.\n- Icon-only buttons: always add .accessibilityLabel(\"Description\").\n- Disabled state: .disabled(condition) — system handles dimming.\n\nFORMS & INPUT:\n- Settings-type screens: Form { Section(\"Header\") { } } — gives grouped inset styling automatically.\n- Label + TextField: in Form, use LabeledContent or let Form auto-label. Standalone: put a Text label above.\n- Set .textContentType(.emailAddress), .keyboardType(.emailAddress), .autocorrectionDisabled() as appropriate.\n- SecureField for passwords. Toggle for booleans. Picker for enums.\n- Validation: show inline red Text below the field, not a blocking alert. Use .foregroundStyle(.red) + .font(.caption).\n\nLISTS:\n- Settings / grouped data: .listStyle(.insetGrouped).\n- Content feeds / timelines: .listStyle(.plain).\n- Swipe-to-delete: .swipeActions(edge: .trailing) { Button(role: .destructive) { ... } }.\n- Pull-to-refresh: .refreshable { await reload() }.\n- Empty state: if items.isEmpty { ContentUnavailableView(\"No Items\", systemImage: \"tray\", description: Text(\"Add items to get started.\")) }. ContentUnavailableView is iOS 17+.\n\nALERTS & CONFIRMATIONS:\n- Destructive confirmation: .alert(\"Delete Item?\", isPresented:) with a .destructive button labeled with the action (\"Delete\", not \"OK\").\n- Multi-option: .confirmationDialog(\"Title\", isPresented:) with role-labeled buttons. Always include cancel.\n- Success feedback: use inline animation (checkmark appear, color flash), NOT an alert.\n- Errors: show inline banner or .alert with clear recovery steps.\n\nACCESSIBILITY (mandatory):\n- Every Image(systemName:) button needs .accessibilityLabel(\"Descriptive action\").\n- Decorative images: .accessibilityHidden(true).\n- Group related views: .accessibilityElement(children: .combine).\n- Test: every screen must be navigable by VoiceOver in logical order.\n- Dynamic Type: all text uses semantic styles (.body, .title2, etc.) — never hardcoded .system(size:) for body content.\n- Reduce Motion: wrap spring animations in if !UIAccessibility.isReduceMotionEnabled or use .animation(.default, value:) which respects it.\n\nANIMATION:\n- Default: .spring(response: 0.35, dampingFraction: 0.85). Natural, not bouncy.\n- Quick state changes (toggle, select): .animation(.easeInOut(duration: 0.2), value: state).\n- List insertions/deletions: withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { items.append(new) }.\n- Page transitions: NavigationStack handles these; don't add custom transitions to NavigationLink.\n- Loading shimmer: use .redacted(reason: .placeholder) with a shimmer overlay for skeleton loading.\n- NEVER use .linear animation — it feels robotic. NEVER animate with duration > 0.5s for UI state changes.\n\nDARK MODE:\n- Must work in both light and dark. Test by wrapping previews in .preferredColorScheme(.dark).\n- All backgrounds: use semantic colors (Color(.systemBackground)) or materials (.regularMaterial). These auto-adapt.\n- Shadows: reduce opacity in dark mode — .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.08), ...).\n- Dividers: use Divider() (auto-adapts) or Color(.separator).\n\nSF SYMBOLS:\n- Use SF Symbols (Image(systemName:)) for all icons. They scale with Dynamic Type automatically.\n- Rendering modes: .symbolRenderingMode(.hierarchical) for depth on detail icons, .monochrome for toolbars, .multicolor for system indicators (battery, wifi).\n- Sizing: match adjacent text with .font(.body) or use .imageScale(.medium/.large). Don't use fixed .frame() on symbols.\n- Filled vs outline: filled variants (.fill suffix) for selected/active tab items; outline for inactive.\n\nEMPTY & LOADING STATES:\n- Empty list: ContentUnavailableView with SF Symbol + description + optional action button.\n- Loading: ProgressView() centered, or skeleton loading with .redacted(reason: .placeholder).\n- Error: ContentUnavailableView with exclamationmark.triangle + error message + retry button.\n- Never show a blank white/black screen. Every state must have intentional UI.",
+  "canonicalCode": {
+    "Theme.swift": "import SwiftUI\n\nextension Color {\n    static let appPrimary = Color(\"Primary\")\n    static let appSecondary = Color(\"Secondary\")\n    static let appAccent = Color.accentColor\n    static let appDestructive = Color.red\n    \n    static let cardBackground = Color(.secondarySystemBackground)\n    static let screenBackground = Color(.systemGroupedBackground)\n}\n\nextension View {\n    func cardStyle() -> some View {\n        self\n            .padding(16)\n            .background(Color.cardBackground)\n            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))\n            .shadow(color: .black.opacity(0.08), radius: 8, y: 4)\n    }\n}",
+    "AccessibleButton.swift": "import SwiftUI\n\nstruct PrimaryButton: View {\n    let title: String\n    let action: () -> Void\n    var isLoading: Bool = false\n    var isDisabled: Bool = false\n    \n    var body: some View {\n        Button(action: action) {\n            HStack(spacing: 8) {\n                if isLoading {\n                    ProgressView()\n                        .tint(.white)\n                }\n                Text(title)\n                    .fontWeight(.semibold)\n            }\n            .frame(maxWidth: .infinity)\n        }\n        .buttonStyle(.borderedProminent)\n        .controlSize(.large)\n        .disabled(isDisabled || isLoading)\n    }\n}"
+  },
+  "antiPatterns": [
+    "Using Color.white/Color.black for backgrounds — breaks dark mode; use Color(.systemBackground)",
+    "Hardcoding .system(size: 16) for body text — use .font(.body) for Dynamic Type support",
+    "Missing .accessibilityLabel on icon-only buttons — VoiceOver can't describe the action",
+    "Using .linear animation — feels robotic; use .spring() or .easeInOut",
+    "Showing success via .alert — use inline animation/feedback instead",
+    "Empty screen with no placeholder — always show ContentUnavailableView or loading state",
+    "Multiple .borderedProminent buttons on one screen — only one primary CTA per screen",
+    "Nesting NavigationStack inside NavigationStack — causes double navigation bars and broken back buttons"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 18,
+    "firstAttemptCompile": 13,
+    "compileRate": 72,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

@@ -413,7 +413,7 @@ struct SettingsView: View {
         let state = BuildActivityAttributes.ContentState(
             status: "running",
             progress: 0.15,
-            elapsedSeconds: 12,
+            elapsedSeconds: 0,
             stepLabel: "Starting…",
             estimatedSecondsLeft: 240,
             attempt: 1,
@@ -435,7 +435,7 @@ struct SettingsView: View {
                     let next = BuildActivityAttributes.ContentState(
                         status: "running",
                         progress: progress,
-                        elapsedSeconds: 12 + (i * 3),
+                        elapsedSeconds: i * 3,
                         stepLabel: "Running…",
                         estimatedSecondsLeft: max(0, 240 - (i * 3)),
                         attempt: 1,

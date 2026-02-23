@@ -1159,6 +1159,49 @@
           "prompt": "Build a shipping tracker app that receives remote push updates to change delivery status. Provide a demo mode with local notifications. Include deep links and a status timeline UI."
         }
       ]
+    },
+    {
+      "folder": "Apple HIG Showcase (Design Patterns)",
+      "frameworks": ["SwiftUI"],
+      "notes": "Apps that demonstrate Apple Human Interface Guidelines patterns: forms, settings, navigation, accessibility, dark mode, and polished micro-interactions.",
+      "ideas": [
+        {
+          "slug": "settings-clone",
+          "title": "iOS Settings Clone (Form + Navigation)",
+          "tier": "medium",
+          "prompt": "Build a pixel-perfect clone of the iOS Settings app structure. Use Form with Section headers, NavigationStack for drill-down, Toggle for booleans, Picker for enums, and .listStyle(.insetGrouped). Include at least 5 sections: General (About, Software Update), Display & Brightness (dark mode toggle, text size slider), Sounds (volume slider, toggles), Notifications (per-app toggles), and Privacy (location, contacts toggles). Each section should drill into a detail screen. Use semantic colors throughout — no hardcoded colors. Support Dynamic Type and dark mode."
+        },
+        {
+          "slug": "onboarding-flow",
+          "title": "App Onboarding Flow (Multi-step + Animation)",
+          "tier": "medium",
+          "prompt": "Build a beautiful 4-step onboarding flow for a fictional wellness app. Step 1: Welcome with animated gradient background and large hero text. Step 2: Feature highlights with 3 cards that animate in with staggered spring animations. Step 3: Notification permission request with a clear value proposition and SF Symbol illustration. Step 4: Name input with Form styling and a primary CTA. Include a page indicator, skip button, and smooth TabView-based transitions. Use .spring() animations, semantic colors, and ensure full dark mode support."
+        },
+        {
+          "slug": "contact-form",
+          "title": "Contact Form (Validation + Accessibility)",
+          "tier": "easy",
+          "prompt": "Build a polished contact form with fields for name, email, phone, subject (Picker), and message (TextEditor). Implement inline validation: red caption text below invalid fields (empty name, invalid email format, message too short). Show a character counter for the message field. The Submit button should be .borderedProminent, disabled until all fields are valid, and show a ProgressView while 'sending' (simulated 2-second delay). On success, show an inline checkmark animation — not an alert. Every field must have proper .textContentType and .keyboardType. Add .accessibilityLabel to all controls."
+        },
+        {
+          "slug": "dashboard-widgets",
+          "title": "Analytics Dashboard (Cards + Charts + States)",
+          "tier": "hard",
+          "prompt": "Build an analytics dashboard with a polished card-based layout. Top row: 3 metric cards (total users, revenue, conversion rate) with large .largeTitle numbers, trend arrows (green up / red down SF Symbols), and .caption comparison text. Middle: a line chart (Swift Charts) showing 30 days of data. Bottom: a List of recent events with swipe actions. Include 3 states: loading (skeleton shimmer using .redacted), empty (ContentUnavailableView), and populated. Use .cardStyle() with shadows, 16pt padding, and rounded corners. Pull-to-refresh on the whole ScrollView. Full dark mode and Dynamic Type support."
+        },
+        {
+          "slug": "master-detail-notes",
+          "title": "Notes App (Master-Detail + Search + Delete)",
+          "tier": "medium",
+          "prompt": "Build a notes app demonstrating HIG navigation patterns. Sidebar/list: NavigationStack with .searchable, sorted by date. Each row shows title (.headline), preview (.subheadline, .secondary), and date (.caption). Swipe-to-delete with .confirmationDialog confirmation. Detail view: editable TextEditor with .navigationTitle set to the note title. Toolbar: share button, delete button (with destructive alert confirmation), and a 'New Note' button. Empty state: ContentUnavailableView with pencil.line SF Symbol. Persist with UserDefaults + Codable. Animate list insertions with .spring(). Dark mode and accessibility labels throughout."
+        },
+        {
+          "slug": "accessibility-showcase",
+          "title": "Accessibility Demo (VoiceOver + Dynamic Type + Reduce Motion)",
+          "tier": "medium",
+          "prompt": "Build a showcase app that demonstrates iOS accessibility features. Screen 1: a product card with image, title, price, and 'Add to Cart' button — fully labeled for VoiceOver with .accessibilityElement(children: .combine), .accessibilityLabel, and .accessibilityHint. Screen 2: an animated counter with spring animations that gracefully degrades when Reduce Motion is enabled (falls back to simple opacity fades). Screen 3: a settings-style Form that scales beautifully at every Dynamic Type size from .xSmall to .accessibility5 — test with @Environment(\\.dynamicTypeSize). Include a toggle to simulate large text. Use semantic colors and SF Symbols exclusively."
+        }
+      ]
     }
   ]
 }

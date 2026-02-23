@@ -71,6 +71,58 @@ Rules:
 - If the user asks for Liquid Glass, iOS 26 design, or glass effect: set deployment target to iOS 26 and use the real iOS 26 APIs like \`.glassEffect()\` (and GlassEffectContainer / \`.glassEffectID()\` where appropriate) so the UI matches the new design language.
 - Privacy permissions: When using privacy-sensitive APIs (camera, microphone, photo library, location, contacts, calendar, health, Face ID, speech recognition, Bluetooth, motion, NFC), the build system will automatically detect the API usage and add the corresponding Info.plist usage description keys. You do NOT need to generate an Info.plist file. However, you MUST properly request permission at runtime using the appropriate API (e.g. \`AVCaptureDevice.requestAccess(for: .video)\`, \`CLLocationManager().requestWhenInUseAuthorization()\`, etc.) before accessing the hardware. Always handle the case where the user denies permission gracefully.
 
+- Apple HIG — Accessibility (mandatory):
+  - Support Dynamic Type: use semantic text styles (.body, .title2, .caption, etc.) instead of hardcoded .system(size:). Users who set larger text sizes must see scaled text.
+  - Add .accessibilityLabel() to any Image, icon button, or non-text control. Decorative images get .accessibilityHidden(true).
+  - Minimum color contrast: 4.5:1 for body text, 3:1 for large text. Never rely on color alone to convey meaning—pair with an icon, label, or shape.
+  - Wrap motion/spring animations in \`if !UIAccessibility.isReduceMotionEnabled\` or use .animation(.default, value:) which respects Reduce Motion automatically.
+  - Mark logical groupings with .accessibilityElement(children: .combine) so VoiceOver reads them as a unit.
+
+- Apple HIG — Animation & Motion:
+  - Default animation duration: 0.25–0.35s. Use .spring(response: 0.35, dampingFraction: 0.85) for natural feel; avoid .linear (feels robotic).
+  - Always animate state transitions (sheet appearance, list insertions, toggle changes). Use withAnimation { } or .animation(.default, value:).
+  - Confirm destructive actions before executing (swipe-to-delete gets a red "Delete" label; permanent actions get a .destructive alert).
+
+- Apple HIG — Color & Dark Mode:
+  - Use semantic system colors (Color.primary, .secondary, Color(.systemBackground), Color(.secondarySystemBackground), Color(.systemGroupedBackground)) as the default palette. These adapt automatically to light/dark mode.
+  - App accent colors: define one or two accent colors using Color("AccentColor") or a custom extension; apply to buttons, active states, and links. Do not scatter random hex colors.
+  - Support both light and dark mode out of the box. Never hardcode Color.white for backgrounds or Color.black for text—use semantic colors.
+
+- Apple HIG — Buttons & Controls:
+  - Primary action: .buttonStyle(.borderedProminent) with .tint(accentColor). One primary per screen.
+  - Secondary: .buttonStyle(.bordered). Tertiary/text: .buttonStyle(.plain) or .borderless.
+  - Destructive: use role: .destructive, which gives red tint automatically.
+  - Disabled: always set .disabled(condition) and provide visual feedback (the system dims the button).
+  - Toggles: use Toggle() with standard styling. Don't build custom switches.
+
+- Apple HIG — Navigation Patterns:
+  - Flat (tabs): use TabView for 3–5 top-level sections. Each tab gets its own NavigationStack.
+  - Hierarchical: use NavigationStack > NavigationLink(value:) > .navigationDestination(for:). Show a .navigationTitle and optionally .toolbar items.
+  - Modal: use .sheet for non-blocking tasks (forms, settings, detail). Use .fullScreenCover only for immersive content (camera, media player). Always provide a clear dismiss action ("Done", "Cancel", or swipe-down).
+  - Do NOT mix: don't put a TabView inside a sheet, and don't nest NavigationStacks.
+
+- Apple HIG — Forms & Text Input:
+  - Use Form { Section { } } for settings/configuration screens—it gives standard grouped inset styling automatically.
+  - Label every field with a clear prompt (Form rows label automatically; standalone TextFields should use a Text label above).
+  - Use .textContentType, .keyboardType, and .autocapitalization to help autofill and reduce typing.
+  - Show validation inline (red text below the field) rather than blocking alerts.
+
+- Apple HIG — Alerts & Confirmations:
+  - .alert() for critical info or destructive confirmation. Include a clear title, concise message, and explicit button labels ("Delete Account", not "OK").
+  - .confirmationDialog() for action sheets with 2+ choices. Always include a .cancel role.
+  - Never show alerts for success—use inline feedback (checkmark, animation, color change).
+
+- Apple HIG — Lists & Tables:
+  - Use List with .listStyle(.insetGrouped) for settings-style screens and .listStyle(.plain) for content feeds.
+  - Swipe actions: .swipeActions(edge: .trailing) for destructive (red), .swipeActions(edge: .leading) for positive (green/blue).
+  - Pull-to-refresh: add .refreshable { } on any list backed by async data.
+  - Section headers: use Section("Title") for logical grouping.
+
+- Apple HIG — SF Symbols:
+  - Prefer SF Symbols via Image(systemName:) over custom icons. They scale with Dynamic Type automatically.
+  - Use appropriate rendering mode: .symbolRenderingMode(.hierarchical) for depth, .multicolor for system icons (weather, devices), .monochrome for toolbars.
+  - Size symbols to match adjacent text: .font(.body) or .imageScale(.large). Don't use fixed .frame on symbol images.
+
 - Sensing strategy (workout rep counting / detection): Choose the sensing approach that matches the user's described setup. Do NOT guess.
   - If the phone is placed in front of the user (selfie / FaceTime-style camera on tripod/table, “watching me”, “6–8 feet away”), Core Motion will NOT reliably detect reps because the device is stationary. In this setup, use AVFoundation camera frames + Vision human body pose estimation to detect down/up phases with smoothing + hysteresis thresholds + cooldown. Provide on-screen guidance when the body isn’t visible enough, plus a manual +1 fallback button.
   - If the phone/watch moves with the body (pocket/armband/Apple Watch), use Core Motion (accelerometer/gyro or CMPedometer) with filtering + thresholds + cooldown. Do not claim form-aware camera detection unless you are actually using Vision pose estimation.

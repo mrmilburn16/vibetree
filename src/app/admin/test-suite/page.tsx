@@ -20,6 +20,8 @@ import {
   Trash2,
   Shuffle,
   Zap,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
@@ -57,10 +59,12 @@ type TestResult = {
   fileCount: number;
   errorMessage?: string;
   buildResultId?: string;
-  /** Kept so Xcode download works without relying on server in-memory store (e.g. after refresh or serverless). */
   projectFiles?: Array<{ path: string; content: string }>;
-  /** Excluded from stats and from resume; use when a failure was due to test/env issues, not the app. */
   excluded?: boolean;
+  model?: string;
+  designRating?: number;
+  functionalityRating?: number;
+  notes?: string;
 };
 
 type RunConfig = {
@@ -73,6 +77,7 @@ type SavedRun = {
   timestamp: string;
   model: string;
   projectType: "pro";
+  milestone?: string;
   status: "running" | "completed" | "stopped";
   results: Array<{
     title: string;
@@ -84,6 +89,7 @@ type SavedRun = {
     buildResultId?: string;
     errors: string[];
     fileCount: number;
+    model?: string;
   }>;
   summary: {
     total: number;
@@ -277,6 +283,136 @@ function formatTimestamp(iso: string): string {
   });
 }
 
+function toPascalCase(str: string): string {
+  return (
+    str
+      .replace(/[^a-zA-Z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join("") || "App"
+  );
+}
+
+const MILESTONE_LABELS: Record<string, string> = {
+  "m1-baseline": "Baseline",
+  "m2-easy": "Easy",
+  "m3-medium": "Medium",
+  "m4-hard": "Hard",
+  "m5-wow": "Wow",
+};
+
+function formatModelName(m: string): string {
+  if (m === "opus-4.6") return "Claude Opus 4.6";
+  if (m === "sonnet-4.6") return "Claude Sonnet 4.6";
+  return m;
+}
+
+function generateRunReport(
+  results: TestResult[],
+  opts: { milestone?: string; model?: string; target?: number },
+): string {
+  const completed = results.filter(
+    (r) => !r.excluded && (r.status === "succeeded" || r.status === "failed" || r.status === "error"),
+  );
+  if (completed.length === 0) return "No completed results.";
+
+  const compiled = completed.filter((r) => r.compiled).length;
+  const totalAttempts = completed.reduce((s, r) => s + r.attempts, 0);
+  const totalDuration = completed.reduce((s, r) => s + r.durationMs, 0);
+  const allErrors = completed.flatMap((r) => r.compilerErrors);
+  const grouped = groupErrors(allErrors);
+  const failed = completed.filter((r) => !r.compiled);
+  const autoFixed = completed.filter((r) => r.compiled && r.attempts > 1);
+  const cleanPasses = completed.filter((r) => r.compiled && r.attempts <= 1);
+
+  const lines: string[] = [];
+  lines.push("## Test Suite Run Report");
+  if (opts.milestone) lines.push(`- Milestone: ${opts.milestone}`);
+  if (opts.model) lines.push(`- Model: ${formatModelName(opts.model)}`);
+  lines.push(
+    `- Compile rate: ${compiled}/${completed.length} (${Math.round((compiled / completed.length) * 100)}%)${opts.target ? ` \u2014 Target: ${opts.target}%` : ""}`,
+  );
+  lines.push(`- Avg attempts: ${(totalAttempts / completed.length).toFixed(1)}`);
+  lines.push(`- Total time: ${formatDuration(totalDuration)}`);
+  lines.push("");
+
+  if (grouped.length > 0) {
+    lines.push("### Error Patterns");
+    for (const { category, count } of grouped) {
+      lines.push(`- ${CATEGORY_LABELS[category]}: ${count}x (${Math.round((count / allErrors.length) * 100)}%)`);
+    }
+    lines.push("");
+  }
+
+  if (failed.length > 0) {
+    lines.push(`### Failed Apps (${failed.length})`);
+    for (const r of failed) {
+      lines.push(
+        `**${r.idea.title}** [${r.idea.category}] \u2014 ${r.attempts} attempt${r.attempts !== 1 ? "s" : ""}, ${formatDuration(r.durationMs)}`,
+      );
+      if (r.compilerErrors.length > 0) {
+        for (const e of r.compilerErrors.slice(0, 5)) {
+          lines.push(`  - ${e}`);
+        }
+        if (r.compilerErrors.length > 5) {
+          lines.push(`  - ... +${r.compilerErrors.length - 5} more`);
+        }
+      }
+      if (r.errorMessage) lines.push(`  Error: ${r.errorMessage}`);
+      if (r.designRating || r.functionalityRating)
+        lines.push(`  Ratings: Design ${r.designRating ?? "\u2014"}/5, Function ${r.functionalityRating ?? "\u2014"}/5`);
+      if (r.notes) lines.push(`  Notes: ${r.notes}`);
+      lines.push("");
+    }
+  }
+
+  if (autoFixed.length > 0) {
+    lines.push("### Auto-fixed (succeeded after retries)");
+    for (const r of autoFixed) {
+      const extras: string[] = [];
+      if (r.designRating || r.functionalityRating) extras.push(`D:${r.designRating ?? "-"}/5 F:${r.functionalityRating ?? "-"}/5`);
+      if (r.notes) extras.push(`"${r.notes}"`);
+      lines.push(`- ${r.idea.title}: ${r.attempts} attempts${extras.length ? ` — ${extras.join(", ")}` : ""}`);
+    }
+    lines.push("");
+  }
+
+  if (cleanPasses.length > 0) {
+    lines.push("### Clean passes (1st attempt)");
+    for (const r of cleanPasses) {
+      const extras: string[] = [];
+      if (r.designRating || r.functionalityRating) extras.push(`D:${r.designRating ?? "-"}/5 F:${r.functionalityRating ?? "-"}/5`);
+      if (r.notes) extras.push(`"${r.notes}"`);
+      lines.push(`- ${r.idea.title}${extras.length ? ` — ${extras.join(", ")}` : ""}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+function generateResultCopy(result: TestResult): string {
+  const lines: string[] = [];
+  lines.push(`App: ${result.idea.title} [${result.idea.category}]`);
+  lines.push(`Status: ${result.status} | Attempts: ${result.attempts} | Duration: ${formatDuration(result.durationMs)}`);
+  if (result.model) lines.push(`Model: ${formatModelName(result.model)}`);
+  if (result.compilerErrors.length > 0) {
+    lines.push(`Errors (${result.compilerErrors.length}):`);
+    for (const e of result.compilerErrors.slice(0, 10)) {
+      lines.push(`  - ${e}`);
+    }
+    if (result.compilerErrors.length > 10) {
+      lines.push(`  ... +${result.compilerErrors.length - 10} more`);
+    }
+  }
+  if (result.errorMessage) lines.push(`Error: ${result.errorMessage}`);
+  if (result.designRating || result.functionalityRating)
+    lines.push(`Ratings: Design ${result.designRating ?? "\u2014"}/5, Function ${result.functionalityRating ?? "\u2014"}/5`);
+  if (result.notes) lines.push(`Notes: ${result.notes}`);
+  return lines.join("\n");
+}
+
 /* ────────────────────────── NDJSON Stream Reader ────────────────────────── */
 
 async function readNDJSONStream(
@@ -402,14 +538,17 @@ async function downloadXcodeZip(
   projectId: string,
   projectName: string,
   projectFiles: Array<{ path: string; content: string }>,
+  developmentTeam?: string,
 ): Promise<void> {
+  const pascalName = toPascalCase(projectName);
   const res = await fetch(`/api/projects/${projectId}/export-xcode`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       files: projectFiles,
-      projectName: projectName.replace(/[^a-zA-Z0-9]/g, "") || "App",
+      projectName: pascalName,
       bundleId: "com.vibetree.test",
+      ...(developmentTeam ? { developmentTeam } : {}),
     }),
   });
   if (!res.ok) {
@@ -420,7 +559,7 @@ async function downloadXcodeZip(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${projectName.replace(/[^a-zA-Z0-9]/g, "") || "App"}.zip`;
+  a.download = `${pascalName}.zip`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -429,16 +568,19 @@ function ResultRow({
   result,
   onRerun,
   onExclude,
+  onUpdate,
   running,
 }: {
   result: TestResult;
   onRerun?: () => void;
   onExclude?: () => void;
+  onUpdate?: (updates: Partial<TestResult>) => void;
   running: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [xcodeLoading, setXcodeLoading] = useState(false);
   const [xcodeError, setXcodeError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   return (
     <article
@@ -460,6 +602,11 @@ function ResultRow({
           <div className="min-w-0">
             <p className="text-sm font-medium text-[var(--text-primary)] truncate">
               {result.idea.title}
+              {result.model && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-[var(--background-tertiary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)]">
+                  {result.model === "opus-4.6" ? "Opus" : result.model === "sonnet-4.6" ? "Sonnet" : result.model}
+                </span>
+              )}
             </p>
             <p className="text-xs text-[var(--text-tertiary)]">{result.idea.category}</p>
           </div>
@@ -501,11 +648,17 @@ function ResultRow({
                   setXcodeError(null);
                   setXcodeLoading(true);
                   try {
+                    let teamId: string | undefined;
+                    try {
+                      const ud = JSON.parse(localStorage.getItem("vibetree-universal-defaults") || "{}");
+                      teamId = ud.teamId || undefined;
+                    } catch {}
                     if (result.projectFiles?.length) {
                       await downloadXcodeZip(
                         result.projectId!,
                         result.idea.title,
                         result.projectFiles,
+                        teamId,
                       );
                     } else {
                       const url = `/api/projects/${result.projectId}/export-xcode`;
@@ -518,7 +671,7 @@ function ResultRow({
                       const downloadUrl = URL.createObjectURL(blob);
                       const a = document.createElement("a");
                       a.href = downloadUrl;
-                      a.download = `${result.idea.title.replace(/[^a-zA-Z0-9]/g, "") || "App"}.zip`;
+                      a.download = `${toPascalCase(result.idea.title)}.zip`;
                       a.click();
                       URL.revokeObjectURL(downloadUrl);
                     }
@@ -563,7 +716,22 @@ function ResultRow({
             </button>
           )}
 
-          {(result.compilerErrors.length > 0 || result.errorMessage) && (
+          {result.status !== "pending" && (
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(generateResultCopy(result));
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+              className="rounded-[var(--radius-md)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
+              title="Copy result details"
+            >
+              {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-[var(--semantic-success)]" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+          )}
+
+          {(result.status === "succeeded" || result.status === "failed" || result.status === "error") && (
             <button
               type="button"
               onClick={() => setExpanded(!expanded)}
@@ -576,9 +744,9 @@ function ResultRow({
       </div>
 
       {expanded && (
-        <div className="mt-3 border-t border-[var(--border-default)] pt-3">
+        <div className="mt-3 border-t border-[var(--border-default)] pt-3 space-y-3">
           {result.errorMessage && (
-            <p className="mb-2 text-xs text-[var(--semantic-error)]">{result.errorMessage}</p>
+            <p className="text-xs text-[var(--semantic-error)]">{result.errorMessage}</p>
           )}
           {result.compilerErrors.length > 0 && (
             <div className="rounded-[var(--radius-md)] border border-[var(--badge-error)]/30 bg-[var(--badge-error)]/10 p-3">
@@ -593,6 +761,56 @@ function ResultRow({
               )}
             </div>
           )}
+
+          {(result.status === "succeeded" || result.status === "failed") && onUpdate && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-[var(--text-tertiary)]">Design</span>
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => onUpdate({ designRating: result.designRating === star ? undefined : star })}
+                        className={`text-base leading-none transition-colors ${(result.designRating ?? 0) >= star ? "text-yellow-400" : "text-[var(--text-tertiary)]/30 hover:text-yellow-400/50"}`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                  {result.designRating != null && (
+                    <span className="text-xs tabular-nums text-[var(--text-tertiary)]">{result.designRating}/5</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-[var(--text-tertiary)]">Function</span>
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => onUpdate({ functionalityRating: result.functionalityRating === star ? undefined : star })}
+                        className={`text-base leading-none transition-colors ${(result.functionalityRating ?? 0) >= star ? "text-yellow-400" : "text-[var(--text-tertiary)]/30 hover:text-yellow-400/50"}`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                  {result.functionalityRating != null && (
+                    <span className="text-xs tabular-nums text-[var(--text-tertiary)]">{result.functionalityRating}/5</span>
+                  )}
+                </div>
+              </div>
+              <textarea
+                placeholder="Add notes (e.g. broken button, layout issue, Xcode runtime error)..."
+                value={result.notes ?? ""}
+                onChange={(e) => onUpdate({ notes: e.target.value })}
+                rows={2}
+                className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-primary)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]/50 focus:border-[var(--button-primary-bg)] focus:outline-none resize-y"
+              />
+            </div>
+          )}
         </div>
       )}
     </article>
@@ -601,7 +819,7 @@ function ResultRow({
 
 /* ────────────────────────── Summary Panel ────────────────────────── */
 
-function SummaryPanel({ results }: { results: TestResult[] }) {
+function SummaryPanel({ results, target }: { results: TestResult[]; target?: number }) {
   const completed = results.filter(
     (r) => !r.excluded && (r.status === "succeeded" || r.status === "failed" || r.status === "error"),
   );
@@ -626,6 +844,9 @@ function SummaryPanel({ results }: { results: TestResult[] }) {
           <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Pass rate</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--text-primary)]">
             {completed.length > 0 ? Math.round((compiled / completed.length) * 100) : 0}%
+            {target !== undefined && (
+              <span className="ml-1 text-sm font-normal text-[var(--text-tertiary)]">/ {target}%</span>
+            )}
           </p>
         </div>
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
@@ -675,40 +896,58 @@ function RunComparison({ runs }: { runs: SavedRun[] }) {
   const completedRuns = runs.filter((r) => r.status === "completed" && r.results.length > 0);
   const [runA, setRunA] = useState("");
   const [runB, setRunB] = useState("");
-
-  if (completedRuns.length < 2) return null;
+  const canCompare = completedRuns.length >= 2;
 
   const options: SelectOption[] = completedRuns.map((r) => ({
     value: r.id,
-    label: `${formatTimestamp(r.timestamp)} \u2014 ${r.model === "opus-4.6" ? "Opus 4.6" : "Sonnet 4.6"} (${r.summary.compileRate}%)`,
+    label: `${formatTimestamp(r.timestamp)} \u2014 ${r.model === "opus-4.6" ? "Opus 4.6" : "Sonnet 4.6"}${r.milestone ? ` [${MILESTONE_LABELS[r.milestone] ?? r.milestone}]` : ""} (${r.summary.compileRate}%)`,
   }));
 
   const a = completedRuns.find((r) => r.id === runA);
   const b = completedRuns.find((r) => r.id === runB);
 
   return (
-    <section className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
+    <section className={`rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4${!canCompare ? " opacity-60" : ""}`}>
       <div className="mb-4 flex items-center gap-2">
         <BarChart3 className="h-4 w-4 text-[var(--button-primary-bg)]" aria-hidden />
         <h3 className="text-sm font-semibold text-[var(--text-primary)]">Compare runs</h3>
+        {completedRuns.length > 0 && (
+          <span className="ml-auto text-xs tabular-nums text-[var(--text-tertiary)]">
+            {completedRuns.length} saved run{completedRuns.length !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <DropdownSelect
-          options={[{ value: "", label: "Select run A" }, ...options]}
-          value={runA}
-          onChange={setRunA}
-          className="min-w-[200px]"
-          aria-label="Select first run"
-        />
-        <span className="text-xs text-[var(--text-tertiary)]">vs</span>
-        <DropdownSelect
-          options={[{ value: "", label: "Select run B" }, ...options]}
-          value={runB}
-          onChange={setRunB}
-          className="min-w-[200px]"
-          aria-label="Select second run"
-        />
-      </div>
+
+      {!canCompare ? (
+        <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border-subtle)] bg-[var(--background-tertiary)]/50 px-4 py-6 text-center">
+          <p className="text-sm text-[var(--text-secondary)]">
+            {completedRuns.length === 0
+              ? "No completed runs yet. Run a milestone to see results here."
+              : "Complete one more run to compare side-by-side. Run the same milestone again after making system improvements, or run a different milestone to see how compile rates change."}
+          </p>
+          <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+            Each completed run is saved automatically. Select any two runs to see which apps improved or regressed.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <DropdownSelect
+              options={[{ value: "", label: "Select run A" }, ...options]}
+              value={runA}
+              onChange={setRunA}
+              className="min-w-[200px]"
+              aria-label="Select first run"
+            />
+            <span className="text-xs text-[var(--text-tertiary)]">vs</span>
+            <DropdownSelect
+              options={[{ value: "", label: "Select run B" }, ...options]}
+              value={runB}
+              onChange={setRunB}
+              className="min-w-[200px]"
+              aria-label="Select second run"
+            />
+          </div>
 
       {a && b && (
         <div className="overflow-x-auto">
@@ -786,6 +1025,8 @@ function RunComparison({ runs }: { runs: SavedRun[] }) {
           </table>
         </div>
       )}
+        </>
+      )}
     </section>
   );
 }
@@ -803,7 +1044,7 @@ function makeInitialResults(ideas: AppIdea[]): TestResult[] {
   }));
 }
 
-function loadPersistedState(): {
+function loadPersistedState(storageKey: string = TEST_SUITE_STORAGE_KEY): {
   model: string;
   results: TestResult[];
   currentRunId: string | null;
@@ -812,7 +1053,7 @@ function loadPersistedState(): {
 } | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(TEST_SUITE_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const data = JSON.parse(raw) as {
       model?: string;
@@ -824,11 +1065,11 @@ function loadPersistedState(): {
     if (!data || !Array.isArray(data.results) || data.results.length < 1) return null;
     const results: TestResult[] = data.results.map((r: unknown, i: number) => {
       const row = r as Record<string, unknown>;
-      const idea = (row.idea as AppIdea) ?? DEFAULT_IDEAS[i] ?? {
+      const idea = (row.idea as AppIdea) ?? {
         title: `Idea ${i + 1}`,
         prompt: "",
         category: "Misc",
-        tier: "medium",
+        tier: "medium" as const,
       };
       return {
         idea,
@@ -847,6 +1088,10 @@ function loadPersistedState(): {
         buildResultId: row.buildResultId as string | undefined,
         projectFiles: Array.isArray(row.projectFiles) ? (row.projectFiles as Array<{ path: string; content: string }>) : undefined,
         excluded: (row.excluded as boolean) ?? false,
+        model: (row.model as string) || undefined,
+        designRating: typeof row.designRating === "number" ? (row.designRating as number) : undefined,
+        functionalityRating: typeof row.functionalityRating === "number" ? (row.functionalityRating as number) : undefined,
+        notes: typeof row.notes === "string" ? (row.notes as string) : undefined,
       };
     });
     const computedCompletedCount = results.filter((r) => !r.excluded && r.status !== "pending").length;
@@ -862,16 +1107,19 @@ function loadPersistedState(): {
   }
 }
 
-function savePersistedState(state: {
-  model: string;
-  results: TestResult[];
-  currentRunId: string | null;
-  completedCount: number;
-  running: boolean;
-}): void {
+function savePersistedState(
+  state: {
+    model: string;
+    results: TestResult[];
+    currentRunId: string | null;
+    completedCount: number;
+    running: boolean;
+  },
+  storageKey: string = TEST_SUITE_STORAGE_KEY,
+): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(TEST_SUITE_STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(storageKey, JSON.stringify(state));
   } catch {
     // quota or disabled localStorage
   }
@@ -891,6 +1139,16 @@ export default function TestSuitePage() {
   const restoredRef = useRef(false);
   const hydratedRef = useRef(false);
 
+  const [activeMilestone, setActiveMilestone] = useState("m1-baseline");
+  const [milestoneTarget, setMilestoneTarget] = useState(70);
+  const [milestoneLoading, setMilestoneLoading] = useState(false);
+  const [milestoneTabs, setMilestoneTabs] = useState<Array<{ id: string; label: string; count: number; target: number; description: string }>>([]);
+  const [copiedReport, setCopiedReport] = useState(false);
+  const [runStartTime, setRunStartTime] = useState<number | null>(null);
+  const [runElapsed, setRunElapsed] = useState(0);
+
+  const msKey = useCallback((ms: string) => `${TEST_SUITE_STORAGE_KEY}-${ms}`, []);
+
   const loadPastRuns = useCallback(async () => {
     try {
       const res = await fetch("/api/test-suite");
@@ -904,9 +1162,29 @@ export default function TestSuitePage() {
   }, [loadPastRuns]);
 
   useEffect(() => {
+    fetch("/api/test-suite/milestones")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.milestones)) {
+          setMilestoneTabs(
+            data.milestones.map((m: { id: string; label: string; count: number; target: number; description: string }) => ({
+              id: m.id,
+              label: m.label,
+              count: m.count,
+              target: m.target,
+              description: m.description,
+            })),
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
-    const persisted = loadPersistedState();
+    const persisted =
+      loadPersistedState(msKey(activeMilestone)) || loadPersistedState();
     if (persisted) {
       setModel(persisted.model);
       setIdeas(persisted.results.map((r) => r.idea));
@@ -916,17 +1194,28 @@ export default function TestSuitePage() {
       setRunning(persisted.running);
     }
     hydratedRef.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!hydratedRef.current) return;
-    savePersistedState({ model, results, currentRunId, completedCount, running });
-  }, [model, results, currentRunId, completedCount, running]);
+    savePersistedState(
+      { model, results, currentRunId, completedCount, running },
+      msKey(activeMilestone),
+    );
+  }, [model, results, currentRunId, completedCount, running, activeMilestone, msKey]);
 
-  // Keep completedCount consistent even as ideas are appended/excluded.
   useEffect(() => {
     setCompletedCount(results.filter((r) => !r.excluded && r.status !== "pending").length);
   }, [results]);
+
+  useEffect(() => {
+    if (!running || !runStartTime) return;
+    const interval = setInterval(() => {
+      setRunElapsed(Date.now() - runStartTime);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [running, runStartTime]);
 
   const updateResult = useCallback((index: number, updates: Partial<TestResult>) => {
     setResults((prev) => {
@@ -935,6 +1224,51 @@ export default function TestSuitePage() {
       return next;
     });
   }, []);
+
+  const switchMilestone = useCallback(
+    async (newMilestone: string) => {
+      if (running || newMilestone === activeMilestone) return;
+
+      savePersistedState(
+        { model, results, currentRunId, completedCount, running },
+        msKey(activeMilestone),
+      );
+
+      setMilestoneLoading(true);
+      try {
+        const res = await fetch(`/api/test-suite/milestones?id=${newMilestone}`);
+        const data = await res.json();
+        const config = data.milestone;
+
+        if (config?.ideas?.length) {
+          setMilestoneTarget(config.target ?? 70);
+
+          const saved = loadPersistedState(msKey(newMilestone));
+
+          if (saved && saved.results.length > 0) {
+            setIdeas(saved.results.map((r) => r.idea));
+            setResults(saved.results);
+            setCurrentRunId(saved.currentRunId);
+            setCompletedCount(saved.completedCount);
+            setModel(saved.model);
+          } else {
+            const newIdeas = config.ideas as AppIdea[];
+            setIdeas(newIdeas);
+            setResults(makeInitialResults(newIdeas));
+            setCurrentRunId(null);
+            setCompletedCount(0);
+          }
+        }
+      } catch {
+        /* ignore fetch error */
+      } finally {
+        setMilestoneLoading(false);
+      }
+
+      setActiveMilestone(newMilestone);
+    },
+    [activeMilestone, model, results, currentRunId, completedCount, running, msKey],
+  );
 
   const runSingleTest = useCallback(
     async (index: number, config: RunConfig, getAbort: () => boolean): Promise<TestResult> => {
@@ -983,15 +1317,22 @@ export default function TestSuitePage() {
         if (getAbort()) throw new Error(ABORTED_MSG);
         updateResult(index, { status: "building", fileCount, generationMs });
 
+        let developmentTeam: string | undefined;
+        try {
+          const ud = JSON.parse(localStorage.getItem("vibetree-universal-defaults") || "{}");
+          developmentTeam = ud.teamId || undefined;
+        } catch {}
+
         const buildStart = Date.now();
         const buildRes = await fetch(`/api/projects/${projectId}/validate-xcode`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             files: projectFiles,
-            projectName: idea.title.replace(/[^a-zA-Z0-9]/g, ""),
+            projectName: toPascalCase(idea.title),
             bundleId: "com.vibetree.test",
             autoFix: true,
+            ...(developmentTeam ? { developmentTeam } : {}),
           }),
         }).then((r) => r.json());
 
@@ -1053,6 +1394,7 @@ export default function TestSuitePage() {
           generationMs,
           buildMs,
           fileCount,
+          model: config.model,
           ...(builtFiles?.length ? { projectFiles: builtFiles } : {}),
         };
 
@@ -1092,6 +1434,8 @@ export default function TestSuitePage() {
   const runAllTests = useCallback(async () => {
     abortRef.current = false;
     setRunning(true);
+    setRunStartTime(Date.now());
+    setRunElapsed(0);
     const pending = results
       .map((_, i) => i)
       .filter((i) => results[i].status === "pending" && !results[i].excluded);
@@ -1107,7 +1451,7 @@ export default function TestSuitePage() {
     const createRes = await fetch("/api/test-suite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "create", model }),
+      body: JSON.stringify({ action: "create", model, milestone: activeMilestone }),
     }).then((r) => r.json());
 
     const runId = createRes.run?.id;
@@ -1161,6 +1505,7 @@ export default function TestSuitePage() {
                   buildResultId: r.buildResultId,
                   errors: r.compilerErrors,
                   fileCount: r.fileCount,
+                  model: r.model ?? config.model,
                 })),
                 summary,
               }),
@@ -1176,26 +1521,77 @@ export default function TestSuitePage() {
       }
     } finally {
       setRunning(false);
+      setRunStartTime(null);
       loadPastRuns();
     }
-  }, [ideas, model, results, runSingleTest, loadPastRuns]);
+  }, [ideas, model, results, runSingleTest, loadPastRuns, activeMilestone]);
 
   const stopRun = useCallback(() => {
     abortRef.current = true;
     setRunning(false);
+    setRunStartTime(null);
   }, []);
 
-  const clearAndReset = useCallback(() => {
+  const clearAndReset = useCallback(async () => {
     if (typeof window !== "undefined") {
       try {
+        localStorage.removeItem(msKey(activeMilestone));
         localStorage.removeItem(TEST_SUITE_STORAGE_KEY);
       } catch {}
     }
-    setResults(makeInitialResults(ideas));
+
+    try {
+      const res = await fetch(`/api/test-suite/milestones?id=${activeMilestone}`);
+      const data = await res.json();
+      if (data.milestone?.ideas?.length) {
+        const freshIdeas = data.milestone.ideas as AppIdea[];
+        setIdeas(freshIdeas);
+        setResults(makeInitialResults(freshIdeas));
+      } else {
+        setResults(makeInitialResults(ideas));
+      }
+    } catch {
+      setResults(makeInitialResults(ideas));
+    }
+
     setRunning(false);
     setCurrentRunId(null);
     setCompletedCount(0);
-  }, [ideas]);
+  }, [ideas, activeMilestone, msKey]);
+
+  const [exportedCount, setExportedCount] = useState<number | null>(null);
+
+  const exportToDashboard = useCallback(() => {
+    const succeeded = results.filter((r) => r.status === "succeeded" && r.projectId);
+    if (succeeded.length === 0) return;
+
+    const STORAGE_KEY = "vibetree-projects";
+    let existing: Array<{ id: string; name: string; bundleId: string; createdAt?: number; updatedAt: number }> = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) existing = JSON.parse(raw);
+    } catch {}
+
+    const existingIds = new Set(existing.map((p) => p.id));
+    let added = 0;
+    const now = Date.now();
+
+    for (const r of succeeded) {
+      if (!r.projectId || existingIds.has(r.projectId)) continue;
+      existing.unshift({
+        id: r.projectId,
+        name: r.idea.title,
+        bundleId: `com.vibetree.${r.projectId.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase()}`.slice(0, 60),
+        createdAt: now,
+        updatedAt: now,
+      });
+      added++;
+    }
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+    setExportedCount(added);
+    setTimeout(() => setExportedCount(null), 3000);
+  }, [results]);
 
   const rerunSingle = useCallback(
     async (index: number) => {
@@ -1218,6 +1614,8 @@ export default function TestSuitePage() {
     if (pending.length === 0) return;
     abortRef.current = false;
     setRunning(true);
+    setRunStartTime(Date.now());
+    setRunElapsed(0);
     const config: RunConfig = { model, projectType: "pro" };
     const initialDone = results.filter((r) => r.status !== "pending").length;
     let doneInResume = 0;
@@ -1230,6 +1628,7 @@ export default function TestSuitePage() {
       }
     } finally {
       setRunning(false);
+      setRunStartTime(null);
       loadPastRuns();
     }
   }, [model, results, runSingleTest, loadPastRuns]);
@@ -1244,7 +1643,7 @@ export default function TestSuitePage() {
 
   const restoreLastRun = useCallback(() => {
     const latest = [...pastRuns]
-      .filter((r) => Array.isArray(r.results) && r.results.length > 0)
+      .filter((r) => Array.isArray(r.results) && r.results.length > 0 && (!activeMilestone || !r.milestone || r.milestone === activeMilestone))
       .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""))[0];
     if (!latest) return;
 
@@ -1271,7 +1670,7 @@ export default function TestSuitePage() {
         };
       }),
     );
-  }, [pastRuns]);
+  }, [pastRuns, activeMilestone]);
 
   const avgDuration = results.filter((r) => r.durationMs > 0).length > 0
     ? results.filter((r) => r.durationMs > 0).reduce((s, r) => s + r.durationMs, 0) /
@@ -1310,6 +1709,30 @@ export default function TestSuitePage() {
             </h1>
           </div>
         </div>
+
+        {milestoneTabs.length > 0 && (
+          <nav className="mx-auto max-w-5xl px-4 sm:px-6">
+            <div className="flex gap-1 overflow-x-auto pb-0">
+              {milestoneTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => switchMilestone(tab.id)}
+                  disabled={running || milestoneLoading}
+                  title={tab.description}
+                  className={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                    activeMilestone === tab.id
+                      ? "border-[var(--button-primary-bg)] text-[var(--button-primary-bg)]"
+                      : "border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:border-[var(--border-subtle)]"
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {tab.label}
+                  <span className="ml-1.5 text-xs opacity-60">({tab.count})</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+        )}
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 space-y-6">
@@ -1416,6 +1839,9 @@ export default function TestSuitePage() {
 
             {running && (
               <div className="flex flex-1 items-center gap-3 min-w-[200px]">
+                <span className="shrink-0 min-w-[65px] text-sm font-mono tabular-nums text-[var(--text-primary)]">
+                  {formatDuration(runElapsed)}
+                </span>
                 <div className="flex-1 h-2 overflow-hidden rounded-full bg-[var(--background-tertiary)]">
                   <div
                     className="h-full rounded-full bg-[var(--button-primary-bg)] transition-all duration-500"
@@ -1451,6 +1877,27 @@ export default function TestSuitePage() {
               </Button>
             )}
 
+            {results.some((r) => r.status === "succeeded" && r.projectId) && (
+              <Button
+                variant="ghost"
+                onClick={exportToDashboard}
+                className="gap-2"
+                title="Export succeeded projects to the Dashboard so they appear in your app list"
+              >
+                {exportedCount !== null ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-[var(--semantic-success)]" aria-hidden />
+                    {exportedCount > 0 ? `Added ${exportedCount}` : "Already exported"}
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="h-4 w-4" aria-hidden />
+                    Export to Dashboard
+                  </>
+                )}
+              </Button>
+            )}
+
             <Button
               variant="secondary"
               onClick={clearAndReset}
@@ -1467,8 +1914,36 @@ export default function TestSuitePage() {
         {results.some((r) => !r.excluded && (r.status === "succeeded" || r.status === "failed" || r.status === "error")) && (
           <section className="sm:sticky sm:top-4 z-20">
             <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-primary)]/70 backdrop-blur-sm p-4">
-              <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">Summary</h2>
-              <SummaryPanel results={results} />
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-[var(--text-primary)]">Summary</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const report = generateRunReport(results, {
+                      milestone: milestoneTabs.find((t) => t.id === activeMilestone)?.label ?? activeMilestone,
+                      model,
+                      target: milestoneTarget,
+                    });
+                    navigator.clipboard.writeText(report);
+                    setCopiedReport(true);
+                    setTimeout(() => setCopiedReport(false), 2000);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
+                >
+                  {copiedReport ? (
+                    <>
+                      <CheckCircle2 className="h-3.5 w-3.5 text-[var(--semantic-success)]" aria-hidden />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" aria-hidden />
+                      Copy Report
+                    </>
+                  )}
+                </button>
+              </div>
+              <SummaryPanel results={results} target={milestoneTarget} />
             </div>
           </section>
         )}
@@ -1484,17 +1959,16 @@ export default function TestSuitePage() {
                 running={running}
                 onRerun={() => rerunSingle(i)}
                 onExclude={() => toggleExclude(i)}
+                onUpdate={(updates) => updateResult(i, updates)}
               />
             ))}
           </div>
         </section>
 
         {/* ── Run Comparison ── */}
-        {pastRuns.length >= 2 && (
-          <section>
-            <RunComparison runs={pastRuns} />
-          </section>
-        )}
+        <section>
+          <RunComparison runs={pastRuns} />
+        </section>
       </main>
     </div>
   );

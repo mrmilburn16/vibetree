@@ -144,6 +144,8 @@ export function DashboardLayout2({ projects, onNewApp, onDelete, onDuplicate }: 
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-[var(--text-primary)]">{project.name}</p>
                       <p className="text-caption text-xs text-[var(--text-tertiary)]">
+                        Created {new Date(project.createdAt ?? project.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                        {" · "}
                         Updated {new Date(project.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                       </p>
                     </div>

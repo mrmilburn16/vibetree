@@ -13,6 +13,7 @@ export type TestSuiteResult = {
   buildResultId?: string;
   errors: string[];
   fileCount: number;
+  model?: string;
 };
 
 export type TestSuiteRun = {
@@ -20,6 +21,7 @@ export type TestSuiteRun = {
   timestamp: string;
   model: string;
   projectType: "pro";
+  milestone?: string;
   status: "running" | "completed" | "stopped";
   results: TestSuiteResult[];
   summary: {
@@ -38,12 +40,14 @@ function generateId(): string {
 export function createTestSuiteRun(
   model: string,
   projectType: "pro" = "pro",
+  milestone?: string,
 ): TestSuiteRun {
   const run: TestSuiteRun = {
     id: generateId(),
     timestamp: new Date().toISOString(),
     model,
     projectType,
+    milestone,
     status: "running",
     results: [],
     summary: { total: 0, compiled: 0, compileRate: 0, avgAttempts: 0, totalDurationMs: 0 },
@@ -91,4 +95,8 @@ export function updateTestSuiteRun(
   } catch {
     return null;
   }
+}
+
+export function getRunsByMilestone(milestone: string): TestSuiteRun[] {
+  return getAllTestSuiteRuns().filter((r) => r.milestone === milestone);
 }
