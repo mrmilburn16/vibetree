@@ -1,0 +1,7 @@
+{
+  "workStart": "09:00",
+  "workEnd": "17:00",
+  "slotMinutes": 15,
+  "workDays": [1, 2, 3, 4, 5],
+  "bufferMinutes": 5
+}

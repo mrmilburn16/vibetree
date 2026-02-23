@@ -1,0 +1,11 @@
+[
+  {
+    "id": "block_1771848769397_odczd",
+    "title": "Lunch",
+    "type": "lunch",
+    "startTime": "12:00",
+    "endTime": "13:00",
+    "recurring": "weekdays",
+    "createdAt": "2026-02-23T12:12:49.398Z"
+  }
+]
