@@ -10,6 +10,7 @@ import {
   Zap,
   Hammer,
   TrendingUp,
+  ClipboardCheck,
   Menu,
   X,
 } from "lucide-react";
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/admin/test-suite", label: "Test Suite", icon: FlaskConical },
   { href: "/admin/skills", label: "Skills", icon: Zap },
   { href: "/admin/builds", label: "Builds", icon: Hammer },
+  { href: "/admin/qa", label: "QA Insights", icon: ClipboardCheck },
   { href: "/admin/dashboard/projections", label: "Projections", icon: TrendingUp },
 ];
 

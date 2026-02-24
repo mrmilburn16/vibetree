@@ -2,6 +2,7 @@ import { readFileSync, appendFileSync, writeFileSync, existsSync, mkdirSync } fr
 import { join, dirname } from "path";
 import { recordBuildForSkill, addGoldenExample } from "@/lib/skills/registry";
 import { getProjectFiles } from "@/lib/projectFileStore";
+import { classifyNotes } from "@/lib/qa/issueClassifier";
 
 const LOG_PATH = join(process.cwd(), "data", "build-results.jsonl");
 
@@ -27,6 +28,8 @@ export type BuildResult = {
   userImagePath: string | null;
   /** Skill IDs that were injected into the system prompt for this build. */
   skillsUsed: string[];
+  /** Auto-classified issue tags derived from userNotes. */
+  issueTags: string[];
 };
 
 function generateId(): string {
@@ -44,6 +47,7 @@ export function logBuildResult(
     userFunctionalScore: null,
     userImagePath: null,
     skillsUsed: [],
+    issueTags: [],
     ...partial,
   };
   try {
@@ -80,6 +84,7 @@ export function getAllBuildResults(): BuildResult[] {
       const r = JSON.parse(l) as BuildResult;
       if (r.userImagePath === undefined) r.userImagePath = null;
       if (!Array.isArray(r.skillsUsed)) r.skillsUsed = [];
+      if (!Array.isArray(r.issueTags)) r.issueTags = [];
       return r;
     }).reverse();
   } catch {
@@ -93,7 +98,7 @@ export function getBuildResult(id: string): BuildResult | null {
 
 export function updateBuildResult(
   id: string,
-  updates: { userNotes?: string; userDesignScore?: number | null; userFunctionalScore?: number | null; userImagePath?: string | null }
+  updates: { userNotes?: string; userDesignScore?: number | null; userFunctionalScore?: number | null; userImagePath?: string | null; issueTags?: string[] }
 ): BuildResult | null {
   if (!existsSync(LOG_PATH)) return null;
   try {
@@ -101,8 +106,13 @@ export function updateBuildResult(
     let found: BuildResult | null = null;
     const updated = lines.map((line) => {
       const r = JSON.parse(line) as BuildResult;
+      if (!Array.isArray(r.issueTags)) r.issueTags = [];
       if (r.id === id) {
-        if (updates.userNotes !== undefined) r.userNotes = updates.userNotes;
+        if (updates.userNotes !== undefined) {
+          r.userNotes = updates.userNotes;
+          r.issueTags = classifyNotes(updates.userNotes);
+        }
+        if (updates.issueTags !== undefined) r.issueTags = updates.issueTags;
         if (updates.userDesignScore !== undefined) r.userDesignScore = updates.userDesignScore;
         if (updates.userFunctionalScore !== undefined) r.userFunctionalScore = updates.userFunctionalScore;
         if (updates.userImagePath !== undefined) r.userImagePath = updates.userImagePath;
