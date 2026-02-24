@@ -37,7 +37,7 @@ function generateId(): string {
 }
 
 export function logBuildResult(
-  partial: Omit<BuildResult, "id" | "timestamp" | "userNotes" | "userDesignScore" | "userFunctionalScore" | "userImagePath" | "skillsUsed"> & { skillsUsed?: string[] }
+  partial: Omit<BuildResult, "id" | "timestamp" | "userNotes" | "userDesignScore" | "userFunctionalScore" | "userImagePath" | "skillsUsed" | "issueTags"> & { skillsUsed?: string[]; issueTags?: string[] }
 ): BuildResult {
   const result: BuildResult = {
     id: generateId(),
