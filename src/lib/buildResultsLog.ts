@@ -197,8 +197,8 @@ export function getBuildStats(): {
 
   let totalAttempts = 0;
   let autoFixCount = 0;
-  let designScores: number[] = [];
-  let funcScores: number[] = [];
+  const designScores: number[] = [];
+  const funcScores: number[] = [];
 
   for (const r of results) {
     totalAttempts += r.attempts;

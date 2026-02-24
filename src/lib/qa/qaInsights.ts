@@ -1,4 +1,4 @@
-import { getAllBuildResults, type BuildResult } from "@/lib/buildResultsLog";
+import { getAllBuildResults } from "@/lib/buildResultsLog";
 import {
   type IssueTag,
   type IssueSeverity,

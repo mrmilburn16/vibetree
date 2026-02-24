@@ -18,6 +18,7 @@ export function QRCode({ value, size = 200, className = "" }: QRCodeProps) {
 
   useEffect(() => {
     if (!value || !canvasRef.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional reset in data-fetching effect
       setError(null);
       return;
     }

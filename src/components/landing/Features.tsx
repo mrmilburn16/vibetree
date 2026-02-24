@@ -30,7 +30,7 @@ export function Features() {
           The first Swift app builder on the web. Build, preview, and publish from one place.
         </p>
         <div className="grid gap-6 sm:grid-cols-2">
-          {features.map((feature, i) => (
+          {features.map((feature) => (
             <Card key={feature.title} className="animate-fade-in">
               <h3 className="text-heading-card mb-2">{feature.title}</h3>
               <p className="text-body-muted text-sm">{feature.description}</p>

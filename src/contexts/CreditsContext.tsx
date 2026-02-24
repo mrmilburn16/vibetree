@@ -31,6 +31,7 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data-fetching on mount
     refresh();
   }, [refresh]);
 

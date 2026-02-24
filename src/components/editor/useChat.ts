@@ -57,8 +57,8 @@ function loadChatMessagesFromLocalStorage(projectId: string): ChatMessage[] | nu
         content: m.content ?? "",
         ...(Array.isArray(m.editedFiles) ? { editedFiles: m.editedFiles as string[] } : {}),
         ...(m.usage &&
-        typeof (m.usage as any).input_tokens === "number" &&
-        typeof (m.usage as any).output_tokens === "number"
+        typeof (m.usage as Record<string, unknown>).input_tokens === "number" &&
+        typeof (m.usage as Record<string, unknown>).output_tokens === "number"
           ? { usage: m.usage as { input_tokens: number; output_tokens: number } }
           : {}),
         ...(typeof m.estimatedCostUsd === "number" ? { estimatedCostUsd: m.estimatedCostUsd } : {}),
@@ -199,7 +199,7 @@ function persistChatToServer(projectId: string, messages: ChatMessage[]): void {
     if (typeof navigator !== "undefined" && "sendBeacon" in navigator) {
       const blob = new Blob([JSON.stringify({ messages: stable })], { type: "application/json" });
       // sendBeacon is best-effort and survives refresh/pagehide.
-      (navigator as any).sendBeacon(url, blob);
+      navigator.sendBeacon(url, blob);
       return;
     }
   } catch {
@@ -225,7 +225,7 @@ function updateProjectNameInLocalStorage(projectId: string, name: string): void 
     const raw = localStorage.getItem(PROJECTS_STORAGE_KEY);
     const arr = raw ? JSON.parse(raw) : [];
     const next = Array.isArray(arr) ? [...arr] : [];
-    const idx = next.findIndex((p: any) => p && p.id === projectId);
+    const idx = next.findIndex((p: Record<string, unknown>) => p && p.id === projectId);
     if (idx >= 0) next[idx] = { ...next[idx], name, updatedAt: Date.now() };
     localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(next));
   } catch {
@@ -286,6 +286,7 @@ export function useChat(
   const hydratedRef = useRef(false);
   const serverPersistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const processQueueRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -351,6 +352,7 @@ export function useChat(
     hydratedRef.current = false;
     const restored = loadChatMessagesFromLocalStorage(projectId);
     if (restored && restored.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional hydration from localStorage on mount
       setMessages(restored);
       // If we have history, default to ready.
       setBuildStatus("live");
@@ -384,7 +386,8 @@ export function useChat(
   }, [projectId, messages]);
 
   const runClientMock = useCallback(
-    (trimmed: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    (_trimmed: string) => {
       const mock = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
 
       const t1 = setTimeout(() => setBuildStatus("building"), 400);
@@ -470,9 +473,7 @@ export function useChat(
     let currentPhaseLabel = "Starting request";
     let lastReceivedChars = 0;
     let lastIncreaseAt = Date.now();
-    let lastElapsedMs: number | undefined;
     let lastCostUsd: number | undefined;
-    let lastProgressElapsedMs: number | undefined;
     let discoveredFilesCount = 0;
     const emittedPhases = new Set<string>();
 
@@ -576,7 +577,7 @@ export function useChat(
       } else if (opts.success && !opts.deferLive) {
         setBuildStatus(queueRef.current.length > 0 ? "building" : "live");
       }
-      processQueue();
+      processQueueRef.current();
     };
 
     fetch("/api/projects", {
@@ -954,7 +955,7 @@ export function useChat(
             abortControllerRef.current = null;
             abortWithReasonRef.current = null;
             setBuildStatus(queueRef.current.length > 0 ? "building" : "idle");
-            processQueue();
+            processQueueRef.current();
             return;
           }
           finish({ error: abortReason ?? "Request timed out. Try again." });
@@ -963,6 +964,10 @@ export function useChat(
         }
       });
   }, [projectId, projectName, onProjectRenamed, onError, onMessageSuccess, onProBuildComplete]);
+
+  useEffect(() => {
+    processQueueRef.current = processQueue;
+  }, [processQueue]);
 
   const sendMessage = useCallback(
     (text: string, model?: string, projectType: "standard" | "pro" = "standard") => {
@@ -1000,7 +1005,7 @@ export function useChat(
       setIsTyping(true);
       runClientMock(trimmed);
     },
-    [canSend, processQueue, runClientMock]
+    [canSend, processQueue, runClientMock, projectId]
   );
 
   return {

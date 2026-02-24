@@ -6,7 +6,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
-import type { LLMAdapterResponse, StructuredLLMResponse, ProjectType } from "@/types";
+import type { ProjectType } from "@/types";
 import type { LLMResponse } from "./mockAdapter";
 import {
   parseStructuredResponse,
@@ -233,6 +233,7 @@ export async function getClaudeResponse(
     const parsed: StructuredResponse = isStructuredResponse(parsedOutput)
       ? parsedOutput
       : parseStructuredResponse(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic SDK doesn't expose content field on typed response
           extractTextFromContent((response as any).content)
         );
     const usage =
@@ -251,7 +252,9 @@ export async function getClaudeResponse(
       usage,
     };
   } catch (err) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic SDK doesn't expose these fields on typed response
     const raw = previewText(extractTextFromContent((response as any).content ?? []));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic SDK doesn't expose stop_reason on typed response
     const reason = (response as any)?.stop_reason ?? null;
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`Invalid structured response (stop_reason=${String(reason)}): ${detail}. raw="${raw}"`);
@@ -352,6 +355,7 @@ async function getClaudeResponseStream(
       ? parsedOutput
       : parseStructuredResponse(
           extractTextFromContent(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic SDK doesn't expose content field on stream finalMessage
             Array.isArray((finalMessage as any).content) ? (finalMessage as any).content : []
           )
         );
@@ -373,9 +377,11 @@ async function getClaudeResponseStream(
   } catch (err) {
     const raw = previewText(
       extractTextFromContent(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic SDK doesn't expose content field on stream finalMessage
         Array.isArray((finalMessage as any).content) ? (finalMessage as any).content : []
       )
     );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic SDK doesn't expose stop_reason on stream finalMessage
     const reason = (finalMessage as any)?.stop_reason ?? null;
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`Invalid structured response (stop_reason=${String(reason)}): ${detail}. raw="${raw}"`);

@@ -1,11 +1,15 @@
 "use client";
 
+import Image from "next/image";
+
 /** Claude logo - starburst mark (asset) */
 export function AnthropicLogo({ className = "h-4 w-4 shrink-0" }: { className?: string }) {
   return (
-    <img
+    <Image
       src="/claude-logo.png"
       alt=""
+      width={16}
+      height={16}
       className={className}
       aria-hidden
     />
