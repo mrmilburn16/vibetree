@@ -3,9 +3,11 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
+export type ButtonSize = "sm" | "md";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
+  size?: ButtonSize;
   children: React.ReactNode;
 }
 
@@ -20,15 +22,20 @@ const variantClasses: Record<ButtonVariant, string> = {
     "bg-[var(--button-destructive-bg)] text-[var(--button-destructive-text)] hover:bg-[var(--button-secondary-hover)]",
 };
 
+const sizeClasses: Record<ButtonSize, string> = {
+  sm: "px-3 py-1.5 min-h-[32px] text-xs",
+  md: "px-4 py-2.5 min-h-[40px] text-sm",
+};
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "primary", className = "", disabled, children, ...props }, ref) => {
+  ({ variant = "primary", size = "md", className = "", disabled, children, ...props }, ref) => {
     return (
       <button
         ref={ref}
         disabled={disabled}
         className={`
           inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)]
-          px-4 py-2.5 min-h-[40px] text-sm font-medium
+          ${sizeClasses[size]} font-medium
           transition-all duration-[var(--transition-normal)] ease-out
           hover:scale-[1.02] active:scale-[0.98]
           disabled:opacity-50 disabled:pointer-events-none disabled:hover:scale-100 disabled:active:scale-100
