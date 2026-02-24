@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyRateLimit, RATE_LIMITS } from "@/lib/rateLimit";
 import { getProject, ensureProject } from "@/lib/projectStore";
 import {
   setProjectFiles,
@@ -18,6 +19,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = applyRateLimit(request, RATE_LIMITS.llm);
+  if (limited) return limited;
+
   const { id: projectId } = await params;
 
   const body = await request.json().catch(() => ({}));

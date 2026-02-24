@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyRateLimit, RATE_LIMITS } from "@/lib/rateLimit";
 
 /**
  * POST /api/auth/login
@@ -7,6 +8,9 @@ import { NextResponse } from "next/server";
  * auth (e.g. NextAuth, your own user store) when ready.
  */
 export async function POST(request: Request) {
+  const limited = applyRateLimit(request, RATE_LIMITS.auth);
+  if (limited) return limited;
+
   const body = await request.json().catch(() => ({}));
   const email = typeof body?.email === "string" ? body.email.trim() : "";
 
