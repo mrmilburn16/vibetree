@@ -22,7 +22,7 @@ export async function POST(
 
   const body = await request.json().catch(() => ({}));
   const name = typeof body.projectName === "string" ? body.projectName.trim() || "Untitled app" : "Untitled app";
-  const project = getProject(projectId) ?? ensureProject(projectId, name);
+  void (getProject(projectId) ?? ensureProject(projectId, name));
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
 

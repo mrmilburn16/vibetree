@@ -65,6 +65,7 @@ export default function DashboardPage() {
       router.replace("/sign-in");
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setProjects(getProjects());
     const stored = localStorage.getItem(LAYOUT_STORAGE_KEY);
     if (stored === "1" || stored === "2") setLayoutVersion(stored);

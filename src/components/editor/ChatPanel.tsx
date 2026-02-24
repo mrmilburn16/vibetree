@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button, Textarea, DropdownSelect } from "@/components/ui";
-import { Send, Sparkles, Square } from "lucide-react";
+import { Send, Sparkles } from "lucide-react";
 import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { BuildingIndicator } from "./BuildingIndicator";
@@ -149,7 +149,7 @@ export function ChatPanel({
       setJustSent(true);
       setTimeout(() => setJustSent(false), 80);
     },
-    [input, canSend, sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
+    [input, canSend, sendMessage, setInput, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
   );
 
   const handleGuidedComplete = useCallback(

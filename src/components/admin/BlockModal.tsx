@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
-import { Coffee, Clock, Users, CalendarOff, Focus, Zap } from "lucide-react";
+import { Coffee, Clock, CalendarOff, Focus } from "lucide-react";
 
 const TYPE_OPTIONS: SelectOption[] = [
   { value: "lunch", label: "Lunch" },
@@ -65,6 +65,7 @@ export function BlockModal({ isOpen, onClose, onSave, prefillDate }: BlockModalP
 
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle("");
       setType("lunch");
       setStartTime("12:00");

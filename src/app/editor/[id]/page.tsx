@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getProject } from "@/lib/projects";
@@ -9,7 +9,6 @@ import type { Project } from "@/lib/projects";
 
 export default function EditorPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -17,6 +16,7 @@ export default function EditorPage() {
   useEffect(() => {
     const p = getProject(id);
     if (!p) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNotFound(true);
       return;
     }

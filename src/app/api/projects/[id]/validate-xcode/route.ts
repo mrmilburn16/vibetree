@@ -7,7 +7,8 @@ function isValidBundleId(value: string): boolean {
   return /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/i.test(value);
 }
 
-function sanitizeXcodeName(name: string, fallback: string): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _sanitizeXcodeName(name: string, fallback: string): string {
   const raw = (name || "").trim();
   if (!raw || raw.toLowerCase() === "untitled app") return fallback;
   const cleaned = raw.replace(/[^\p{L}\p{N}\s-]+/gu, "").trim();

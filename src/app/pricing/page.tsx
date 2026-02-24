@@ -62,11 +62,6 @@ function PlanCard({
       ? plan.annualPrice
       : plan.monthlyPrice;
   const isAnnual = interval === "annual";
-  const showAnnualEquivalent =
-    isAnnual &&
-    plan.annualMonthlyEquivalent !== null &&
-    plan.annualMonthlyEquivalent > 0;
-
   return (
     <Card
       className={`relative flex h-full flex-col ${

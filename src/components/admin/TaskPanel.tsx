@@ -81,7 +81,7 @@ export function TaskPanel({
       {/* Unscheduled task list */}
       {unscheduled.length === 0 ? (
         <p className="py-4 text-center text-xs text-[var(--text-tertiary)]">
-          No unscheduled tasks. Add a task or click "Plan My Day" after creating some.
+          No unscheduled tasks. Add a task or click &quot;Plan My Day&quot; after creating some.
         </p>
       ) : (
         <div className="flex flex-col gap-1">

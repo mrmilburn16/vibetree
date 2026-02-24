@@ -67,6 +67,7 @@ export function EditorLayout({ project }: { project: Project }) {
   const [isResizing, setIsResizing] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setChatWidth(getStoredChatWidth());
   }, []);
 
@@ -82,7 +83,9 @@ export function EditorLayout({ project }: { project: Project }) {
   }, [project.id]);
 
   const latestWidthRef = useRef(chatWidth);
-  latestWidthRef.current = chatWidth;
+  useEffect(() => {
+    latestWidthRef.current = chatWidth;
+  }, [chatWidth]);
 
   const handleResizerDoubleClick = useCallback(() => {
     setChatWidth(CHAT_WIDTH_DEFAULT);

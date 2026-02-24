@@ -61,6 +61,7 @@ export function TaskModal({ isOpen, onClose, task, onSave, onDelete, prefillTime
 
   useEffect(() => {
     if (task) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle(task.title);
       setDescription(task.description || "");
       setPriority(String(task.priority));

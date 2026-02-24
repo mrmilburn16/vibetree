@@ -174,6 +174,7 @@ export function RunOnDeviceModal({
 
         setValidateFixing(false);
         setValidateStatus(status);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const logs = Array.isArray(job.logs) ? job.logs.filter((x: any) => typeof x === "string") : [];
         setValidateLogTail(logs.slice(-10));
         if (status === "failed") {
@@ -235,6 +236,7 @@ export function RunOnDeviceModal({
             try {
               const projectsRaw = localStorage.getItem("vibetree-projects");
               const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const p = Array.isArray(projects) ? projects.find((x: any) => x?.id === projectId) : null;
               if (p?.name) projectName = String(p.name);
               if (p?.bundleId) bundleId = String(p.bundleId);
@@ -297,6 +299,7 @@ export function RunOnDeviceModal({
     setValidateLogTail([]);
     try {
       // Prefer client-cached Swift files (survives refresh/dev reload).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let files: any[] = [];
       if (typeof window !== "undefined") {
         try {
@@ -314,6 +317,7 @@ export function RunOnDeviceModal({
         try {
           const projectsRaw = localStorage.getItem("vibetree-projects");
           const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const p = Array.isArray(projects) ? projects.find((x: any) => x?.id === projectId) : null;
           if (p?.name) projectName = String(p.name);
           if (p?.bundleId) bundleId = String(p.bundleId);
@@ -372,6 +376,7 @@ export function RunOnDeviceModal({
         try {
           const projectsRaw = localStorage.getItem("vibetree-projects");
           const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const p = Array.isArray(projects) ? projects.find((x: any) => x?.id === projectId) : null;
           if (p?.name) projectName = String(p.name);
           if (p?.bundleId) bundleId = String(p.bundleId);

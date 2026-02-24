@@ -31,7 +31,7 @@ function isReasoningMessage(msg: { id?: string; role: string; content: string; e
 }
 
 function BuildFeedback({ projectId }: { projectId?: string }) {
-  const [rating, setRating] = useState<"up" | "down" | null>(null);
+  const [, setRating] = useState<"up" | "down" | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
   const handleRate = async (value: "up" | "down") => {
@@ -96,7 +96,7 @@ export function ChatMessageList({
   const bottomRef = useRef<HTMLDivElement>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [streamedContent, setStreamedContent] = useState("");
-  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [, setIsAtBottom] = useState(true);
   const shouldAutoScrollRef = useRef(true);
   const lastForcedScrollUserMessageIdRef = useRef<string | null>(null);
   const lastScrollTopRef = useRef(0);
@@ -223,6 +223,7 @@ export function ChatMessageList({
     }, STREAM_WORD_DELAY_MS);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
 
   return (

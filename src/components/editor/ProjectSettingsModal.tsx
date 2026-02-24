@@ -99,7 +99,6 @@ interface ProjectSettings {
 }
 
 type UniversalKey = keyof UniversalDefaults;
-const UNIVERSAL_KEYS: UniversalKey[] = ["teamId", "preferredRunDevice", "deploymentTarget", "orientation", "deviceFamily"];
 
 function loadSettings(projectId: string, universalDefaults: UniversalDefaults): ProjectSettings {
   const settings: ProjectSettings = {

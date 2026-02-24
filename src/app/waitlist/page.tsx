@@ -270,7 +270,7 @@ export default function WaitlistPage() {
     setJoinButtonStyle(s);
     try {
       localStorage.setItem(STORAGE_JOIN_BTN_STYLE, String(s));
-    } catch (_) {}
+    } catch {}
   }
 
   // Show "I did it" only after user has left the tab and come back (e.g. opened Share link)
@@ -306,7 +306,7 @@ export default function WaitlistPage() {
     setCardLayout(l);
     try {
       localStorage.setItem(STORAGE_CARD_LAYOUT, l);
-    } catch (_) {}
+    } catch {}
   }
 
   async function fetchStatus(token: string) {
@@ -318,7 +318,7 @@ export default function WaitlistPage() {
       setEmail(data.email);
       setName(data.name);
       setJoined(true);
-    } catch (_) {}
+    } catch {}
   }
 
   async function fetchLeaderboard(token: string | null) {
@@ -331,7 +331,7 @@ export default function WaitlistPage() {
       const data = (await res.json()) as { top10: LeaderboardEntry[]; userRank: LeaderboardEntry | null };
       setTop10(data.top10);
       setUserRank(data.userRank);
-    } catch (_) {}
+    } catch {}
   }
 
   async function handleJoin(e: React.FormEvent) {
@@ -388,7 +388,7 @@ export default function WaitlistPage() {
         const token = data.token;
         fetchStatus(token).then(() => fetchLeaderboard(token));
       }
-    } catch (_) {
+    } catch {
       setError("Could not connect. Please try again.");
     } finally {
       setLoading(false);
@@ -417,7 +417,7 @@ export default function WaitlistPage() {
           : prev
       );
       await fetchLeaderboard(token);
-    } catch (_) {}
+    } catch {}
   }
 
   function getReferralLink(): string {
@@ -440,7 +440,7 @@ export default function WaitlistPage() {
       await navigator.clipboard.writeText(link);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (_) {}
+    } catch {}
   }
 
   const completedActions = status?.completedActions ?? [];

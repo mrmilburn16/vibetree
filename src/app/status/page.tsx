@@ -81,7 +81,8 @@ function statusLabel(status: ServiceStatus) {
   return "Down";
 }
 
-function timeAgo(iso: string | null): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _timeAgo(iso: string | null): string {
   if (!iso) return "Never";
   const diff = Date.now() - new Date(iso).getTime();
   const seconds = Math.floor(diff / 1000);

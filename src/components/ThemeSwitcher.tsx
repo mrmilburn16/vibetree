@@ -36,7 +36,7 @@ function applyTheme(value: string) {
   document.documentElement.setAttribute("data-theme", value);
   try {
     localStorage.setItem(STORAGE_KEY, value);
-  } catch (_) {}
+  } catch {}
 }
 
 export function ThemeSwitcher() {
@@ -45,6 +45,7 @@ export function ThemeSwitcher() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(getTheme());
   }, []);
 

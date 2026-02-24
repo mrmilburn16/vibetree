@@ -12,6 +12,7 @@ export function LowCreditBanner() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDismissed(sessionStorage.getItem(BANNER_DISMISS_KEY) === "1");
   }, []);
 

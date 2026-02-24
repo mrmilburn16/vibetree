@@ -254,6 +254,7 @@ function CSSDeviceFrame({
                 aria-hidden
               />
               {isPro && simulatorPreviewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={simulatorPreviewUrl}
                   alt="Simulator preview"
