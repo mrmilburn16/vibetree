@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Globe,
   Save,
+  FlaskConical,
 } from "lucide-react";
 import { DropdownSelect } from "@/components/ui";
 
@@ -70,6 +71,8 @@ export default function AdminStatusPage() {
   const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>({});
   const [savingGlobal, setSavingGlobal] = useState(false);
   const [savedGlobal, setSavedGlobal] = useState(false);
+  const [simulating, setSimulating] = useState(false);
+  const [simCountdown, setSimCountdown] = useState(0);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -160,6 +163,46 @@ export default function AdminStatusPage() {
     }
   };
 
+  const handleSimulateOutage = async () => {
+    setSimulating(true);
+    setSimCountdown(10);
+
+    await fetch("/api/admin/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "override",
+        serviceId: "website",
+        override: "down",
+        overrideMessage: "Simulated outage (auto-reverts in 10s)",
+      }),
+    });
+    await fetchData();
+
+    let remaining = 10;
+    const timer = setInterval(() => {
+      remaining -= 1;
+      setSimCountdown(remaining);
+      if (remaining <= 0) {
+        clearInterval(timer);
+        fetch("/api/admin/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "override",
+            serviceId: "website",
+            override: null,
+            overrideMessage: null,
+          }),
+        }).then(() => {
+          fetchData();
+          setSimulating(false);
+          setSimCountdown(0);
+        });
+      }
+    }, 1000);
+  };
+
   if (loading && !data) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -196,6 +239,15 @@ export default function AdminStatusPage() {
             <Globe className="h-3.5 w-3.5" />
             View Public Page
           </a>
+          <button
+            type="button"
+            onClick={handleSimulateOutage}
+            disabled={simulating}
+            className="flex items-center gap-1.5 rounded-[var(--radius-md)] border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+          >
+            <FlaskConical className="h-3.5 w-3.5" />
+            {simulating ? `Reverting in ${simCountdown}s...` : "Simulate Outage"}
+          </button>
           <button
             type="button"
             onClick={handleCheckAll}
