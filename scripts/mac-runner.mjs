@@ -30,7 +30,7 @@ function loadEnvLocal() {
         value = value.slice(1, -1);
       process.env[key] = value;
     }
-  } catch (_) {}
+  } catch {}
 }
 
 loadEnvLocal();
@@ -46,14 +46,14 @@ function getXcodebuildPath() {
   try {
     const devDir = execSync("xcode-select -p", { encoding: "utf8", shell: true }).trim();
     if (devDir) tried.push(resolve(devDir, "usr", "bin", "xcodebuild"));
-  } catch (_) {}
+  } catch {}
   for (const p of tried) {
     if (p && existsSync(p)) return { path: p, tried };
   }
   return { path: "xcodebuild", tried };
 }
 
-const SERVER_URL = process.env.VIBETREE_SERVER_URL || "http://localhost:3001";
+const SERVER_URL = process.env.VIBETREE_SERVER_URL || "[REDACTED]";
 const TOKEN = process.env.MAC_RUNNER_TOKEN;
 const RUNNER_ID = process.env.MAC_RUNNER_ID || `mac_${process.pid}`;
 
@@ -101,7 +101,7 @@ function parseXcdeviceList(raw) {
     const physical = mapped.filter((d) => d.kind === "physical");
     const simulators = mapped.filter((d) => d.kind === "simulator");
     return { physical, simulators };
-  } catch (_) {
+  } catch {
     return { physical: [], simulators: [] };
   }
 }
@@ -116,7 +116,7 @@ async function reportRunnerDevices() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ physical, simulators }),
     });
-  } catch (_) {
+  } catch {
     // Ignore reporting errors; build runner still works without device list.
   }
 }
@@ -196,7 +196,7 @@ async function runSimulatorStream(projectId, appPath, bundleId) {
   const deviceName = "iPhone 16";
   try {
     await run("xcrun", ["simctl", "boot", deviceName], { onLine: () => {} }).catch(() => {});
-  } catch (_) {}
+  } catch {}
   try {
     const installRes = await run("xcrun", ["simctl", "install", "booted", appPath], { onLine: () => {} });
     if (installRes.code !== 0) {
@@ -237,13 +237,13 @@ async function runScreenshotLoop(projectId) {
           });
           if (!res.ok) break;
         }
-      } catch (_) {}
+      } catch {}
       await sleep(SIMULATOR_FRAME_INTERVAL_MS);
     }
   } finally {
     try {
       await rm(screenshotPath, { force: true });
-    } catch (_) {}
+    } catch {}
   }
 }
 
@@ -339,7 +339,7 @@ function getCachedDerivedDataPath(projectId) {
   const cached = join(DERIVED_DATA_CACHE_DIR, projectId);
   try {
     execSync(`mkdir -p "${cached}"`, { shell: true });
-  } catch (_) {}
+  } catch {}
   return existsSync(cached) ? cached : null;
 }
 
@@ -366,7 +366,7 @@ async function validateJob(job) {
 
     // Auto-detect project name from unzipped contents: find the .xcodeproj and derive the name.
     let contents = [];
-    try { contents = readdirSync(unzipDir); } catch (_) {}
+    try { contents = readdirSync(unzipDir); } catch {}
     const xcodeprojEntry = contents.find((e) => e.endsWith(".xcodeproj"));
     if (xcodeprojEntry) {
       const detected = xcodeprojEntry.replace(/\.xcodeproj$/, "");
@@ -375,7 +375,6 @@ async function validateJob(job) {
       }
     }
 
-    const projDir = join(unzipDir, projectName);
     const xcodeproj = join(unzipDir, `${projectName}.xcodeproj`);
 
     if (!existsSync(xcodeproj)) {

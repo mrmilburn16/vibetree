@@ -26,13 +26,13 @@ function loadEnvLocal() {
         value = value.slice(1, -1);
       process.env[key] = value;
     }
-  } catch (_) {}
+  } catch {}
 }
 
 loadEnvLocal();
 
 const SERVER_URL =
-  process.env.SERVER_URL || process.env.VIBETREE_SERVER_URL || "http://localhost:3001";
+  process.env.SERVER_URL || process.env.VIBETREE_SERVER_URL || "[REDACTED]";
 const RESULTS_INPUT = join(ROOT, "data", "test-suite-results.jsonl");
 const RESULTS_OUTPUT = join(ROOT, "data", "regression-test-results.jsonl");
 
@@ -72,7 +72,7 @@ function loadTestSuiteResults() {
     if (!line.trim()) continue;
     try {
       entries.push(JSON.parse(line));
-    } catch (_) {}
+    } catch {}
   }
   return entries;
 }
@@ -159,7 +159,7 @@ async function sendMessage(projectId, prompt) {
         const obj = JSON.parse(line);
         if (obj.type === "done") donePayload = obj;
         else if (obj.type === "error") errorPayload = obj;
-      } catch (_) {}
+      } catch {}
     }
 
     if (errorPayload) throw new Error(errorPayload.error || "Stream error");
