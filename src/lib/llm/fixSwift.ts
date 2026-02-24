@@ -42,6 +42,16 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
 
     content = content.replace(/\.foregroundColor\b/g, ".foregroundStyle");
 
+    content = content.replace(
+      /NSAttributedString\.Key\.foregroundStyle\b/g,
+      "NSAttributedString.Key.foregroundColor"
+    );
+
+    content = content.replace(
+      /\bTheme\.accentColor\b/g,
+      "Color.accentColor"
+    );
+
     const usesCharts = /\b(Chart|BarMark|LineMark|AreaMark|PointMark|RuleMark|SectorMark)\b/.test(content);
     if (usesCharts && !content.includes("import Charts")) {
       content = "import Charts\n" + content;

@@ -1256,6 +1256,7 @@ function RunComparison({ runs }: { runs: SavedRun[] }) {
 }
 
 const TEST_SUITE_STORAGE_KEY = "vibetree-test-suite-state";
+const CONCURRENCY_STORAGE_KEY = "vibetree-test-suite-concurrency";
 
 function makeInitialResults(ideas: AppIdea[]): TestResult[] {
   return ideas.map((idea) => ({
@@ -1376,6 +1377,17 @@ export default function TestSuitePage() {
   const [copiedReport, setCopiedReport] = useState(false);
   const [runStartTime, setRunStartTime] = useState<number | null>(null);
   const [runElapsed, setRunElapsed] = useState(0);
+  const [concurrency, setConcurrency] = useState<1 | 2>(() => {
+    if (typeof window === "undefined") return 1;
+    try { return localStorage.getItem(CONCURRENCY_STORAGE_KEY) === "2" ? 2 : 1; } catch { return 1; }
+  });
+  const concurrencyRef = useRef(concurrency);
+
+  function setConcurrencyAndSave(n: 1 | 2) {
+    setConcurrency(n);
+    concurrencyRef.current = n;
+    try { localStorage.setItem(CONCURRENCY_STORAGE_KEY, String(n)); } catch {}
+  }
 
   const msKey = useCallback((ms: string) => `${TEST_SUITE_STORAGE_KEY}-${ms}`, []);
 
@@ -1877,70 +1889,76 @@ export default function TestSuitePage() {
     const finalResults: TestResult[] = [];
     const baseResults = results.filter((r) => !r.excluded && r.status !== "pending");
 
+    const saveProgress = async (isLast: boolean) => {
+      if (!runId) return;
+      const mergedByKey = new Map<string, TestResult>();
+      for (const r of [...baseResults, ...finalResults]) {
+        mergedByKey.set(`${r.idea.title}::${r.idea.prompt}`, r);
+      }
+      const merged = Array.from(mergedByKey.values());
+      const summary = {
+        total: merged.length,
+        compiled: merged.filter((r) => r.compiled).length,
+        compileRate: Math.round(
+          (merged.filter((r) => r.compiled).length / merged.length) * 100,
+        ),
+        avgAttempts: Math.round(
+          (merged.reduce((s, r) => s + r.attempts, 0) / merged.length) * 10,
+        ) / 10,
+        totalDurationMs: merged.reduce((s, r) => s + r.durationMs, 0),
+      };
+      try {
+        await fetch("/api/test-suite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "update",
+            id: runId,
+            status: abortRef.current ? "stopped" : (isLast ? "completed" : "running"),
+            results: merged.map((r) => ({
+              title: r.idea.title,
+              category: r.idea.category,
+              compiled: r.compiled ?? false,
+              attempts: r.attempts,
+              durationMs: r.durationMs,
+              projectId: r.projectId,
+              buildResultId: r.buildResultId,
+              errors: r.compilerErrors,
+              fileCount: r.fileCount,
+              model: r.model ?? config.model,
+            })),
+            summary,
+          }),
+        });
+      } catch (_) {}
+    };
+
     try {
-      for (let step = 0; step < pending.length; step++) {
-        if (abortRef.current) break;
+      let cursor = 0;
+      const lanes = concurrencyRef.current;
 
-        const idx = pending[step]!;
-        const result = await runSingleTest(idx, config, () => abortRef.current);
-        finalResults.push(result);
-        setCompletedCount(baseDone + finalResults.length);
-
-        if (runId) {
-          const mergedByKey = new Map<string, TestResult>();
-          for (const r of [...baseResults, ...finalResults]) {
-            mergedByKey.set(`${r.idea.title}::${r.idea.prompt}`, r);
-          }
-          const merged = Array.from(mergedByKey.values());
-          const summary = {
-            total: merged.length,
-            compiled: merged.filter((r) => r.compiled).length,
-            compileRate: Math.round(
-              (merged.filter((r) => r.compiled).length / merged.length) * 100,
-            ),
-            avgAttempts: Math.round(
-              (merged.reduce((s, r) => s + r.attempts, 0) / merged.length) * 10,
-            ) / 10,
-            totalDurationMs: merged.reduce((s, r) => s + r.durationMs, 0),
-          };
-
-          try {
-            await fetch("/api/test-suite", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                action: "update",
-                id: runId,
-                status: abortRef.current ? "stopped" : (step === pending.length - 1 ? "completed" : "running"),
-                results: merged.map((r) => ({
-                  title: r.idea.title,
-                  category: r.idea.category,
-                  compiled: r.compiled ?? false,
-                  attempts: r.attempts,
-                  durationMs: r.durationMs,
-                  projectId: r.projectId,
-                  buildResultId: r.buildResultId,
-                  errors: r.compilerErrors,
-                  fileCount: r.fileCount,
-                  model: r.model ?? config.model,
-                })),
-                summary,
-              }),
-            });
-          } catch (_) {
-            // Don't let a failed save stop the run; continue to next app
+      async function worker() {
+        while (cursor < pending.length) {
+          if (abortRef.current || pauseAfterNextRef.current) break;
+          const idx = pending[cursor++];
+          if (idx === undefined) break;
+          const result = await runSingleTest(idx, config, () => abortRef.current);
+          finalResults.push(result);
+          setCompletedCount(baseDone + finalResults.length);
+          await saveProgress(cursor >= pending.length);
+          if (pauseAfterNextRef.current) break;
+          if (cursor < pending.length && !abortRef.current) {
+            await sleep(lanes > 1 ? 500 : 2000);
           }
         }
+      }
 
-        if (pauseAfterNextRef.current) {
-          pauseAfterNextRef.current = false;
-          setPauseAfterNext(false);
-          break;
-        }
+      const workers = Array.from({ length: lanes }, () => worker());
+      await Promise.all(workers);
 
-        if (step < pending.length - 1 && !abortRef.current) {
-          await sleep(2000);
-        }
+      if (pauseAfterNextRef.current) {
+        pauseAfterNextRef.current = false;
+        setPauseAfterNext(false);
       }
     } finally {
       setRunning(false);
@@ -2096,17 +2114,30 @@ export default function TestSuitePage() {
     const config: RunConfig = { model, projectType: "pro" };
     const initialDone = results.filter((r) => r.status !== "pending").length;
     let doneInResume = 0;
+    const lanes = concurrencyRef.current;
+
     try {
-      for (const i of pending) {
-        if (abortRef.current) break;
-        await runSingleTest(i, config, () => abortRef.current);
-        doneInResume++;
-        setCompletedCount(initialDone + doneInResume);
-        if (pauseAfterNextRef.current) {
-          pauseAfterNextRef.current = false;
-          setPauseAfterNext(false);
-          break;
+      let cursor = 0;
+      async function worker() {
+        while (cursor < pending.length) {
+          if (abortRef.current || pauseAfterNextRef.current) break;
+          const idx = pending[cursor++];
+          if (idx === undefined) break;
+          await runSingleTest(idx, config, () => abortRef.current);
+          doneInResume++;
+          setCompletedCount(initialDone + doneInResume);
+          if (pauseAfterNextRef.current) break;
+          if (cursor < pending.length && !abortRef.current) {
+            await sleep(lanes > 1 ? 500 : 1000);
+          }
         }
+      }
+      const workers = Array.from({ length: lanes }, () => worker());
+      await Promise.all(workers);
+
+      if (pauseAfterNextRef.current) {
+        pauseAfterNextRef.current = false;
+        setPauseAfterNext(false);
       }
     } finally {
       setRunning(false);
@@ -2132,21 +2163,37 @@ export default function TestSuitePage() {
     setRunElapsed(0);
     const config: RunConfig = { model, projectType: "pro" };
     let done = 0;
+    const lanes = concurrencyRef.current;
+
+    for (const i of indices) {
+      setResults((prev) => {
+        const next = [...prev];
+        next[i] = { ...next[i], status: "pending", compilerErrors: [], attempts: 0, durationMs: 0, errorMessage: undefined, buildResultId: undefined, projectFiles: undefined };
+        return next;
+      });
+    }
+
     try {
-      for (const i of indices) {
-        if (abortRef.current) break;
-        setResults((prev) => {
-          const next = [...prev];
-          next[i] = { ...next[i], status: "pending", compilerErrors: [], attempts: 0, durationMs: 0, errorMessage: undefined, buildResultId: undefined, projectFiles: undefined };
-          return next;
-        });
-        await runSingleTest(i, config, () => abortRef.current);
-        done++;
-        if (pauseAfterNextRef.current) {
-          pauseAfterNextRef.current = false;
-          setPauseAfterNext(false);
-          break;
+      let cursor = 0;
+      async function worker() {
+        while (cursor < indices.length) {
+          if (abortRef.current || pauseAfterNextRef.current) break;
+          const idx = indices[cursor++];
+          if (idx === undefined) break;
+          await runSingleTest(idx, config, () => abortRef.current);
+          done++;
+          if (pauseAfterNextRef.current) break;
+          if (cursor < indices.length && !abortRef.current) {
+            await sleep(lanes > 1 ? 500 : 1000);
+          }
         }
+      }
+      const workers = Array.from({ length: lanes }, () => worker());
+      await Promise.all(workers);
+
+      if (pauseAfterNextRef.current) {
+        pauseAfterNextRef.current = false;
+        setPauseAfterNext(false);
       }
     } finally {
       setRunning(false);
@@ -2270,6 +2317,23 @@ export default function TestSuitePage() {
               className="min-w-[180px]"
               aria-label="Select LLM model"
             />
+            <div className="inline-flex rounded-full border border-[var(--border-default)] bg-[var(--background-tertiary)] p-0.5" role="group" aria-label="Concurrency">
+              {([1, 2] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setConcurrencyAndSave(n)}
+                  disabled={running}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    concurrency === n
+                      ? "bg-[var(--button-primary-bg)] text-white"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {n}x
+                </button>
+              ))}
+            </div>
             {!running ? (
               <>
                 <Button onClick={runAllTests} className="gap-2" disabled={pendingIndices.length === 0} title={pendingIndices.length === 0 ? "No pending apps to run" : "Run only pending, non-excluded apps"}>
@@ -2460,6 +2524,15 @@ export default function TestSuitePage() {
               Clear & reset
             </Button>
           </div>
+          {concurrency === 2 && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
+              <Zap className="h-3.5 w-3.5 text-[var(--semantic-warning)]" aria-hidden />
+              For full 2x speed, start a second Mac runner in another terminal:
+              <code className="rounded bg-[var(--background-tertiary)] px-1.5 py-0.5 font-mono text-[10px]">
+                MAC_RUNNER_ID=runner2 node scripts/mac-runner.mjs
+              </code>
+            </p>
+          )}
         </section>
 
         {/* ── Summary (Sticky) ── */}

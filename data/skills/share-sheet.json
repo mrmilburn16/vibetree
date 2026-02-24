@@ -43,12 +43,19 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 14,
-    "firstAttemptCompile": 8,
-    "compileRate": 57,
+    "totalBuilds": 31,
+    "firstAttemptCompile": 13,
+    "compileRate": 42,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "type 'NSAttributedString.Key' has no member 'foregroundStyle'",
+      "cannot convert value of type '[CardTheme]' to expected argument type 'Binding<C>'",
+      "generic parameter 'C' could not be inferred",
+      "cannot convert value of type 'Binding<C.Element>' to expected argument type 'CardTheme'",
+      "cannot convert value of type 'Binding<Subject>' to expected argument type '[Color]'",
+      "for-in loop requires 'AsyncStream<[RecognizedItem]>' to conform to 'Sequence'"
+    ],
     "goldenExamples": []
   }
 }

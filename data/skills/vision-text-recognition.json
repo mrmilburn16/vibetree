@@ -45,12 +45,14 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 4,
-    "firstAttemptCompile": 0,
-    "compileRate": 0,
+    "totalBuilds": 7,
+    "firstAttemptCompile": 2,
+    "compileRate": 29,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "for-in loop requires 'AsyncStream<[RecognizedItem]>' to conform to 'Sequence'"
+    ],
     "goldenExamples": []
   }
 }

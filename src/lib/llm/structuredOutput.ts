@@ -1,30 +1,4 @@
-/**
- * Real Claude API adapter. Used when ANTHROPIC_API_KEY is set and useRealLLM is true.
- * Returns the same shape as mockAdapter: { content, editedFiles }, plus parsedFiles when
- * the response is valid JSON (summary + files with path and content).
- */
-
-import Anthropic from "@anthropic-ai/sdk";
-import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
-import type { LLMResponse } from "./mockAdapter";
-import {
-  parseStructuredResponse,
-  type StructuredResponse,
-} from "./parseStructuredResponse";
-
-/** Map UI model values to Anthropic API model IDs. GPT 5.2 is disabled in the UI until OpenAI is wired. */
-const MODEL_MAP: Record<string, string> = {
-  "opus-4.6": "claude-opus-4-6",
-  "sonnet-4.6": "claude-sonnet-4-6",
-  "sonnet-4.5": "claude-sonnet-4-5-20250929",
-};
-
-const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
-// Sonnet 4.6 max output is 64K tokens; Opus 4.6 max output is 128K tokens.
-// 32K handles complex multi-file apps (13+ files) without truncation.
-const MAX_TOKENS = 32000;
-
-const SYSTEM_PROMPT_STANDARD = `You are an expert React Native / Expo developer. You build and modify Expo apps that run in Expo Go. Reply message-by-message: if the user sends a follow-up (e.g. "change the button color to blue"), you will receive the current project files and their request; apply the change and output the full updated JSON. If there are no current files, create a new app from scratch.
+export const SYSTEM_PROMPT_STANDARD = `You are an expert React Native / Expo developer. You build and modify Expo apps that run in Expo Go. Reply message-by-message: if the user sends a follow-up (e.g. "change the button color to blue"), you will receive the current project files and their request; apply the change and output the full updated JSON. If there are no current files, create a new app from scratch.
 
 Output format: Respond with a single JSON object only. No other text before or after.
 Shape: { "summary": "1-2 sentence description of what you built or changed", "files": [ { "path": "App.js", "content": "full JavaScript/JSX source..." }, ... ] }
@@ -37,7 +11,7 @@ Rules:
 - Q&A vs code changes: If the user is asking a question or requesting explanation/steps (and NOT asking you to change the app), answer in the summary string and set files to an empty array (no file changes).
 Produce the full set of files (new or updated) in one reply. No explanations outside the summary.`;
 
-const SYSTEM_PROMPT_SWIFT = `You are an expert Swift and SwiftUI developer. You build native iOS apps that run on iPhone and iPad. Reply message-by-message: if the user sends a follow-up (e.g. "change the button color to blue"), you will receive the current project files and their request; apply the change and output the full updated JSON. If there are no current files, create a new app from scratch.
+export const SYSTEM_PROMPT_SWIFT = `You are an expert Swift and SwiftUI developer. You build native iOS apps that run on iPhone and iPad. Reply message-by-message: if the user sends a follow-up (e.g. "change the button color to blue"), you will receive the current project files and their request; apply the change and output the full updated JSON. If there are no current files, create a new app from scratch.
 
 Output format: Respond with a single JSON object only. No other text before or after.
 Shape: { "summary": "1-2 sentence description of what you built or changed", "files": [ { "path": "App.swift", "content": "full Swift source..." }, { "path": "ContentView.swift", "content": "..." }, ... ] }
@@ -52,10 +26,6 @@ Rules:
 - Swift compiler correctness: Do not add trailing closures unless the API actually accepts a closure. This is a common cause of “Extra trailing closure passed in call”. In Swift Charts specifically, \`BarMark(...)\`, \`LineMark(...)\`, \`AreaMark(...)\`, \`PointMark(...)\` initializers do NOT take trailing closures—use modifiers like \`.annotation { }\`, \`.foregroundStyle(...)\`, \`.symbol(...)\`, etc.
 - String interpolation correctness: Code inside \`Text("...")\` interpolations must be valid Swift (no JSON-style escaping). For example, write \`.currency(code: "USD")\` (not \`.currency(code: \\\"USD\\\")\`), and ensure every \`"\` is properly closed.
 - Type correctness: Don’t pass formatted strings into numeric APIs. Keep numbers as \`Double\`/\`Int\` for views like \`ProgressView(value:total:)\`, \`Gauge(value:in:)\`, charts, and calculations; only format to \`String\` when rendering with \`Text(...)\`.
-- Theme/accent color: Do NOT create a custom \`Theme\` struct with an \`accentColor\` property—it shadows the system API and causes "has no member 'accentColor'" errors. Use \`Color.accentColor\` (the built-in SwiftUI accent) or define a custom \`Color\` extension for app-specific colors.
-- NSAttributedString keys: When building \`NSAttributedString\` or \`AttributedString\` with UIKit/AppKit APIs, use \`NSAttributedString.Key.foregroundColor\` (NOT \`.foregroundStyle\`). \`.foregroundStyle\` is a SwiftUI view modifier, not an attributed-string key.
-- ForEach with Binding: When you need mutable access to array elements inside \`ForEach\`, use \`ForEach($array)\` or \`ForEach(array.indices, id: \\\\.self)\` with \`$array[index]\`. Do NOT pass a plain \`[T]\` array literal where a \`Binding<[T]>\` or \`Binding<C>\` is expected—the compiler cannot infer the generic parameter.
-- Widgets and Live Activities: WidgetKit timeline providers, widget views, and Live Activity configurations require specific entry types conforming to \`TimelineEntry\`. The widget \`@main\` attribute must be on the \`WidgetBundle\` (not the app's \`@main\`). Place all widget code in the "WidgetExtension/" folder. Do NOT duplicate \`@main\` across the app and the widget extension.
 - Q&A vs code changes: If the user is asking a question or requesting explanation/steps (and NOT asking you to change the app), answer in the summary string and set files to an empty array (no file changes).
 - Live Activities: If the user asks for Live Activities, you MUST generate a WidgetKit extension implementation under a folder named exactly "WidgetExtension/" so the exporter can auto-create the extension target. Include at least:
   - "WidgetExtension/WidgetBundle.swift" with an \`@main\` \`WidgetBundle\`
@@ -134,7 +104,7 @@ Rules:
 
 Produce the full set of files (new or updated) in one reply. No markdown, no code fences around the JSON—only the raw JSON object.`;
 
-const STRUCTURED_OUTPUT_SCHEMA = {
+export const STRUCTURED_OUTPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["summary", "files"],
@@ -155,7 +125,12 @@ const STRUCTURED_OUTPUT_SCHEMA = {
   },
 } as const;
 
-function isStructuredResponse(value: unknown): value is StructuredResponse {
+export type StructuredResponse = {
+  summary: string;
+  files: Array<{ path: string; content: string }>;
+};
+
+export function isStructuredResponse(value: unknown): value is StructuredResponse {
   if (!value || typeof value !== "object") return false;
   const v = value as { summary?: unknown; files?: unknown };
   if (typeof v.summary !== "string") return false;
@@ -167,227 +142,3 @@ function isStructuredResponse(value: unknown): value is StructuredResponse {
   });
 }
 
-function previewText(text: string, max = 240): string {
-  const s = (text ?? "").replace(/\s+/g, " ").trim();
-  if (s.length <= max) return s;
-  return s.slice(0, max) + "…";
-}
-
-export type ProjectType = "standard" | "pro";
-
-export interface GetClaudeResponseOptions {
-  /** Current project files; when present, the user message is treated as a follow-up (e.g. change color, add feature). */
-  currentFiles?: Array<{ path: string; content: string }>;
-  /** When "pro", use Swift/SwiftUI system prompt; otherwise use Standard (Expo). */
-  projectType?: ProjectType;
-  /** Extra system-prompt text generated by the skills system (appended after the base prompt). */
-  skillPromptBlock?: string;
-}
-
-/**
- * Call Claude and return content + editedFiles (+ parsedFiles when response is valid JSON).
- * If currentFiles is provided, the user message is sent with that context so Claude can apply incremental changes.
- */
-export async function getClaudeResponse(
-  message: string,
-  modelOption?: string,
-  options?: GetClaudeResponseOptions
-): Promise<LLMResponse> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set");
-  }
-
-  const model =
-    modelOption && MODEL_MAP[modelOption]
-      ? MODEL_MAP[modelOption]
-      : DEFAULT_MODEL;
-
-  const client = new Anthropic({ apiKey });
-
-  let userContent: string;
-  if (options?.currentFiles && options.currentFiles.length > 0) {
-    userContent = `Current project files (apply the user's request to these and output the full updated JSON):\n${JSON.stringify(options.currentFiles)}\n\nUser request: ${message}`;
-  } else {
-    userContent = message;
-  }
-
-  const basePrompt =
-    options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
-  const systemPrompt = options?.skillPromptBlock
-    ? basePrompt + options.skillPromptBlock
-    : basePrompt;
-
-  const response = await client.messages.create({
-    model,
-    max_tokens: MAX_TOKENS,
-    system: systemPrompt,
-    output_config: { format: jsonSchemaOutputFormat(STRUCTURED_OUTPUT_SCHEMA) },
-    messages: [{ role: "user", content: userContent }],
-  });
-
-  try {
-    const parsedOutput = (response as unknown as { parsed_output?: unknown }).parsed_output;
-    const parsed: StructuredResponse = isStructuredResponse(parsedOutput)
-      ? parsedOutput
-      : parseStructuredResponse(
-          extractTextFromContent((response as any).content)
-        );
-    const usage =
-      response.usage &&
-      typeof response.usage.input_tokens === "number" &&
-      typeof response.usage.output_tokens === "number"
-        ? {
-            input_tokens: response.usage.input_tokens,
-            output_tokens: response.usage.output_tokens,
-          }
-        : undefined;
-    return {
-      content: parsed.summary,
-      editedFiles: parsed.files.map((f) => f.path),
-      parsedFiles: parsed.files,
-      usage,
-    };
-  } catch (err) {
-    const raw = previewText(extractTextFromContent((response as any).content ?? []));
-    const reason = (response as any)?.stop_reason ?? null;
-    const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`Invalid structured response (stop_reason=${String(reason)}): ${detail}. raw="${raw}"`);
-  }
-}
-
-/**
- * Stream Claude response and call onProgress with live received character count
- * (client can approximate tokens as chars/4). Returns same shape as getClaudeResponse.
- */
-async function getClaudeResponseStream(
-  message: string,
-  modelOption: string | undefined,
-  options: GetClaudeResponseOptions | undefined,
-  callbacks: {
-    onProgress: (data: { receivedChars: number }) => void;
-    onDiscoveredFilePath?: (path: string) => void;
-  }
-): Promise<LLMResponse> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-
-  const model =
-    modelOption && MODEL_MAP[modelOption]
-      ? MODEL_MAP[modelOption]
-      : DEFAULT_MODEL;
-
-  const client = new Anthropic({ apiKey });
-
-  let userContent: string;
-  if (options?.currentFiles && options.currentFiles.length > 0) {
-    userContent = `Current project files (apply the user's request to these and output the full updated JSON):\n${JSON.stringify(options.currentFiles)}\n\nUser request: ${message}`;
-  } else {
-    userContent = message;
-  }
-
-  const basePrompt =
-    options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
-  const systemPrompt = options?.skillPromptBlock
-    ? basePrompt + options.skillPromptBlock
-    : basePrompt;
-
-  let lastReported = 0;
-  const throttleChars = 80;
-  let lastScannedLen = 0;
-  const seenPaths = new Set<string>();
-
-  const maybeScanForPaths = (textSnapshot: string) => {
-    if (!callbacks.onDiscoveredFilePath) return;
-    // Scan only the new tail to avoid quadratic work.
-    const start = Math.max(0, lastScannedLen - 5000);
-    const tail = textSnapshot.slice(start);
-    lastScannedLen = textSnapshot.length;
-
-    const re = /"path"\s*:\s*"([^"]+)"/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(tail))) {
-      const p = m[1];
-      if (!p) continue;
-      if (options?.projectType === "pro") {
-        if (!p.endsWith(".swift")) continue;
-      } else {
-        // Standard: allow common JS/TS paths too
-        const ok = p.endsWith(".js") || p.endsWith(".jsx") || p.endsWith(".ts") || p.endsWith(".tsx") || p.endsWith(".json");
-        if (!ok) continue;
-      }
-      if (seenPaths.has(p)) continue;
-      seenPaths.add(p);
-      callbacks.onDiscoveredFilePath(p);
-    }
-  };
-
-  const stream = client.messages
-    .stream({
-      model,
-      max_tokens: MAX_TOKENS,
-      system: systemPrompt,
-      output_config: { format: jsonSchemaOutputFormat(STRUCTURED_OUTPUT_SCHEMA) },
-      messages: [{ role: "user", content: userContent }],
-    })
-    .on("text", (_delta: string, textSnapshot: string) => {
-      const len = textSnapshot.length;
-      // File discovery (best-effort) for live UI updates.
-      if (len - lastScannedLen >= 200) {
-        maybeScanForPaths(textSnapshot);
-      }
-      if (len - lastReported >= throttleChars || len < 100) {
-        lastReported = len;
-        callbacks.onProgress({ receivedChars: len });
-      }
-    });
-
-  const finalMessage = await stream.finalMessage();
-
-  try {
-    const parsedOutput = (finalMessage as unknown as { parsed_output?: unknown }).parsed_output;
-    const parsed: StructuredResponse = isStructuredResponse(parsedOutput)
-      ? parsedOutput
-      : parseStructuredResponse(
-          extractTextFromContent(
-            Array.isArray((finalMessage as any).content) ? (finalMessage as any).content : []
-          )
-        );
-    const usage =
-      finalMessage.usage &&
-      typeof finalMessage.usage.input_tokens === "number" &&
-      typeof finalMessage.usage.output_tokens === "number"
-        ? {
-            input_tokens: finalMessage.usage.input_tokens,
-            output_tokens: finalMessage.usage.output_tokens,
-          }
-        : undefined;
-    return {
-      content: parsed.summary,
-      editedFiles: parsed.files.map((f) => f.path),
-      parsedFiles: parsed.files,
-      usage,
-    };
-  } catch (err) {
-    const raw = previewText(
-      extractTextFromContent(
-        Array.isArray((finalMessage as any).content) ? (finalMessage as any).content : []
-      )
-    );
-    const reason = (finalMessage as any)?.stop_reason ?? null;
-    const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`Invalid structured response (stop_reason=${String(reason)}): ${detail}. raw="${raw}"`);
-  }
-}
-
-export { getClaudeResponseStream };
-
-function extractTextFromContent(
-  content: Array<{ type: string; text?: string }>
-): string {
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter((block): block is { type: "text"; text: string } => block.type === "text" && typeof block.text === "string")
-    .map((block) => block.text)
-    .join("\n");
-}

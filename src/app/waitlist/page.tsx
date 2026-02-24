@@ -7,6 +7,13 @@ import { Button, Card, Input } from "@/components/ui";
 import { Check, Copy, ExternalLink, Trophy, Clock, Users, ChevronDown, Crown, Medal, Star, Gift, Zap } from "lucide-react";
 
 const STORAGE_TOKEN = "vibetree-waitlist-token";
+const STORAGE_JOIN_BTN_STYLE = "vibetree-waitlist-join-btn-style";
+const STORAGE_CARD_LAYOUT = "vibetree-waitlist-card-layout";
+
+type JoinButtonStyle = 1 | 2 | 3;
+type CardLayout = "current" | "green";
+
+const CARD_GREEN = "#34d399";
 
 const TWEET_TEXT =
   "I just joined the waitlist for Vibetree — build real iOS apps in your browser with AI. No Xcode required. 🚀";
@@ -255,7 +262,16 @@ export default function WaitlistPage() {
   const [top10, setTop10] = useState<LeaderboardEntry[]>([]);
   const [userRank, setUserRank] = useState<LeaderboardEntry | null>(null);
   const [hasReturnedToTab, setHasReturnedToTab] = useState(false);
+  const [joinButtonStyle, setJoinButtonStyle] = useState<JoinButtonStyle>(1);
+  const [cardLayout, setCardLayout] = useState<CardLayout>("current");
   const wasHiddenRef = useRef(false);
+
+  function setJoinButtonStyleAndSave(s: JoinButtonStyle) {
+    setJoinButtonStyle(s);
+    try {
+      localStorage.setItem(STORAGE_JOIN_BTN_STYLE, String(s));
+    } catch (_) {}
+  }
 
   // Show "I did it" only after user has left the tab and come back (e.g. opened Share link)
   useEffect(() => {
@@ -270,7 +286,7 @@ export default function WaitlistPage() {
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, []);
 
-  // Hydrate from server on load if token exists
+  // Hydrate from server on load if token exists; restore button style
   useEffect(() => {
     setMounted(true);
     const token = localStorage.getItem(STORAGE_TOKEN);
@@ -280,7 +296,18 @@ export default function WaitlistPage() {
     } else {
       fetchLeaderboard(null);
     }
+    const raw = localStorage.getItem(STORAGE_JOIN_BTN_STYLE);
+    if (raw === "2" || raw === "3") setJoinButtonStyle(Number(raw) as JoinButtonStyle);
+    const layout = localStorage.getItem(STORAGE_CARD_LAYOUT);
+    if (layout === "green") setCardLayout("green");
   }, []);
+
+  function setCardLayoutAndSave(l: CardLayout) {
+    setCardLayout(l);
+    try {
+      localStorage.setItem(STORAGE_CARD_LAYOUT, l);
+    } catch (_) {}
+  }
 
   async function fetchStatus(token: string) {
     try {
@@ -398,9 +425,11 @@ export default function WaitlistPage() {
   }
 
   function getTweetUrl(): string {
-    const ref = status?.referralCode;
-    const link = ref ? ` ${window.location.origin}/waitlist?ref=${ref}` : "";
-    return `https://twitter.com/intent/tweet?text=${encodeURIComponent(TWEET_TEXT + link)}`;
+    const affiliateLink = getReferralLink();
+    const text = affiliateLink
+      ? `${TWEET_TEXT} Join here: ${affiliateLink}`
+      : TWEET_TEXT;
+    return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
   }
 
   async function copyReferral() {
@@ -426,7 +455,7 @@ export default function WaitlistPage() {
         {/* Page 1: hero + join fit in one viewport; scroll snaps to this or to actions below */}
         <div className="flex min-h-[calc(100dvh-4rem)] flex-col snap-start">
           {/* Hero — compact so sign-up card sits higher */}
-          <section className="landing-section relative flex flex-shrink-0 flex-col justify-center overflow-hidden px-4 pt-[calc(4rem-2vh)] pb-4 sm:px-6 sm:pt-[calc(5rem-2vh)] sm:pb-6">
+          <section className="landing-section relative flex flex-shrink-0 flex-col justify-center overflow-hidden px-4 pt-[calc(4rem-3vh)] pb-4 sm:px-6 sm:pt-[calc(5rem-3vh)] sm:pb-6">
             <div
               className="absolute inset-0 opacity-30"
               style={{
@@ -446,7 +475,7 @@ export default function WaitlistPage() {
           </section>
 
           {/* Join form / confirmation */}
-          <section id="join" className="landing-section -mt-[2vh] flex flex-1 flex-col justify-center px-4 pt-2 pb-4 sm:px-6 sm:pt-4 sm:pb-6">
+          <section id="join" className="landing-section -mt-[3vh] flex flex-1 flex-col justify-center px-4 pt-2 pb-4 sm:px-6 sm:pt-4 sm:pb-6">
             <div className="mx-auto w-full max-w-xl">
             {joined && status ? (
               <Card className="animate-fade-in py-10 text-center">
@@ -498,13 +527,25 @@ export default function WaitlistPage() {
               </Card>
             ) : (
               <Card className="animate-fade-in p-6 sm:p-8">
-                <h2 className="text-heading-card mb-6 text-center">Join the waitlist</h2>
-                <p className="text-body-muted mb-6 text-center text-sm">
+                <h2
+                  className="mb-6 text-center text-heading-card"
+                  style={cardLayout === "green" ? { color: CARD_GREEN } : undefined}
+                >
+                  Join the waitlist
+                </h2>
+                <p
+                  className={`mb-6 text-center text-sm ${cardLayout === "current" ? "text-body-muted" : ""}`}
+                  style={cardLayout === "green" ? { color: "rgba(52, 211, 153, 0.9)" } : undefined}
+                >
                   Enter your email to reserve your spot. Complete actions below to move up.
                 </p>
                 <form onSubmit={handleJoin} className="space-y-4">
                   <div>
-                    <label htmlFor="waitlist-email" className="text-body-muted mb-1.5 block pl-3 text-sm font-medium">
+                    <label
+                      htmlFor="waitlist-email"
+                      className={`mb-1.5 block pl-3 text-sm font-medium ${cardLayout === "current" ? "text-body-muted" : ""}`}
+                      style={cardLayout === "green" ? { color: CARD_GREEN } : undefined}
+                    >
                       Email
                     </label>
                     <Input
@@ -518,7 +559,11 @@ export default function WaitlistPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="waitlist-name" className="text-body-muted mb-1.5 block pl-3 text-sm font-medium">
+                    <label
+                      htmlFor="waitlist-name"
+                      className={`mb-1.5 block pl-3 text-sm font-medium ${cardLayout === "current" ? "text-body-muted" : ""}`}
+                      style={cardLayout === "green" ? { color: CARD_GREEN } : undefined}
+                    >
                       Name <span className="text-[var(--text-tertiary)]">(optional)</span>
                     </label>
                     <Input
@@ -532,10 +577,74 @@ export default function WaitlistPage() {
                     />
                   </div>
                   {error && <p className="text-sm text-[var(--semantic-error)]">{error}</p>}
+                  {/* Layout toggle */}
+                  <div className="flex items-center justify-center gap-1 pt-2">
+                    <span className="mr-2 text-xs text-[var(--text-tertiary)]">Layout:</span>
+                    <button
+                      type="button"
+                      onClick={() => setCardLayoutAndSave("current")}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                        cardLayout === "current"
+                          ? "bg-[var(--link-default)] text-white"
+                          : "bg-[var(--background-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      }`}
+                    >
+                      Current
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCardLayoutAndSave("green")}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                        cardLayout === "green"
+                          ? "bg-[var(--link-default)] text-white"
+                          : "bg-[var(--background-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      }`}
+                    >
+                      Green accent
+                    </button>
+                  </div>
+                  {/* Button style toggle */}
+                  <div className="flex items-center justify-center gap-1 pt-2">
+                    <span className="mr-2 text-xs text-[var(--text-tertiary)]">Button:</span>
+                    {([1, 2, 3] as const).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setJoinButtonStyleAndSave(n)}
+                        className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                          joinButtonStyle === n
+                            ? "bg-[var(--link-default)] text-white"
+                            : "bg-[var(--background-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex justify-center pt-4 pb-2">
-                    <Button type="submit" variant="primary" disabled={loading} className="w-full sm:w-auto">
-                      {loading ? "Joining…" : "Join the waitlist"}
-                    </Button>
+                    {joinButtonStyle === 1 && (
+                      <Button type="submit" variant="primary" disabled={loading} className="w-full sm:w-auto">
+                        {loading ? "Joining…" : "Join the waitlist"}
+                      </Button>
+                    )}
+                    {joinButtonStyle === 2 && (
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="font-semibold text-[#10b981] hover:underline disabled:opacity-60"
+                      >
+                        {loading ? "Joining…" : "Join the waitlist"}
+                      </button>
+                    )}
+                    {joinButtonStyle === 3 && (
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="rounded-full border border-[var(--border-default)] bg-[var(--background-tertiary)] px-6 py-2.5 font-medium text-[var(--link-default)] transition-colors hover:opacity-90 disabled:opacity-60"
+                      >
+                        {loading ? "Joining…" : "Join the waitlist"}
+                      </button>
+                    )}
                   </div>
                 </form>
               </Card>
