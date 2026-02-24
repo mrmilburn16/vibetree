@@ -18,10 +18,12 @@ export function Badge({
   variant = "neutral",
   className = "",
   children,
+  role = "status",
   ...props
 }: BadgeProps) {
   return (
     <span
+      role={role}
       className={`
         inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
         ${variantClasses[variant]}

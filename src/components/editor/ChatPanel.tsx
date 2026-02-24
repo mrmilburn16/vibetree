@@ -193,7 +193,7 @@ export function ChatPanel({
   }, [input]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" role="region" aria-label="Chat panel">
       <div className="flex items-center justify-between gap-3 border-b border-[var(--border-default)] px-4 py-2.5">
         <div className="flex items-center gap-3">
           {buildStatus === "building" && <BuildingIndicator />}

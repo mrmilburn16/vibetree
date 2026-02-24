@@ -78,7 +78,7 @@ export default function SignUpPage() {
               />
             </div>
             {error && (
-              <p className="text-sm text-[var(--semantic-error)]">{error}</p>
+              <p className="text-sm text-[var(--semantic-error)]" role="alert" aria-live="assertive">{error}</p>
             )}
             <Button type="submit" variant="primary" className="w-full" disabled={loading}>
               {loading ? "Creating account…" : "Sign up"}
