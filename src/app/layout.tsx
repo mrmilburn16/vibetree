@@ -26,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={fontVariableClasses} suppressHydrationWarning>
+    <html lang="en" className={fontVariableClasses} data-theme="emerald" suppressHydrationWarning>
       <body className="antialiased">
         <script
           dangerouslySetInnerHTML={{

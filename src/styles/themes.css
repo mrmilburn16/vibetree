@@ -4,7 +4,7 @@
  */
 
 /* ─── Light mode base (any theme ending in -light) ─── */
-[data-theme$="-light"] {
+:root[data-theme$="-light"] {
   --background-primary: #FAFAFA;
   --background-secondary: #F4F4F5;
   --background-tertiary: #E4E4E7;
@@ -28,7 +28,7 @@
 /* ─── Dark themes ─── */
 
 /* Twilight Violet — default (purple/indigo) */
-[data-theme="violet"] {
+:root[data-theme="violet"] {
   --accent-rgb: 99, 102, 241;
   --button-primary-bg: #6366F1;
   --button-primary-hover: #818CF8;
@@ -38,7 +38,7 @@
 }
 
 /* Forest — emerald green */
-[data-theme="emerald"] {
+:root[data-theme="emerald"] {
   --accent-rgb: 16, 185, 129;
   --button-primary-bg: #10B981;
   --button-primary-hover: #34D399;
@@ -48,7 +48,7 @@
 }
 
 /* Amber — warm gold */
-[data-theme="amber"] {
+:root[data-theme="amber"] {
   --accent-rgb: 245, 158, 11;
   --button-primary-bg: #F59E0B;
   --button-primary-hover: #FBBF24;
@@ -58,7 +58,7 @@
 }
 
 /* Ocean — sky blue */
-[data-theme="ocean"] {
+:root[data-theme="ocean"] {
   --accent-rgb: 14, 165, 233;
   --button-primary-bg: #0EA5E9;
   --button-primary-hover: #38BDF8;
@@ -68,7 +68,7 @@
 }
 
 /* Rose — pink */
-[data-theme="rose"] {
+:root[data-theme="rose"] {
   --accent-rgb: 244, 63, 94;
   --button-primary-bg: #F43F5E;
   --button-primary-hover: #FB7185;
@@ -78,7 +78,7 @@
 }
 
 /* Slate — cool gray */
-[data-theme="slate"] {
+:root[data-theme="slate"] {
   --accent-rgb: 100, 116, 139;
   --button-primary-bg: #64748B;
   --button-primary-hover: #94A3B8;
@@ -88,7 +88,7 @@
 }
 
 /* Teal — cyan-green */
-[data-theme="teal"] {
+:root[data-theme="teal"] {
   --accent-rgb: 20, 184, 166;
   --button-primary-bg: #14B8A6;
   --button-primary-hover: #2DD4BF;
@@ -98,7 +98,7 @@
 }
 
 /* Fuchsia — magenta */
-[data-theme="fuchsia"] {
+:root[data-theme="fuchsia"] {
   --accent-rgb: 217, 70, 239;
   --button-primary-bg: #D946EF;
   --button-primary-hover: #E879F9;
@@ -108,7 +108,7 @@
 }
 
 /* Sky — deep blue */
-[data-theme="sky"] {
+:root[data-theme="sky"] {
   --accent-rgb: 2, 132, 199;
   --button-primary-bg: #0284C7;
   --button-primary-hover: #0EA5E9;
@@ -118,7 +118,7 @@
 }
 
 /* Lime — bright green */
-[data-theme="lime"] {
+:root[data-theme="lime"] {
   --accent-rgb: 132, 204, 22;
   --button-primary-bg: #84CC16;
   --button-primary-hover: #A3E635;
@@ -129,7 +129,7 @@
 
 /* ─── Light themes (same accents as above) ─── */
 
-[data-theme="violet-light"] {
+:root[data-theme="violet-light"] {
   --accent-rgb: 99, 102, 241;
   --button-primary-bg: #6366F1;
   --button-primary-hover: #4F46E5;
@@ -138,7 +138,7 @@
   --semantic-info: #6366F1;
 }
 
-[data-theme="emerald-light"] {
+:root[data-theme="emerald-light"] {
   --accent-rgb: 16, 185, 129;
   --button-primary-bg: #10B981;
   --button-primary-hover: #059669;
@@ -147,7 +147,7 @@
   --semantic-info: #10B981;
 }
 
-[data-theme="amber-light"] {
+:root[data-theme="amber-light"] {
   --accent-rgb: 245, 158, 11;
   --button-primary-bg: #F59E0B;
   --button-primary-hover: #D97706;
@@ -156,7 +156,7 @@
   --semantic-info: #F59E0B;
 }
 
-[data-theme="ocean-light"] {
+:root[data-theme="ocean-light"] {
   --accent-rgb: 14, 165, 233;
   --button-primary-bg: #0EA5E9;
   --button-primary-hover: #0284C7;
@@ -165,7 +165,7 @@
   --semantic-info: #0EA5E9;
 }
 
-[data-theme="rose-light"] {
+:root[data-theme="rose-light"] {
   --accent-rgb: 244, 63, 94;
   --button-primary-bg: #F43F5E;
   --button-primary-hover: #E11D48;
@@ -174,7 +174,7 @@
   --semantic-info: #F43F5E;
 }
 
-[data-theme="slate-light"] {
+:root[data-theme="slate-light"] {
   --accent-rgb: 100, 116, 139;
   --button-primary-bg: #64748B;
   --button-primary-hover: #475569;
@@ -183,7 +183,7 @@
   --semantic-info: #64748B;
 }
 
-[data-theme="teal-light"] {
+:root[data-theme="teal-light"] {
   --accent-rgb: 20, 184, 166;
   --button-primary-bg: #14B8A6;
   --button-primary-hover: #0D9488;
@@ -192,7 +192,7 @@
   --semantic-info: #14B8A6;
 }
 
-[data-theme="fuchsia-light"] {
+:root[data-theme="fuchsia-light"] {
   --accent-rgb: 217, 70, 239;
   --button-primary-bg: #D946EF;
   --button-primary-hover: #C026D3;
@@ -201,7 +201,7 @@
   --semantic-info: #D946EF;
 }
 
-[data-theme="sky-light"] {
+:root[data-theme="sky-light"] {
   --accent-rgb: 2, 132, 199;
   --button-primary-bg: #0284C7;
   --button-primary-hover: #0369A1;
@@ -210,7 +210,7 @@
   --semantic-info: #0284C7;
 }
 
-[data-theme="lime-light"] {
+:root[data-theme="lime-light"] {
   --accent-rgb: 132, 204, 22;
   --button-primary-bg: #84CC16;
   --button-primary-hover: #65A30D;
