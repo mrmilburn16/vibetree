@@ -55,12 +55,14 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 18,
-    "firstAttemptCompile": 13,
-    "compileRate": 72,
+    "totalBuilds": 26,
+    "firstAttemptCompile": 15,
+    "compileRate": 58,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "type 'Theme' has no member 'accentColor'"
+    ],
     "goldenExamples": []
   }
 }

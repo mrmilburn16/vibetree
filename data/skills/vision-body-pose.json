@@ -62,14 +62,15 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 6,
-    "firstAttemptCompile": 5,
-    "compileRate": 83,
+    "totalBuilds": 9,
+    "firstAttemptCompile": 6,
+    "compileRate": 67,
     "functionalSuccesses": 1,
-    "functionalRate": 17,
+    "functionalRate": 11,
     "commonErrors": [
       "Double-counting reps (v1: narrow hysteresis gap)",
-      "Stopwatch-like phantom counting when still (v2: hardcoded thresholds too wide for user's camera setup)"
+      "Stopwatch-like phantom counting when still (v2: hardcoded thresholds too wide for user's camera setup)",
+      "type 'Theme' has no member 'accentColor'"
     ],
     "goldenExamples": [
       {

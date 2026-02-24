@@ -1,7 +1,9 @@
 {
   "id": "audio-recording",
   "name": "Audio Recording & Playback (AVFoundation)",
-  "frameworks": ["AVFoundation"],
+  "frameworks": [
+    "AVFoundation"
+  ],
   "version": 1,
   "detection": {
     "keywords": [
@@ -19,7 +21,12 @@
       "AVAudioRecorder",
       "AVAudioPlayer"
     ],
-    "excludeKeywords": ["speech recognition", "transcribe", "speech to text", "dictation"]
+    "excludeKeywords": [
+      "speech recognition",
+      "transcribe",
+      "speech to text",
+      "dictation"
+    ]
   },
   "promptInjection": "CAPABILITY: Audio Recording & Playback (AVFoundation)\n\nRECORDING SETUP:\n1. Import AVFoundation.\n2. Configure AVAudioSession BEFORE creating the recorder:\n   let session = AVAudioSession.sharedInstance()\n   try session.setCategory(.playAndRecord, mode: .default)\n   try session.setActive(true)\n3. Request microphone permission: session.requestRecordPermission { granted in ... }\n4. Create a file URL in the documents directory with .m4a extension.\n5. Define recording settings:\n   let settings: [String: Any] = [\n       AVFormatIDKey: Int(kAudioFormatMPEG4AAC),\n       AVSampleRateKey: 44100,\n       AVNumberOfChannelsKey: 1,\n       AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue\n   ]\n6. Create AVAudioRecorder(url: fileURL, settings: settings), set delegate, call record().\n\nSTOPPING & SAVING:\n- Call recorder.stop() to finish. The file is automatically saved at the URL.\n- Implement AVAudioRecorderDelegate audioRecorderDidFinishRecording(_:successfully:) for cleanup.\n- Store metadata (filename, date, duration) in UserDefaults or a Codable store for the recordings list.\n\nPLAYBACK:\n1. Switch audio session category to .playback or .playAndRecord before playing.\n2. Create AVAudioPlayer(contentsOf: fileURL).\n3. Call player.prepareToPlay() then player.play().\n4. Use player.duration for total length, player.currentTime for scrubber position.\n5. Implement AVAudioPlayerDelegate audioPlayerDidFinishPlaying(_:successfully:) to reset UI.\n\nFILE MANAGEMENT:\n- Store recordings in FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!\n- Use unique filenames: \"recording-\\(Date().timeIntervalSince1970).m4a\"\n- To delete: FileManager.default.removeItem(at: fileURL)\n\nCRITICAL GOTCHAS:\n- MUST set audio session category BEFORE creating AVAudioRecorder — otherwise it silently fails.\n- MUST request microphone permission — app crashes without NSMicrophoneUsageDescription.\n- When switching from recording to playback, you may need to reconfigure the audio session category.\n- AVAudioPlayer holds a strong reference to the file — release it before deleting the file.\n- On Simulator, recording works but quality is poor (uses Mac mic). Test on device for real results.\n\nUI BEST PRACTICES:\n- Show a waveform or level meter during recording (use recorder.isMeteringEnabled = true, recorder.updateMeters(), recorder.averagePower(forChannel: 0)).\n- Show recording duration with a timer.\n- Provide pause/resume via recorder.pause() and recorder.record().\n- For playback, show a scrubber with elapsed/remaining time.\n\nANTI-PATTERNS:\n- Do NOT create AVAudioRecorder before setting the audio session category.\n- Do NOT forget NSMicrophoneUsageDescription in Info.plist.\n- Do NOT use .record category if you also need playback — use .playAndRecord.\n- Do NOT assume the file URL persists across app launches without storing it.\n- Do NOT play audio without preparing the player first (prepareToPlay).",
   "canonicalCode": {
@@ -33,11 +40,13 @@
     "Not storing recording file URLs/metadata for persistence across app launches",
     "Playing audio without calling prepareToPlay() first"
   ],
-  "requiredPermissions": ["NSMicrophoneUsageDescription"],
+  "requiredPermissions": [
+    "NSMicrophoneUsageDescription"
+  ],
   "stats": {
-    "totalBuilds": 0,
-    "firstAttemptCompile": 0,
-    "compileRate": 0,
+    "totalBuilds": 2,
+    "firstAttemptCompile": 1,
+    "compileRate": 50,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],

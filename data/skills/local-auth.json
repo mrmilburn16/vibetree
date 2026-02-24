@@ -1,7 +1,9 @@
 {
   "id": "local-auth",
   "name": "Local Authentication (Face ID / Touch ID)",
-  "frameworks": ["LocalAuthentication"],
+  "frameworks": [
+    "LocalAuthentication"
+  ],
   "version": 1,
   "detection": {
     "keywords": [
@@ -32,11 +34,13 @@
     "Forgetting NSFaceIDUsageDescription for Face ID",
     "Not providing a passcode fallback option"
   ],
-  "requiredPermissions": ["NSFaceIDUsageDescription"],
+  "requiredPermissions": [
+    "NSFaceIDUsageDescription"
+  ],
   "stats": {
-    "totalBuilds": 0,
-    "firstAttemptCompile": 0,
-    "compileRate": 0,
+    "totalBuilds": 3,
+    "firstAttemptCompile": 2,
+    "compileRate": 67,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],

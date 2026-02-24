@@ -22,6 +22,10 @@ import {
   Zap,
   Copy,
   ExternalLink,
+  LocateFixed,
+  Pause,
+  Minimize2,
+  Maximize2,
 } from "lucide-react";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
@@ -65,6 +69,9 @@ type TestResult = {
   designRating?: number;
   functionalityRating?: number;
   notes?: string;
+  liveStatus?: string;
+  startedAt?: number;
+  liveEvents?: Array<{ at: number; msg: string }>;
 };
 
 type RunConfig = {
@@ -270,7 +277,34 @@ function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${s % 60}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+function formatRemainingHuman(ms: number): string {
+  const totalMin = Math.ceil(ms / 60_000);
+  if (totalMin < 60) return `~${totalMin}m left`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `~${h}h ${m}m left` : `~${h}h left`;
+}
+
+function formatETATime(remainingMs: number): string {
+  const eta = new Date(Date.now() + remainingMs);
+  return eta.toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+    timeZoneName: "short",
+  });
+}
+
+function summarizeLogLine(line: string, max = 120): string {
+  const cleaned = String(line || "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  return cleaned.length > max ? `${cleaned.slice(0, max - 1)}…` : cleaned;
 }
 
 function formatTimestamp(iso: string): string {
@@ -418,42 +452,64 @@ function generateResultCopy(result: TestResult): string {
 async function readNDJSONStream(
   res: Response,
   onEvent?: (event: Record<string, unknown>) => void,
+  opts?: { signal?: AbortSignal; shouldAbort?: () => boolean },
 ): Promise<{ done: Record<string, unknown> | null }> {
   const reader = res.body?.getReader();
   if (!reader) throw new Error("No response body");
+
+  const abortError = new Error(ABORTED_MSG);
+
+  function abortPromise(): Promise<never> {
+    if (!opts?.signal) return new Promise<never>(() => {});
+    if (opts.signal.aborted) return Promise.reject(abortError);
+    return new Promise<never>((_, reject) => {
+      opts.signal!.addEventListener("abort", () => reject(abortError), { once: true });
+    });
+  }
+
+  const abortIfNeeded = () => {
+    if (opts?.signal?.aborted || opts?.shouldAbort?.()) throw abortError;
+  };
 
   const decoder = new TextDecoder();
   let buffer = "";
   let donePayload: Record<string, unknown> | null = null;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      abortIfNeeded();
+      const { done, value } = await Promise.race([reader.read(), abortPromise()]);
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const obj = JSON.parse(line);
-        onEvent?.(obj);
-        if (obj.type === "done") donePayload = obj;
-        if (obj.type === "error") throw new Error(obj.error || "Stream error");
-      } catch (e) {
-        if (e instanceof SyntaxError) continue;
-        throw e;
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          abortIfNeeded();
+          const obj = JSON.parse(line);
+          onEvent?.(obj);
+          if (obj.type === "done") donePayload = obj;
+          if (obj.type === "error") throw new Error(obj.error || "Stream error");
+        } catch (e) {
+          if (e instanceof SyntaxError) continue;
+          throw e;
+        }
       }
     }
-  }
 
-  if (buffer.trim()) {
-    try {
-      const obj = JSON.parse(buffer);
-      onEvent?.(obj);
-      if (obj.type === "done") donePayload = obj;
-    } catch { /* partial line */ }
+    if (buffer.trim()) {
+      try {
+        abortIfNeeded();
+        const obj = JSON.parse(buffer);
+        onEvent?.(obj);
+        if (obj.type === "done") donePayload = obj;
+      } catch { /* partial line */ }
+    }
+  } finally {
+    try { reader.cancel(); } catch { /* ignore */ }
   }
 
   return { done: donePayload };
@@ -465,24 +521,42 @@ const ABORTED_MSG = "TEST_SUITE_ABORTED";
 
 async function pollBuildJob(
   jobId: string,
-  onStatusChange?: (status: string, attempts: number) => void,
+  onJobUpdate?: (job: Record<string, unknown>, attempts: number) => void,
   shouldAbort?: () => boolean,
 ): Promise<{ finalJob: Record<string, unknown>; attempts: number }> {
   const POLL_INTERVAL = 3000;
-  const MAX_POLL_TIME = 10 * 60 * 1000;
+  const MAX_POLL_TIME = 20 * 60 * 1000;
+  const MAX_QUEUED_TIME = 2 * 60 * 1000;
   const start = Date.now();
   let attempts = 1;
   let currentId = jobId;
+  let queuedSince = Date.now();
+  let wasEverPickedUp = false;
 
   while (Date.now() - start < MAX_POLL_TIME) {
     if (shouldAbort?.()) throw new Error(ABORTED_MSG);
 
     const res = await fetch(`/api/build-jobs/${currentId}`);
-    if (!res.ok) throw new Error(`Poll failed: ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(
+          `Build job not found (404). This usually means the server restarted or the job store was cleared. Re-run this entry to generate a new build job. (jobId=${currentId})`
+        );
+      }
+      throw new Error(`Poll failed: ${res.status}`);
+    }
     const { job } = await res.json();
 
+    if (job.status === "queued" && !wasEverPickedUp) {
+      if (Date.now() - queuedSince > MAX_QUEUED_TIME) {
+        throw new Error("No Mac runner available — build job stuck in queue for 2 minutes. Start the Mac runner (npm run mac-runner) and retry.");
+      }
+    } else {
+      wasEverPickedUp = true;
+    }
+
     if (job.status === "succeeded") {
-      onStatusChange?.("succeeded", attempts);
+      onJobUpdate?.(job, attempts);
       return { finalJob: job, attempts };
     }
 
@@ -490,24 +564,27 @@ async function pollBuildJob(
       if (job.nextJobId) {
         currentId = job.nextJobId;
         attempts++;
-        onStatusChange?.("auto-fixing", attempts);
+        queuedSince = Date.now();
+        wasEverPickedUp = false;
+        onJobUpdate?.({ ...job, status: "auto-fixing" }, attempts);
         continue;
       }
       if (job.autoFixInProgress) {
-        onStatusChange?.("auto-fixing", attempts);
+        onJobUpdate?.({ ...job, status: "auto-fixing" }, attempts);
         if (shouldAbort?.()) throw new Error(ABORTED_MSG);
         await sleep(POLL_INTERVAL);
         continue;
       }
+      onJobUpdate?.(job, attempts);
       return { finalJob: job, attempts };
     }
 
-    onStatusChange?.(job.status, attempts);
+    onJobUpdate?.(job, attempts);
     if (shouldAbort?.()) throw new Error(ABORTED_MSG);
     await sleep(POLL_INTERVAL);
   }
 
-  throw new Error("Build job timed out after 10 minutes");
+  throw new Error("Build job timed out after 20 minutes");
 }
 
 /* ────────────────────────── Status Badge ────────────────────────── */
@@ -529,6 +606,45 @@ function StatusBadge({ status }: { status: TestResultStatus }) {
       <c.Icon className={`h-3.5 w-3.5 ${spinning ? "animate-spin" : ""}`} aria-hidden />
       {c.label}
     </span>
+  );
+}
+
+/* ────────────────────────── Live Timer ────────────────────────── */
+
+function LiveTimer({ startedAt, className }: { startedAt: number; className?: string }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const iv = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(iv);
+  }, []);
+  return (
+    <span className={className ?? "text-xs tabular-nums text-[var(--text-tertiary)]"}>
+      {formatDuration(Date.now() - startedAt)}
+    </span>
+  );
+}
+
+function LiveEventList({ events }: { events: Array<{ at: number; msg: string }> }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const iv = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(iv);
+  }, []);
+  const last = events.slice(-10);
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-tertiary)]/40 p-3">
+      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">Live updates</p>
+      <div className="space-y-1">
+        {last.map((e, idx) => (
+          <div key={`${e.at}-${idx}`} className="flex items-start gap-2">
+            <span className="shrink-0 w-[68px] text-[10px] tabular-nums text-[var(--text-tertiary)]">
+              {new Date(e.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
+            </span>
+            <span className="min-w-0 text-xs text-[var(--text-secondary)] break-words">{e.msg}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -566,28 +682,36 @@ async function downloadXcodeZip(
 
 function ResultRow({
   result,
+  index,
   onRerun,
   onExclude,
   onUpdate,
+  onCancel,
   running,
 }: {
   result: TestResult;
+  index: number;
   onRerun?: () => void;
   onExclude?: () => void;
   onUpdate?: (updates: Partial<TestResult>) => void;
+  onCancel?: () => void;
   running: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [xcodeLoading, setXcodeLoading] = useState(false);
   const [xcodeError, setXcodeError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const isActive = result.status === "generating" || result.status === "building" || result.status === "auto-fixing";
 
   return (
     <article
+      data-test-index={index}
       className={`rounded-[var(--radius-lg)] border p-4 transition-all duration-[var(--transition-normal)] ${
         result.excluded
           ? "border-[var(--border-subtle)] bg-[var(--background-tertiary)]/50 opacity-75"
-          : "border-[var(--border-default)] bg-[var(--background-secondary)] hover:border-[var(--border-subtle)]"
+          : isActive
+            ? "border-[var(--button-primary-bg)] bg-[var(--background-secondary)] ring-1 ring-[var(--button-primary-bg)]/30"
+            : "border-[var(--border-default)] bg-[var(--background-secondary)] hover:border-[var(--border-subtle)]"
       }`}
     >
       <div className="flex items-center justify-between gap-3">
@@ -608,7 +732,12 @@ function ResultRow({
                 </span>
               )}
             </p>
-            <p className="text-xs text-[var(--text-tertiary)]">{result.idea.category}</p>
+            <p className="text-xs text-[var(--text-tertiary)]">
+              {result.idea.category}
+              {isActive && result.liveStatus && (
+                <span className="ml-2 text-blue-400">{result.liveStatus}</span>
+              )}
+            </p>
           </div>
         </div>
 
@@ -618,11 +747,13 @@ function ResultRow({
               {result.attempts} attempt{result.attempts !== 1 ? "s" : ""}
             </span>
           )}
-          {result.durationMs > 0 && (
+          {isActive && result.startedAt ? (
+            <LiveTimer startedAt={result.startedAt} />
+          ) : result.durationMs > 0 ? (
             <span className="text-xs tabular-nums text-[var(--text-tertiary)]">
               {formatDuration(result.durationMs)}
             </span>
-          )}
+          ) : null}
           {result.generationMs !== undefined && result.generationMs > 0 && (
             <span className="text-xs tabular-nums text-[var(--text-tertiary)]">
               gen {formatDuration(result.generationMs)}
@@ -740,11 +871,42 @@ function ResultRow({
               {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
           )}
+
+          {isActive && onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-[var(--radius-md)] px-2 py-1 text-xs font-medium text-[var(--semantic-error)] transition-colors hover:bg-[var(--badge-error)]/10"
+              title="Cancel this entry"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Always-visible error summary for failed/error entries */}
+      {!expanded && (result.status === "failed" || result.status === "error") && (result.errorMessage || result.compilerErrors.length > 0) && (
+        <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--badge-error)]/30 bg-[var(--badge-error)]/10 px-3 py-2">
+          {result.errorMessage && (
+            <p className="text-xs font-medium text-[var(--semantic-error)]">{result.errorMessage}</p>
+          )}
+          {result.compilerErrors.length > 0 && (
+            <>
+              <p className="font-mono text-xs text-[var(--text-secondary)] truncate">{result.compilerErrors[0]}</p>
+              {result.compilerErrors.length > 1 && (
+                <p className="mt-0.5 text-xs text-[var(--text-tertiary)]">+{result.compilerErrors.length - 1} more errors</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {expanded && (
         <div className="mt-3 border-t border-[var(--border-default)] pt-3 space-y-3">
+          {result.liveEvents && result.liveEvents.length > 0 && (
+            <LiveEventList events={result.liveEvents} />
+          )}
           {result.errorMessage && (
             <p className="text-xs text-[var(--semantic-error)]">{result.errorMessage}</p>
           )}
@@ -819,7 +981,27 @@ function ResultRow({
 
 /* ────────────────────────── Summary Panel ────────────────────────── */
 
-function SummaryPanel({ results, target }: { results: TestResult[]; target?: number }) {
+function SummaryPanel({
+  results,
+  target,
+  running,
+  runStartTime,
+  onStop,
+  onPauseAfterNext,
+  pauseAfterNext,
+  errorsExpanded,
+  onToggleErrors,
+}: {
+  results: TestResult[];
+  target?: number;
+  running?: boolean;
+  runStartTime?: number | null;
+  onStop?: () => void;
+  onPauseAfterNext?: () => void;
+  pauseAfterNext?: boolean;
+  errorsExpanded: boolean;
+  onToggleErrors: () => void;
+}) {
   const completed = results.filter(
     (r) => !r.excluded && (r.status === "succeeded" || r.status === "failed" || r.status === "error"),
   );
@@ -832,7 +1014,7 @@ function SummaryPanel({ results, target }: { results: TestResult[]; target?: num
   const grouped = groupErrors(allErrors);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Compile rate</p>
@@ -842,12 +1024,19 @@ function SummaryPanel({ results, target }: { results: TestResult[]; target?: num
         </div>
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Pass rate</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--text-primary)]">
-            {completed.length > 0 ? Math.round((compiled / completed.length) * 100) : 0}%
-            {target !== undefined && (
-              <span className="ml-1 text-sm font-normal text-[var(--text-tertiary)]">/ {target}%</span>
-            )}
-          </p>
+          {(() => {
+            const rate = completed.length > 0 ? Math.round((compiled / completed.length) * 100) : 0;
+            const t = target ?? 70;
+            const rateColor = rate >= t + 5 ? "text-[var(--semantic-success)]" : rate >= t - 5 ? "text-yellow-400" : "text-[var(--semantic-error)]";
+            return (
+              <p className={`mt-1 text-2xl font-semibold tabular-nums ${rateColor}`}>
+                {rate}%
+                {target !== undefined && (
+                  <span className="ml-1 text-sm font-normal text-[var(--text-tertiary)]">/ {target}%</span>
+                )}
+              </p>
+            );
+          })()}
         </div>
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Avg attempts</p>
@@ -856,34 +1045,69 @@ function SummaryPanel({ results, target }: { results: TestResult[]; target?: num
           </p>
         </div>
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Total time</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--text-primary)]">
-            {formatDuration(totalDuration)}
+          <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
+            {running ? "Elapsed" : "Total time"}
           </p>
+          {running && runStartTime ? (
+            <LiveTimer
+              startedAt={runStartTime}
+              className="mt-1 block text-2xl font-semibold tabular-nums text-[var(--text-primary)]"
+            />
+          ) : (
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--text-primary)]">
+              {formatDuration(totalDuration)}
+            </p>
+          )}
         </div>
       </div>
 
+      {running && (onStop || onPauseAfterNext) && (
+        <div className="flex items-center gap-2">
+          {onStop && (
+            <Button variant="destructive" onClick={onStop} className="gap-1.5 px-3 py-1.5 min-h-0 text-xs">
+              <Square className="h-3.5 w-3.5" aria-hidden />
+              Stop
+            </Button>
+          )}
+          {onPauseAfterNext && (
+            <Button
+              variant="secondary"
+              onClick={onPauseAfterNext}
+              className={`gap-1.5 px-3 py-1.5 min-h-0 text-xs ${pauseAfterNext ? "ring-1 ring-[var(--semantic-warning)]" : ""}`}
+            >
+              <Pause className="h-3.5 w-3.5" aria-hidden />
+              {pauseAfterNext ? "Pausing after this build…" : "Pause after next"}
+            </Button>
+          )}
+        </div>
+      )}
+
       {grouped.length > 0 && (
-        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-            Error patterns
-          </h3>
-          <div className="space-y-2">
-            {grouped.map(({ category, count }) => (
-              <div key={category} className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-[var(--text-primary)]">{CATEGORY_LABELS[category]}</span>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-24 overflow-hidden rounded-full bg-[var(--background-tertiary)]">
+        <div>
+          <button
+            type="button"
+            onClick={onToggleErrors}
+            className="flex w-full items-center justify-between rounded-[var(--radius-md)] px-1 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+          >
+            <span>Error patterns ({allErrors.length})</span>
+            {errorsExpanded ? <Minimize2 className="h-3.5 w-3.5" aria-hidden /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden />}
+          </button>
+          {errorsExpanded && (
+            <div className="mt-1.5 space-y-1">
+              {grouped.map(({ category, count }) => (
+                <div key={category} className="flex items-center gap-2 text-xs">
+                  <span className="w-8 text-right font-semibold tabular-nums text-[var(--text-primary)]">{count}x</span>
+                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--background-tertiary)]">
                     <div
                       className="h-full rounded-full bg-[var(--semantic-error)] transition-all"
                       style={{ width: `${Math.min(100, (count / allErrors.length) * 100)}%` }}
                     />
                   </div>
-                  <span className="w-10 text-right text-xs tabular-nums text-[var(--text-tertiary)]">{count}x</span>
+                  <span className="text-[var(--text-secondary)]">{CATEGORY_LABELS[category]}</span>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1135,9 +1359,15 @@ export default function TestSuitePage() {
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [pastRuns, setPastRuns] = useState<SavedRun[]>([]);
   const [completedCount, setCompletedCount] = useState(0);
+  const [syncingActive, setSyncingActive] = useState(false);
+  const [pauseAfterNext, setPauseAfterNext] = useState(false);
+  const [errorsExpanded, setErrorsExpanded] = useState(true);
   const abortRef = useRef(false);
+  const pauseAfterNextRef = useRef(false);
+  const entryControllersRef = useRef<Map<number, AbortController>>(new Map());
   const restoredRef = useRef(false);
   const hydratedRef = useRef(false);
+  const lastScrolledIdx = useRef(-1);
 
   const [activeMilestone, setActiveMilestone] = useState("m1-baseline");
   const [milestoneTarget, setMilestoneTarget] = useState(70);
@@ -1217,6 +1447,18 @@ export default function TestSuitePage() {
     return () => clearInterval(interval);
   }, [running, runStartTime]);
 
+  useEffect(() => {
+    if (!running && !syncingActive) { lastScrolledIdx.current = -1; return; }
+    const activeIdx = results.findIndex(
+      (r) => r.status === "generating" || r.status === "building" || r.status === "auto-fixing",
+    );
+    if (activeIdx >= 0 && activeIdx !== lastScrolledIdx.current) {
+      lastScrolledIdx.current = activeIdx;
+      const el = document.querySelector(`[data-test-index="${activeIdx}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [results, running, syncingActive]);
+
   const updateResult = useCallback((index: number, updates: Partial<TestResult>) => {
     setResults((prev) => {
       const next = [...prev];
@@ -1224,6 +1466,122 @@ export default function TestSuitePage() {
       return next;
     });
   }, []);
+
+  const pushLiveEvent = useCallback((index: number, msg: string) => {
+    setResults((prev) => {
+      const next = [...prev];
+      const cur = next[index];
+      if (!cur) return prev;
+      const events = (cur.liveEvents ?? []).concat([{ at: Date.now(), msg }]).slice(-60);
+      next[index] = { ...cur, liveEvents: events };
+      return next;
+    });
+  }, []);
+
+  const syncActiveBuilds = useCallback(async () => {
+    if (syncingActive) return;
+    const active = results
+      .map((r, i) => ({ r, i }))
+      .filter(
+        ({ r }) =>
+          !r.excluded &&
+          (r.status === "building" || r.status === "auto-fixing") &&
+          typeof r.buildJobId === "string" &&
+          r.buildJobId.length > 0
+      );
+    if (active.length === 0) return;
+
+    setSyncingActive(true);
+    try {
+      for (const { r, i } of active) {
+        updateResult(i, { startedAt: Date.now(), liveStatus: "Reconnecting to build job..." });
+        pushLiveEvent(i, "Reconnecting to build job…");
+        try {
+          let lastLogHint = "";
+          const { finalJob, attempts } = await pollBuildJob(
+            r.buildJobId!,
+            (job, att) => {
+              const lastLog = Array.isArray((job as { logs?: unknown }).logs)
+                ? (job as { logs: string[] }).logs[(job as { logs: string[] }).logs.length - 1]
+                : undefined;
+              const logHint = lastLog ? summarizeLogLine(lastLog) : "";
+              const phase: TestResultStatus = att > 1 ? "auto-fixing" : "building";
+              const statusText = phase === "auto-fixing" ? `Auto-fix attempt ${att}...` : "Compiling in Xcode...";
+              const nextLive = logHint ? `${statusText} • ${logHint}` : statusText;
+              updateResult(i, {
+                status: phase,
+                attempts: att,
+                liveStatus: nextLive,
+              });
+              if (logHint && logHint !== lastLogHint) {
+                lastLogHint = logHint;
+                pushLiveEvent(i, logHint);
+              }
+            },
+          );
+
+          const compiled = finalJob.status === "succeeded";
+          const compilerErrors = (finalJob.compilerErrors as string[]) ?? [];
+          const jobRequest = finalJob.request as { files?: Array<{ path: string; content: string }> } | undefined;
+          const builtFiles = (compiled && jobRequest?.files?.length ? jobRequest.files : undefined) ?? undefined;
+
+          updateResult(i, {
+            status: compiled ? "succeeded" : "failed",
+            compiled,
+            attempts,
+            compilerErrors,
+            ...(builtFiles?.length ? { projectFiles: builtFiles } : {}),
+            liveStatus: undefined,
+            startedAt: undefined,
+          });
+          pushLiveEvent(i, compiled ? "Build succeeded." : "Build failed.");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          updateResult(i, {
+            status: "error",
+            compiled: false,
+            errorMessage: msg,
+            liveStatus: undefined,
+            startedAt: undefined,
+          });
+          pushLiveEvent(i, `Error: ${msg}`);
+        }
+      }
+    } finally {
+      setSyncingActive(false);
+    }
+  }, [pushLiveEvent, results, syncingActive, updateResult]);
+
+  // On load, reset any orphaned "generating" entries to error (no way to reconnect a stream).
+  // Only reconnect "building/auto-fixing" entries that have a buildJobId.
+  const cleanedOrphansRef = useRef(false);
+  useEffect(() => {
+    if (cleanedOrphansRef.current) return;
+    if (!hydratedRef.current) return;
+    cleanedOrphansRef.current = true;
+    setResults((prev) => {
+      let changed = false;
+      const next = prev.map((r) => {
+        if (r.status === "generating") {
+          changed = true;
+          return { ...r, status: "error" as TestResultStatus, errorMessage: "Generation interrupted (page reload). Re-run this entry.", liveStatus: undefined, startedAt: undefined };
+        }
+        return r;
+      });
+      return changed ? next : prev;
+    });
+  }, [results]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reconnect to in-flight build jobs (building/auto-fixing with a buildJobId).
+  useEffect(() => {
+    if (running) return;
+    if (syncingActive) return;
+    const hasActive = results.some(
+      (r) => !r.excluded && (r.status === "building" || r.status === "auto-fixing") && r.buildJobId
+    );
+    if (!hasActive) return;
+    syncActiveBuilds();
+  }, [results, running, syncingActive, syncActiveBuilds]);
 
   const switchMilestone = useCallback(
     async (newMilestone: string) => {
@@ -1277,7 +1635,9 @@ export default function TestSuitePage() {
 
       try {
         if (getAbort()) throw new Error(ABORTED_MSG);
-        updateResult(index, { status: "generating" });
+        const entryStart = Date.now();
+        updateResult(index, { status: "generating", startedAt: entryStart, liveStatus: "Starting generation...", liveEvents: [] });
+        pushLiveEvent(index, "Starting generation…");
 
         const genStart = Date.now();
         const project = await fetch("/api/projects", {
@@ -1289,6 +1649,15 @@ export default function TestSuitePage() {
         const projectId = project.id;
         updateResult(index, { projectId });
 
+        const GEN_TIMEOUT_MS = 6 * 60 * 1000;
+        const genController = new AbortController();
+        entryControllersRef.current.set(index, genController);
+        const genTimeout = setTimeout(() => {
+          try {
+            genController.abort();
+          } catch {}
+        }, GEN_TIMEOUT_MS);
+
         const streamRes = await fetch(`/api/projects/${projectId}/message/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1297,6 +1666,7 @@ export default function TestSuitePage() {
             projectType: config.projectType,
             model: config.model,
           }),
+          signal: genController.signal,
         });
 
         if (!streamRes.ok) throw new Error(`Stream failed: ${streamRes.status}`);
@@ -1304,9 +1674,27 @@ export default function TestSuitePage() {
         let projectFiles: Array<{ path: string; content: string }> | null = null;
         let fileCount = 0;
 
-        const { done } = await readNDJSONStream(streamRes, (event) => {
-          if (event.type === "file") fileCount = (event.count as number) ?? fileCount + 1;
-        });
+        let lastEventCount = 0;
+        const { done } = await readNDJSONStream(
+          streamRes,
+          (event) => {
+          if (event.type === "file") {
+            fileCount = (event.count as number) ?? fileCount + 1;
+            const fileName = (event.path as string)?.split("/").pop() ?? "";
+            if (fileName) {
+              updateResult(index, { liveStatus: `Generating ${fileName}`, fileCount });
+              if (fileCount <= 3 || fileCount >= lastEventCount + 5) {
+                lastEventCount = fileCount;
+                pushLiveEvent(index, `Generated ${fileName}`);
+              }
+            }
+          }
+          },
+          { signal: genController.signal, shouldAbort: getAbort },
+        );
+
+        clearTimeout(genTimeout);
+        entryControllersRef.current.delete(index);
 
         if (!done) throw new Error("No 'done' event in stream");
         projectFiles = (done.projectFiles as Array<{ path: string; content: string }>) ?? null;
@@ -1315,7 +1703,8 @@ export default function TestSuitePage() {
         const generationMs = Date.now() - genStart;
         fileCount = projectFiles.length;
         if (getAbort()) throw new Error(ABORTED_MSG);
-        updateResult(index, { status: "building", fileCount, generationMs });
+        updateResult(index, { status: "building", fileCount, generationMs, liveStatus: "Compiling in Xcode...", startedAt: Date.now() });
+        pushLiveEvent(index, "Starting build…");
 
         let developmentTeam: string | undefined;
         try {
@@ -1340,13 +1729,33 @@ export default function TestSuitePage() {
 
         const { finalJob, attempts } = await pollBuildJob(
           buildRes.job.id,
-          (status, att) => {
-            updateResult(index, {
-              status: status === "auto-fixing" ? "auto-fixing" : "building",
-              attempts: att,
-              buildJobId: buildRes.job.id,
-            });
-          },
+          (() => {
+            let lastLogHint = "";
+            let lastPhase: TestResultStatus | "" = "";
+            return (job, att) => {
+              const lastLog = Array.isArray((job as { logs?: unknown }).logs)
+                ? (job as { logs: string[] }).logs[(job as { logs: string[] }).logs.length - 1]
+                : undefined;
+              const logHint = lastLog ? summarizeLogLine(lastLog) : "";
+              const phase: TestResultStatus = att > 1 ? "auto-fixing" : "building";
+              const statusText = phase === "auto-fixing" ? `Auto-fix attempt ${att}...` : "Compiling in Xcode...";
+              const nextLive = logHint ? `${statusText} • ${logHint}` : statusText;
+              updateResult(index, {
+                status: phase,
+                attempts: att,
+                buildJobId: buildRes.job.id,
+                liveStatus: nextLive,
+              });
+              if (phase !== lastPhase) {
+                lastPhase = phase;
+                pushLiveEvent(index, phase === "auto-fixing" ? `Auto-fix started (attempt ${att}).` : "Build in progress…");
+              }
+              if (logHint && logHint !== lastLogHint) {
+                lastLogHint = logHint;
+                pushLiveEvent(index, logHint);
+              }
+            };
+          })(),
           getAbort,
         );
 
@@ -1395,10 +1804,13 @@ export default function TestSuitePage() {
           buildMs,
           fileCount,
           model: config.model,
+          liveStatus: undefined,
+          startedAt: undefined,
           ...(builtFiles?.length ? { projectFiles: builtFiles } : {}),
         };
 
         updateResult(index, finalResult);
+        pushLiveEvent(index, compiled ? "Build succeeded." : "Build failed.");
 
         return {
           idea,
@@ -1407,6 +1819,8 @@ export default function TestSuitePage() {
           ...finalResult,
         } as TestResult;
       } catch (err) {
+        // Ensure any in-flight controller for this entry is cleared.
+        entryControllersRef.current.delete(index);
         const msg = err instanceof Error ? err.message : String(err);
         const isAborted = msg === ABORTED_MSG;
         const durationMs = Date.now() - t0;
@@ -1415,7 +1829,10 @@ export default function TestSuitePage() {
           compiled: false,
           errorMessage: isAborted ? "Stopped by user" : msg,
           durationMs,
+          liveStatus: undefined,
+          startedAt: undefined,
         });
+        pushLiveEvent(index, isAborted ? "Stopped by user." : `Error: ${msg}`);
         return {
           idea,
           status: "error",
@@ -1428,7 +1845,7 @@ export default function TestSuitePage() {
         };
       }
     },
-    [ideas, updateResult],
+    [ideas, pushLiveEvent, updateResult],
   );
 
   const runAllTests = useCallback(async () => {
@@ -1515,6 +1932,12 @@ export default function TestSuitePage() {
           }
         }
 
+        if (pauseAfterNextRef.current) {
+          pauseAfterNextRef.current = false;
+          setPauseAfterNext(false);
+          break;
+        }
+
         if (step < pending.length - 1 && !abortRef.current) {
           await sleep(2000);
         }
@@ -1522,15 +1945,51 @@ export default function TestSuitePage() {
     } finally {
       setRunning(false);
       setRunStartTime(null);
+      setPauseAfterNext(false);
+      pauseAfterNextRef.current = false;
       loadPastRuns();
     }
   }, [ideas, model, results, runSingleTest, loadPastRuns, activeMilestone]);
 
   const stopRun = useCallback(() => {
     abortRef.current = true;
+    for (const ctrl of entryControllersRef.current.values()) {
+      try {
+        ctrl.abort();
+      } catch {}
+    }
+    entryControllersRef.current.clear();
     setRunning(false);
     setRunStartTime(null);
+    setResults((prev) =>
+      prev.map((r) =>
+        r.status === "generating"
+          ? { ...r, status: "error" as TestResultStatus, errorMessage: "Stopped by user", liveStatus: undefined, startedAt: undefined }
+          : r,
+      ),
+    );
   }, []);
+
+  const cancelEntry = useCallback(
+    (index: number) => {
+      const ctrl = entryControllersRef.current.get(index);
+      if (ctrl) {
+        try {
+          ctrl.abort();
+        } catch {}
+        entryControllersRef.current.delete(index);
+      }
+      updateResult(index, {
+        status: "error",
+        compiled: false,
+        errorMessage: "Cancelled by user",
+        liveStatus: undefined,
+        startedAt: undefined,
+      });
+      pushLiveEvent(index, "Cancelled by user.");
+    },
+    [pushLiveEvent, updateResult],
+  );
 
   const clearAndReset = useCallback(async () => {
     if (typeof window !== "undefined") {
@@ -1607,6 +2066,24 @@ export default function TestSuitePage() {
     .filter((i) => results[i].status === "pending" && !results[i].excluded);
   const canResume = !running && pendingIndices.length > 0;
 
+  const activeIndex = results.findIndex(
+    (r) => !r.excluded && (r.status === "generating" || r.status === "building" || r.status === "auto-fixing"),
+  );
+  const jumpToActive = useCallback(() => {
+    if (activeIndex < 0) return;
+    const el = document.querySelector(`[data-test-index="${activeIndex}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeIndex]);
+
+  const retryableIndices = results
+    .map((r, i) => i)
+    .filter((i) => {
+      const r = results[i];
+      if (r.excluded) return false;
+      return r.status === "pending" || r.status === "error";
+    });
+  const canRetry = !running && retryableIndices.length > 0;
+
   const resumeRun = useCallback(async () => {
     const pending = results
       .map((_, i) => i)
@@ -1625,10 +2102,57 @@ export default function TestSuitePage() {
         await runSingleTest(i, config, () => abortRef.current);
         doneInResume++;
         setCompletedCount(initialDone + doneInResume);
+        if (pauseAfterNextRef.current) {
+          pauseAfterNextRef.current = false;
+          setPauseAfterNext(false);
+          break;
+        }
       }
     } finally {
       setRunning(false);
       setRunStartTime(null);
+      setPauseAfterNext(false);
+      pauseAfterNextRef.current = false;
+      loadPastRuns();
+    }
+  }, [model, results, runSingleTest, loadPastRuns]);
+
+  const retryIncomplete = useCallback(async () => {
+    const indices = results
+      .map((_, i) => i)
+      .filter((i) => {
+        const r = results[i];
+        if (r.excluded) return false;
+        return r.status === "pending" || r.status === "error";
+      });
+    if (indices.length === 0) return;
+    abortRef.current = false;
+    setRunning(true);
+    setRunStartTime(Date.now());
+    setRunElapsed(0);
+    const config: RunConfig = { model, projectType: "pro" };
+    let done = 0;
+    try {
+      for (const i of indices) {
+        if (abortRef.current) break;
+        setResults((prev) => {
+          const next = [...prev];
+          next[i] = { ...next[i], status: "pending", compilerErrors: [], attempts: 0, durationMs: 0, errorMessage: undefined, buildResultId: undefined, projectFiles: undefined };
+          return next;
+        });
+        await runSingleTest(i, config, () => abortRef.current);
+        done++;
+        if (pauseAfterNextRef.current) {
+          pauseAfterNextRef.current = false;
+          setPauseAfterNext(false);
+          break;
+        }
+      }
+    } finally {
+      setRunning(false);
+      setRunStartTime(null);
+      setPauseAfterNext(false);
+      pauseAfterNextRef.current = false;
       loadPastRuns();
     }
   }, [model, results, runSingleTest, loadPastRuns]);
@@ -1758,6 +2282,22 @@ export default function TestSuitePage() {
                     Resume ({pendingIndices.length} left)
                   </Button>
                 )}
+                {canRetry && retryableIndices.length !== pendingIndices.length && (
+                  <Button variant="secondary" onClick={retryIncomplete} className="gap-2" title="Retry all pending + errored/timed-out apps">
+                    <RefreshCw className="h-4 w-4" aria-hidden />
+                    Retry incomplete ({retryableIndices.length})
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  onClick={jumpToActive}
+                  disabled={activeIndex < 0}
+                  className="gap-2"
+                  title={activeIndex < 0 ? "No active entry right now" : "Scroll to the entry currently being worked on"}
+                >
+                  <LocateFixed className="h-4 w-4" aria-hidden />
+                  Jump to active
+                </Button>
                 <Button
                   variant="ghost"
                   onClick={async () => {
@@ -1850,12 +2390,24 @@ export default function TestSuitePage() {
                 </div>
                 <span className="text-xs tabular-nums text-[var(--text-tertiary)] shrink-0">
                   {completedCount}/{ideas.length}
-                  {remaining > 0 && ` \u2022 ~${formatDuration(remaining)} remaining`}
+                  {remaining > 0 && ` \u2022 ${formatRemainingHuman(remaining)} (${formatETATime(remaining)})`}
                 </span>
               </div>
             )}
 
+            {!running && syncingActive && (
+              <span className="text-xs text-[var(--semantic-warning)]">Syncing active builds…</span>
+            )}
+
+            {!running && !syncingActive && activeIndex >= 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-[var(--semantic-warning)]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                Active: {results[activeIndex]?.status} — {results[activeIndex]?.idea?.title}
+              </span>
+            )}
+
             {currentRunId && !running && (() => {
+              if (syncingActive || activeIndex >= 0) return null;
               const total = ideas.length;
               const excludedCount = results.filter((r) => r.excluded).length;
               const evaluable = total - excludedCount;
@@ -1943,7 +2495,17 @@ export default function TestSuitePage() {
                   )}
                 </button>
               </div>
-              <SummaryPanel results={results} target={milestoneTarget} />
+              <SummaryPanel
+                results={results}
+                target={milestoneTarget}
+                running={running}
+                runStartTime={runStartTime}
+                onStop={running ? stopRun : undefined}
+                onPauseAfterNext={running ? () => { pauseAfterNextRef.current = !pauseAfterNextRef.current; setPauseAfterNext(pauseAfterNextRef.current); } : undefined}
+                pauseAfterNext={pauseAfterNext}
+                errorsExpanded={errorsExpanded}
+                onToggleErrors={() => setErrorsExpanded((v) => !v)}
+              />
             </div>
           </section>
         )}
@@ -1956,10 +2518,12 @@ export default function TestSuitePage() {
               <ResultRow
                 key={result.idea.title}
                 result={result}
+                index={i}
                 running={running}
                 onRerun={() => rerunSingle(i)}
                 onExclude={() => toggleExclude(i)}
                 onUpdate={(updates) => updateResult(i, updates)}
+                onCancel={() => cancelEntry(i)}
               />
             ))}
           </div>

@@ -1,7 +1,9 @@
 {
   "id": "core-motion",
   "name": "Core Motion (Accelerometer / Gyroscope)",
-  "frameworks": ["CoreMotion"],
+  "frameworks": [
+    "CoreMotion"
+  ],
   "version": 1,
   "detection": {
     "keywords": [
@@ -42,11 +44,13 @@
     "Creating CMMotionManager inside a SwiftUI View body (gets recreated on renders)",
     "Not handling Simulator where Core Motion is unavailable"
   ],
-  "requiredPermissions": ["NSMotionUsageDescription"],
+  "requiredPermissions": [
+    "NSMotionUsageDescription"
+  ],
   "stats": {
-    "totalBuilds": 0,
-    "firstAttemptCompile": 0,
-    "compileRate": 0,
+    "totalBuilds": 4,
+    "firstAttemptCompile": 3,
+    "compileRate": 75,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],

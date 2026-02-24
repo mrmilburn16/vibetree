@@ -53,12 +53,14 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 7,
-    "firstAttemptCompile": 5,
-    "compileRate": 71,
+    "totalBuilds": 16,
+    "firstAttemptCompile": 9,
+    "compileRate": 56,
     "functionalSuccesses": 1,
-    "functionalRate": 14,
-    "commonErrors": [],
+    "functionalRate": 6,
+    "commonErrors": [
+      "type 'Theme' has no member 'accentColor'"
+    ],
     "goldenExamples": [
       {
         "buildResultId": "br_1771805252960_44d8c",

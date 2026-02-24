@@ -45,12 +45,21 @@
     "NSLocationWhenInUseUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 7,
-    "firstAttemptCompile": 5,
-    "compileRate": 71,
+    "totalBuilds": 17,
+    "firstAttemptCompile": 9,
+    "compileRate": 53,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "generic struct 'StateObject' requires that 'MeasureViewModel' conform to 'ObservableObject'",
+      "cannot find type 'UIView' in scope",
+      "cannot find type 'Context' in scope",
+      "cannot find type 'UIViewRepresentable' in scope",
+      "cannot find type 'ObservableObject' in scope",
+      "unknown attribute 'Published'",
+      "cannot find type 'Color' in scope",
+      "cannot find type 'CGPoint' in scope"
+    ],
     "goldenExamples": []
   }
 }
