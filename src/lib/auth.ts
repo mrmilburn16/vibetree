@@ -63,7 +63,8 @@ export async function registerUser(
   users.set(user.id, user);
   emailIndex.set(normalizedEmail, user.id);
 
-  const { passwordHash: _, ...safeUser } = user;
+  const { passwordHash: _hash, ...safeUser } = user;
+  void _hash;
   return safeUser;
 }
 
@@ -94,7 +95,8 @@ export async function loginUser(
   const payload: AuthPayload = { userId: user.id, email: user.email };
   const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 
-  const { passwordHash: _, ...safeUser } = user;
+  const { passwordHash: _pw, ...safeUser } = user;
+  void _pw;
   return { token, user: safeUser };
 }
 
@@ -119,7 +121,8 @@ export function getUserById(
 ): Omit<User, "passwordHash"> | null {
   const user = users.get(userId);
   if (!user) return null;
-  const { passwordHash: _, ...safeUser } = user;
+  const { passwordHash: _hash, ...safeUser } = user;
+  void _hash;
   return safeUser;
 }
 
