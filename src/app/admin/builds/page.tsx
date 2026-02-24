@@ -37,6 +37,7 @@ type BuildResult = {
   userDesignScore: number | null;
   userFunctionalScore: number | null;
   userImagePath: string | null;
+  issueTags: string[];
 };
 
 type Stats = {
@@ -87,6 +88,8 @@ function ResultRow({
 }) {
   const [notes, setNotes] = useState(result.userNotes);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [detectedTags, setDetectedTags] = useState<string[]>(result.issueTags ?? []);
   const [expanded, setExpanded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -95,11 +98,15 @@ function ResultRow({
   const save = useCallback(
     async (updates: Record<string, unknown>) => {
       setSaving(true);
-      await fetch(`/api/build-results/${result.id}`, {
+      const res = await fetch(`/api/build-results/${result.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.result?.issueTags) setDetectedTags(json.result.issueTags);
+      }
       setSaving(false);
       onUpdate();
     },
@@ -107,7 +114,11 @@ function ResultRow({
   );
 
   const saveNotes = useCallback(() => {
-    if (notes !== result.userNotes) save({ userNotes: notes });
+    if (notes !== result.userNotes) {
+      save({ userNotes: notes });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    }
   }, [notes, result.userNotes, save]);
 
   const date = new Date(result.timestamp);
@@ -237,20 +248,40 @@ function ResultRow({
         </div>
       </div>
 
-      <div className="mt-3 flex gap-2">
-        <input
-          type="text"
+      <div className="mt-3 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-[var(--text-secondary)]">
+            QA Notes
+          </label>
+          <span className="text-[10px] text-[var(--text-tertiary)]">
+            {saving ? "Saving…" : saved ? "✓ Saved — tags auto-detected" : "Press Enter or click away to save"}
+          </span>
+        </div>
+        <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           onBlur={saveNotes}
-          onKeyDown={(e) => e.key === "Enter" && saveNotes()}
-          placeholder="Add notes (overlaps, broken buttons, etc.)…"
-          className="min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] transition-colors focus:border-[var(--button-primary-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--button-primary-bg)]/30"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              saveNotes();
+            }
+          }}
+          rows={2}
+          placeholder={"What's broken or off? e.g.\n• menu overlaps the start button • can't tap settings • navigation doesn't go back • slider covers the text"}
+          className="w-full resize-y rounded-[var(--radius-md)] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm leading-relaxed text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] transition-colors focus:border-[var(--button-primary-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--button-primary-bg)]/30"
         />
-        {saving && (
-          <span className="self-center text-xs text-[var(--text-tertiary)]">
-            Saving…
-          </span>
+        {detectedTags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {detectedTags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400"
+              >
+                {tag.replace(/_/g, " ")}
+              </span>
+            ))}
+          </div>
         )}
       </div>
 
