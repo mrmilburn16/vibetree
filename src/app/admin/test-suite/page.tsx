@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Loader2,
   RotateCcw,
+  History,
   ChevronDown,
   ChevronUp,
   BarChart3,
@@ -2278,28 +2279,26 @@ export default function TestSuitePage() {
     });
   }, []);
 
-  const restoreLastRun = useCallback(() => {
-    const latest = [...pastRuns]
-      .filter((r) => Array.isArray(r.results) && r.results.length > 0 && (!activeMilestone || !r.milestone || r.milestone === activeMilestone))
-      .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""))[0];
-    if (!latest) return;
+  const loadRun = useCallback((runId: string) => {
+    const run = pastRuns.find((r) => r.id === runId);
+    if (!run || !Array.isArray(run.results) || run.results.length === 0) return;
 
-    setCurrentRunId(latest.id);
+    setCurrentRunId(run.id);
     setRunning(false);
 
     setResults((prev) =>
       prev.map((row) => {
-        const match = latest.results.find((r) => r.title === row.idea.title);
-        if (!match) return row;
+        const match = run.results.find((r) => r.title === row.idea.title);
+        if (!match) return { ...row, status: "pending" as const, compiled: undefined, attempts: 0, compilerErrors: [], durationMs: 0, errorMessage: undefined, buildResultId: undefined };
         const compiled = Boolean(match.compiled);
         const errors = Array.isArray(match.errors) ? match.errors : [];
         return {
           ...row,
-          status: compiled ? "succeeded" : "failed",
+          status: compiled ? ("succeeded" as const) : ("failed" as const),
           compiled,
           attempts: typeof match.attempts === "number" ? match.attempts : row.attempts,
           durationMs: typeof match.durationMs === "number" ? match.durationMs : row.durationMs,
-          fileCount: typeof (match as any).fileCount === "number" ? (match as any).fileCount : row.fileCount,
+          fileCount: typeof (match as unknown as { fileCount?: number }).fileCount === "number" ? (match as unknown as { fileCount: number }).fileCount : row.fileCount,
           compilerErrors: errors,
           projectId: typeof match.projectId === "string" ? match.projectId : row.projectId,
           buildResultId: typeof match.buildResultId === "string" ? match.buildResultId : row.buildResultId,
@@ -2307,7 +2306,7 @@ export default function TestSuitePage() {
         };
       }),
     );
-  }, [pastRuns, activeMilestone]);
+  }, [pastRuns]);
 
   const avgDuration = results.filter((r) => r.durationMs > 0).length > 0
     ? results.filter((r) => r.durationMs > 0).reduce((s, r) => s + r.durationMs, 0) /
@@ -2547,17 +2546,34 @@ export default function TestSuitePage() {
               return null;
             })()}
 
-            {!running && pastRuns.some((r) => Array.isArray(r.results) && r.results.length > 0) && (
-              <Button
-                variant="ghost"
-                onClick={restoreLastRun}
-                className="gap-2"
-                title="Restore statuses from the most recent saved run history"
-              >
-                <RotateCcw className="h-4 w-4" aria-hidden />
-                Restore last run
-              </Button>
-            )}
+            {(() => {
+              const milestoneRuns = pastRuns
+                .filter((r) => Array.isArray(r.results) && r.results.length > 0 && r.milestone === activeMilestone)
+                .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+              if (!running && milestoneRuns.length > 0) {
+                const modelLabel = (m: string) => m === "opus-4.6" ? "Opus" : "Sonnet";
+                const runOptions: SelectOption[] = [
+                  { value: "", label: `History (${milestoneRuns.length} run${milestoneRuns.length !== 1 ? "s" : ""})` },
+                  ...milestoneRuns.map((r, idx) => ({
+                    value: r.id,
+                    label: `${formatTimestamp(r.timestamp)} — ${modelLabel(r.model)} ${r.summary.compiled}/${r.summary.total} (${r.summary.compileRate}%)${idx === 0 ? " (latest)" : ""}`,
+                  })),
+                ];
+                return (
+                  <div className="flex items-center gap-1.5">
+                    <History className="h-4 w-4 text-[var(--text-tertiary)]" aria-hidden />
+                    <DropdownSelect
+                      options={runOptions}
+                      value={currentRunId ?? ""}
+                      onChange={(v) => { if (v) loadRun(v); }}
+                      className="min-w-[260px]"
+                      aria-label="Load a past run"
+                    />
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             {results.some((r) => r.status === "succeeded" && r.projectId) && (
               <Button
