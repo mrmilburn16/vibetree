@@ -11,6 +11,7 @@ import {
   parseStructuredResponse,
   type StructuredResponse,
 } from "./parseStructuredResponse";
+import { buildAppliedRulesPromptBlock } from "@/lib/qa/appliedRules";
 
 /** Map UI model values to Anthropic API model IDs. GPT 5.2 is disabled in the UI until OpenAI is wired. */
 const MODEL_MAP: Record<string, string> = {
@@ -214,9 +215,9 @@ export async function getClaudeResponse(
 
   const basePrompt =
     options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
-  const systemPrompt = options?.skillPromptBlock
-    ? basePrompt + options.skillPromptBlock
-    : basePrompt;
+  const qaRulesBlock = buildAppliedRulesPromptBlock();
+  const systemPrompt =
+    basePrompt + (options?.skillPromptBlock ?? "") + qaRulesBlock;
 
   const response = await client.messages.create({
     model,
@@ -288,9 +289,9 @@ async function getClaudeResponseStream(
 
   const basePrompt =
     options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
-  const systemPrompt = options?.skillPromptBlock
-    ? basePrompt + options.skillPromptBlock
-    : basePrompt;
+  const qaRulesBlock = buildAppliedRulesPromptBlock();
+  const systemPrompt =
+    basePrompt + (options?.skillPromptBlock ?? "") + qaRulesBlock;
 
   let lastReported = 0;
   const throttleChars = 80;
