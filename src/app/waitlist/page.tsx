@@ -385,7 +385,8 @@ export default function WaitlistPage() {
         });
         setJoined(true);
         // Refresh rank and leaderboard in background
-        fetchStatus(data.token).then(() => fetchLeaderboard(data.token));
+        const token = data.token;
+        fetchStatus(token).then(() => fetchLeaderboard(token));
       }
     } catch (_) {
       setError("Could not connect. Please try again.");
