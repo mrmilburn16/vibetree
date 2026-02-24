@@ -11,6 +11,9 @@ import {
   Server,
   Cpu,
   Wrench,
+  Cloud,
+  Bell,
+  ShieldCheck,
 } from "lucide-react";
 
 type ServiceStatus = "operational" | "degraded" | "down";
@@ -44,12 +47,18 @@ const SERVICE_ICONS: Record<string, typeof Globe> = {
   website: Globe,
   "app-generation": Cpu,
   "xcode-builds": Wrench,
+  "cloud-services": Cloud,
+  "push-notifications": Bell,
+  authentication: ShieldCheck,
 };
 
 const SERVICE_DESCRIPTIONS: Record<string, string> = {
   website: "Landing page, dashboard, and editor",
   "app-generation": "AI code generation pipeline",
   "xcode-builds": "iOS compilation and simulator",
+  "cloud-services": "Firebase database, storage, and analytics",
+  "push-notifications": "APNs relay for app notifications",
+  authentication: "Sign in with Apple and user accounts",
 };
 
 function statusColor(status: ServiceStatus) {

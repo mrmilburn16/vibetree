@@ -51,6 +51,9 @@ const DEFAULT_SERVICES: ServiceEntry[] = [
   { id: "website", name: "Website", status: "operational", autoDetected: true, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
   { id: "app-generation", name: "App Generation", status: "operational", autoDetected: true, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
   { id: "xcode-builds", name: "Xcode Builds", status: "operational", autoDetected: true, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
+  { id: "cloud-services", name: "Cloud Services", status: "operational", autoDetected: false, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
+  { id: "push-notifications", name: "Push Notifications", status: "operational", autoDetected: false, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
+  { id: "authentication", name: "Authentication", status: "operational", autoDetected: false, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
 ];
 
 function ensureFile() {
@@ -219,7 +222,7 @@ export function getUptimeHistory(): ServiceUptimeHistory[] {
 
   const filtered = entries.filter((e) => e.ts.slice(0, 10) >= cutoffKey);
 
-  const serviceIds = ["website", "app-generation", "xcode-builds"];
+  const serviceIds = ["website", "app-generation", "xcode-builds", "cloud-services", "push-notifications", "authentication"];
   const results: ServiceUptimeHistory[] = [];
 
   for (const sid of serviceIds) {
