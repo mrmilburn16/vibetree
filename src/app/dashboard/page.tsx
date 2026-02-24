@@ -12,6 +12,7 @@ import { DashboardLayout2 } from "@/components/dashboard/DashboardLayout2";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
 import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
 import { EmptyState } from "@/components/dashboard/EmptyState";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const LAYOUT_STORAGE_KEY = "vibetree-dashboard-layout";
 
@@ -135,6 +136,7 @@ export default function DashboardPage() {
   })();
 
   return (
+    <ErrorBoundary section="Dashboard">
     <div className="relative min-h-screen bg-[var(--background-primary)]">
       {layoutVersion === "1" && (
         <div
@@ -302,5 +304,6 @@ export default function DashboardPage() {
         />
       </Modal>
     </div>
+    </ErrorBoundary>
   );
 }

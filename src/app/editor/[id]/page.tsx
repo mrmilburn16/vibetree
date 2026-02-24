@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getProject } from "@/lib/projects";
 import { EditorLayout } from "@/components/editor/EditorLayout";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Project } from "@/lib/projects";
 
 export default function EditorPage() {
@@ -48,5 +49,9 @@ export default function EditorPage() {
     );
   }
 
-  return <EditorLayout project={project} />;
+  return (
+    <ErrorBoundary section="Editor">
+      <EditorLayout project={project} />
+    </ErrorBoundary>
+  );
 }
