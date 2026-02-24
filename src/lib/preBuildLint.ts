@@ -1,4 +1,6 @@
-export type SwiftFile = { path: string; content: string };
+import type { CodeFile } from "@/types";
+
+export type SwiftFile = CodeFile;
 
 export type LintWarning = {
   file: string;
@@ -104,6 +106,117 @@ export function preBuildLint(files: SwiftFile[]): LintResult {
     if (!f.path.endsWith(".swift")) continue;
     if (!/\b(struct|class|enum|protocol|extension|func)\b/.test(f.content)) {
       warnings.push({ file: f.path, message: "File has no type declarations — may be empty or incomplete", severity: "warning", autoFixed: false });
+    }
+  }
+
+  // Check for .offset() usage (causes layout issues — doesn't affect layout flow)
+  for (const f of result) {
+    if (!f.path.endsWith(".swift")) continue;
+    if (/\.offset\s*\(/.test(f.content)) {
+      warnings.push({ file: f.path, message: ".offset() used for positioning — it does not affect layout flow and can cause overlaps. Prefer padding/spacing.", severity: "warning", autoFixed: false });
+    }
+  }
+
+  // Check for ZStack used for general layout (should be VStack/HStack)
+  for (const f of result) {
+    if (!f.path.endsWith(".swift")) continue;
+    const zstackMatches = f.content.match(/\bZStack\b/g);
+    if (zstackMatches && zstackMatches.length > 0) {
+      const hasOverlay = /\.overlay\b/.test(f.content);
+      if (!hasOverlay) {
+        warnings.push({ file: f.path, message: "ZStack without .overlay — verify it's intentional. ZStack can cause visual overlaps if used for general layout.", severity: "warning", autoFixed: false });
+      }
+    }
+  }
+
+  // Check for VStack with many children (may need ScrollView)
+  for (const f of result) {
+    if (!f.path.endsWith(".swift")) continue;
+    const vstackRe = /VStack[^{]*\{/g;
+    let vMatch;
+    while ((vMatch = vstackRe.exec(f.content)) !== null) {
+      const startIdx = vMatch.index + vMatch[0].length;
+      let depth = 1;
+      let pos = startIdx;
+      while (pos < f.content.length && depth > 0) {
+        if (f.content[pos] === "{") depth++;
+        else if (f.content[pos] === "}") depth--;
+        pos++;
+      }
+      const body = f.content.slice(startIdx, pos - 1);
+      const topLevelChildren = body.split("\n").filter((l) => {
+        const trimmed = l.trim();
+        return trimmed.length > 0 && /^[A-Z]/.test(trimmed);
+      });
+      const parentHasScroll = f.content.slice(Math.max(0, vMatch.index - 200), vMatch.index).includes("ScrollView");
+      if (topLevelChildren.length > 8 && !parentHasScroll) {
+        const lineNum = f.content.substring(0, vMatch.index).split("\n").length;
+        warnings.push({ file: f.path, line: lineNum, message: `VStack with ${topLevelChildren.length}+ child views may overflow the screen — consider wrapping in ScrollView`, severity: "warning", autoFixed: false });
+      }
+    }
+  }
+
+  // Check that every View file is actually referenced somewhere
+  const viewFiles = result.filter(
+    (f) => f.path.endsWith(".swift") && f.path !== "App.swift" && !f.path.endsWith("/App.swift")
+  );
+  for (const vf of viewFiles) {
+    const viewName = vf.path
+      .replace(/\.swift$/, "")
+      .split("/")
+      .pop();
+    if (!viewName) continue;
+    const isReferenced = result.some(
+      (other) => other.path !== vf.path && other.content.includes(viewName)
+    );
+    if (!isReferenced) {
+      warnings.push({
+        file: vf.path,
+        message: `"${viewName}" is never referenced by any other file — it may be orphaned and unreachable`,
+        severity: "warning",
+        autoFixed: false,
+      });
+    }
+  }
+
+  // Check for accessibility: Image(systemName:) without .accessibilityLabel
+  for (const f of result) {
+    if (!f.path.endsWith(".swift")) continue;
+    const imageRe = /Image\(systemName:\s*"[^"]+"\)/g;
+    let imgMatch;
+    while ((imgMatch = imageRe.exec(f.content)) !== null) {
+      const afterImage = f.content.slice(imgMatch.index, imgMatch.index + 300);
+      if (
+        !afterImage.includes(".accessibilityLabel") &&
+        !afterImage.includes(".accessibilityHidden")
+      ) {
+        const lineNum = f.content.substring(0, imgMatch.index).split("\n").length;
+        warnings.push({
+          file: f.path,
+          line: lineNum,
+          message: "Image(systemName:) without .accessibilityLabel or .accessibilityHidden — add accessibility support",
+          severity: "warning",
+          autoFixed: false,
+        });
+        break;
+      }
+    }
+  }
+
+  // Check for TODO/placeholder actions
+  for (const f of result) {
+    if (!f.path.endsWith(".swift")) continue;
+    const todoActionRe = /\{\s*\/[/*]\s*(TODO|FIXME|placeholder)\b/gi;
+    let todoMatch;
+    while ((todoMatch = todoActionRe.exec(f.content)) !== null) {
+      const lineNum = f.content.substring(0, todoMatch.index).split("\n").length;
+      warnings.push({
+        file: f.path,
+        line: lineNum,
+        message: "TODO/placeholder in action closure — feature is not implemented",
+        severity: "warning",
+        autoFixed: false,
+      });
     }
   }
 
