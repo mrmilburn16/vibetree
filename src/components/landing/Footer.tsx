@@ -34,6 +34,12 @@ export function Footer() {
             >
               Contact
             </Link>
+            <Link
+              href="/status"
+              className="text-sm text-[var(--link-default)] hover:text-[var(--link-hover)]"
+            >
+              Status
+            </Link>
           </div>
           <SocialIcons />
         </div>
