@@ -18,7 +18,7 @@ import {
   Pie,
 } from "recharts";
 import { ThemedTooltipContent } from "@/components/admin/ChartTooltip";
-import { Button, DropdownSelect } from "@/components/ui";
+import { DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 
 const MODELS = [
@@ -142,7 +142,7 @@ function useProjections(
         creditsPerMonth,
       };
     });
-  }, [monthlyCredits, revenuePerMonth, costPer1k, months, period]);
+  }, [monthlyCredits, revenuePerMonth, costPer1k, months]);
 }
 
 function ScenarioCard({

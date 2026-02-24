@@ -614,14 +614,14 @@ function StatusBadge({ status }: { status: TestResultStatus }) {
 /* ────────────────────────── Live Timer ────────────────────────── */
 
 function LiveTimer({ startedAt, className }: { startedAt: number; className?: string }) {
-  const [, setTick] = useState(0);
+  const [elapsed, setElapsed] = useState(() => Date.now() - startedAt);
   useEffect(() => {
-    const iv = setInterval(() => setTick((t) => t + 1), 1000);
+    const iv = setInterval(() => setElapsed(Date.now() - startedAt), 1000);
     return () => clearInterval(iv);
-  }, []);
+  }, [startedAt]);
   return (
     <span className={className ?? "text-xs tabular-nums text-[var(--text-tertiary)]"}>
-      {formatDuration(Date.now() - startedAt)}
+      {formatDuration(elapsed)}
     </span>
   );
 }
@@ -1640,7 +1640,7 @@ export default function TestSuitePage() {
       });
       return changed ? next : prev;
     });
-  }, [results]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [results]);
 
   // Reconnect to in-flight build jobs (building/auto-fixing with a buildJobId).
   useEffect(() => {
@@ -1997,7 +1997,7 @@ export default function TestSuitePage() {
             summary,
           }),
         });
-      } catch (_) {}
+      } catch { /* ignored */ }
     };
 
     try {
@@ -2034,7 +2034,7 @@ export default function TestSuitePage() {
       pauseAfterNextRef.current = false;
       loadPastRuns();
     }
-  }, [ideas, model, results, runSingleTest, loadPastRuns, activeMilestone]);
+  }, [model, results, runSingleTest, loadPastRuns, activeMilestone]);
 
   const stopRun = useCallback(() => {
     abortRef.current = true;
@@ -2229,7 +2229,6 @@ export default function TestSuitePage() {
     setRunStartTime(Date.now());
     setRunElapsed(0);
     const config: RunConfig = { model, projectType: "pro" };
-    let done = 0;
     const lanes = concurrencyRef.current;
 
     for (const i of indices) {
@@ -2248,7 +2247,6 @@ export default function TestSuitePage() {
           const idx = indices[cursor++];
           if (idx === undefined) break;
           await runSingleTest(idx, config, () => abortRef.current);
-          done++;
           if (pauseAfterNextRef.current) break;
           if (cursor < indices.length && !abortRef.current) {
             await sleep(lanes > 1 ? 500 : 1000);

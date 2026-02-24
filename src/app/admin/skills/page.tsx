@@ -76,6 +76,7 @@ export default function SkillsDashboardPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data fetch on mount
     fetchSkills();
   }, [fetchSkills]);
 

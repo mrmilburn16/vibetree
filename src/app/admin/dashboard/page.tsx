@@ -154,6 +154,7 @@ export default function AdminDashboardPage() {
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data fetch on range change
     setLoading(true);
     setError(null);
     fetchStats(range)

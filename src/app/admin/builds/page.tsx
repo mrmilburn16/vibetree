@@ -291,6 +291,7 @@ function ResultRow({
         </p>
         {(result.userImagePath ?? null) ? (
           <div className="flex flex-wrap items-start gap-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`/api/build-results/${result.id}/image`}
               alt="Build screenshot"
@@ -520,6 +521,7 @@ export default function BuildsPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data fetch on mount
     load();
   }, [load]);
 
