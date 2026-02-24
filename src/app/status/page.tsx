@@ -15,12 +15,23 @@ import {
 
 type ServiceStatus = "operational" | "degraded" | "down";
 
+type DayBucket = {
+  date: string;
+  status: ServiceStatus;
+  checks: number;
+  operational: number;
+  degraded: number;
+  down: number;
+};
+
 type Service = {
   id: string;
   name: string;
   status: ServiceStatus;
   message: string | null;
   lastChecked: string | null;
+  uptimePct: number;
+  days: DayBucket[];
 };
 
 type StatusResponse = {
@@ -41,41 +52,16 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
   "xcode-builds": "iOS compilation and simulator",
 };
 
-function statusConfig(status: ServiceStatus) {
-  if (status === "operational") {
-    return {
-      label: "Operational",
-      icon: CheckCircle2,
-      pillBg: "bg-emerald-500/10",
-      pillText: "text-emerald-400",
-      pillBorder: "border-emerald-500/20",
-      glow: "shadow-[0_0_20px_rgba(16,185,129,0.08)]",
-      barColor: "bg-emerald-500",
-      dotPulse: true,
-    };
-  }
-  if (status === "degraded") {
-    return {
-      label: "Degraded Performance",
-      icon: AlertTriangle,
-      pillBg: "bg-yellow-500/10",
-      pillText: "text-yellow-400",
-      pillBorder: "border-yellow-500/20",
-      glow: "shadow-[0_0_20px_rgba(234,179,8,0.08)]",
-      barColor: "bg-yellow-500",
-      dotPulse: true,
-    };
-  }
-  return {
-    label: "Service Disruption",
-    icon: XCircle,
-    pillBg: "bg-red-500/10",
-    pillText: "text-red-400",
-    pillBorder: "border-red-500/20",
-    glow: "shadow-[0_0_20px_rgba(239,68,68,0.1)]",
-    barColor: "bg-red-500",
-    dotPulse: false,
-  };
+function statusColor(status: ServiceStatus) {
+  if (status === "operational") return { text: "text-emerald-400", bg: "bg-emerald-500", bgSoft: "bg-emerald-500/15", border: "border-emerald-500/20" };
+  if (status === "degraded") return { text: "text-yellow-400", bg: "bg-yellow-500", bgSoft: "bg-yellow-500/15", border: "border-yellow-500/20" };
+  return { text: "text-red-400", bg: "bg-red-500", bgSoft: "bg-red-500/15", border: "border-red-500/20" };
+}
+
+function statusLabel(status: ServiceStatus) {
+  if (status === "operational") return "Operational";
+  if (status === "degraded") return "Degraded";
+  return "Down";
 }
 
 function timeAgo(iso: string | null): string {
@@ -89,106 +75,103 @@ function timeAgo(iso: string | null): string {
   return `${hours}h ago`;
 }
 
-function OverallBanner({ allOperational }: { allOperational: boolean }) {
+function barColor(status: ServiceStatus): string {
+  if (status === "operational") return "var(--semantic-success)";
+  if (status === "degraded") return "var(--semantic-warning)";
+  return "var(--semantic-error)";
+}
+
+function noDataColor(): string {
+  return "var(--border-default)";
+}
+
+function UptimeBar({ days }: { days: DayBucket[] }) {
   return (
-    <div
-      className={`relative overflow-hidden rounded-[var(--radius-xl)] border p-6 sm:p-8 ${
-        allOperational
-          ? "border-emerald-500/20 bg-emerald-500/[0.04]"
-          : "border-yellow-500/20 bg-yellow-500/[0.04]"
-      }`}
-    >
-      <div
-        className="absolute inset-0 opacity-40"
-        style={{
-          background: allOperational
-            ? "radial-gradient(ellipse 60% 80% at 50% 100%, rgba(16,185,129,0.12), transparent)"
-            : "radial-gradient(ellipse 60% 80% at 50% 100%, rgba(234,179,8,0.12), transparent)",
-        }}
-      />
-      <div className="relative flex items-center gap-4">
+    <div className="flex items-center gap-[2px]" role="img" aria-label="90-day uptime history">
+      {days.map((day) => (
         <div
-          className={`flex h-12 w-12 items-center justify-center rounded-full ${
-            allOperational ? "bg-emerald-500/15" : "bg-yellow-500/15"
-          }`}
+          key={day.date}
+          className="group relative h-8 flex-1 rounded-[2px] transition-all hover:scale-y-110 hover:brightness-125"
+          style={{
+            backgroundColor: day.checks === 0 ? noDataColor() : barColor(day.status),
+            opacity: day.checks === 0 ? 0.3 : 1,
+            minWidth: 2,
+          }}
         >
-          {allOperational ? (
-            <CheckCircle2 className="h-6 w-6 text-emerald-400" />
-          ) : (
-            <AlertTriangle className="h-6 w-6 text-yellow-400" />
-          )}
+          <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--background-tertiary)] border border-[var(--border-default)] px-2.5 py-1.5 text-[11px] text-[var(--text-secondary)] shadow-lg group-hover:block">
+            <span className="font-medium text-[var(--text-primary)]">{day.date}</span>
+            <br />
+            {day.checks === 0 ? (
+              <span className="text-[var(--text-tertiary)]">No data</span>
+            ) : (
+              <>
+                {day.operational > 0 && <span className="text-emerald-400">{day.operational} ok</span>}
+                {day.degraded > 0 && <span className="text-yellow-400">{day.operational > 0 ? " / " : ""}{day.degraded} slow</span>}
+                {day.down > 0 && <span className="text-red-400">{(day.operational > 0 || day.degraded > 0) ? " / " : ""}{day.down} down</span>}
+              </>
+            )}
+          </div>
         </div>
-        <div>
-          <h2
-            className={`text-lg font-bold ${
-              allOperational ? "text-emerald-400" : "text-yellow-400"
-            }`}
-          >
-            {allOperational ? "All Systems Operational" : "Some Services Experiencing Issues"}
-          </h2>
-          <p className="mt-0.5 text-sm text-[var(--text-tertiary)]">
-            {allOperational
-              ? "Everything is running smoothly"
-              : "We're aware and working on it"}
-          </p>
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
 
 function ServiceCard({ service }: { service: Service }) {
-  const config = statusConfig(service.status);
-  const StatusIcon = config.icon;
+  const colors = statusColor(service.status);
   const ServiceIcon = SERVICE_ICONS[service.id] ?? Server;
   const description = SERVICE_DESCRIPTIONS[service.id];
+  const hasDays = service.days.length > 0;
+  const hasData = service.days.some((d) => d.checks > 0);
 
   return (
-    <div
-      className={`group relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] transition-all duration-300 hover:border-[var(--border-subtle)] ${config.glow}`}
-    >
-      {/* Top color bar */}
-      <div className={`h-0.5 ${config.barColor} opacity-60`} />
-
-      <div className="p-5">
+    <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] transition-colors hover:border-[var(--border-subtle)]">
+      <div className="p-5 pb-3">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] bg-[var(--background-tertiary)] text-[var(--text-tertiary)] transition-colors group-hover:text-[var(--text-secondary)]">
-              <ServiceIcon className="h-4.5 w-4.5" />
+          <div className="flex items-center gap-3">
+            <div className={`flex h-9 w-9 items-center justify-center rounded-full ${colors.bgSoft}`}>
+              <ServiceIcon className={`h-4 w-4 ${colors.text}`} />
             </div>
             <div>
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">{service.name}</h3>
               {description && (
-                <p className="mt-0.5 text-xs text-[var(--text-tertiary)]">{description}</p>
-              )}
-              {service.message && (
-                <p className="mt-2 rounded-[var(--radius-sm)] bg-[var(--background-tertiary)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)]">
-                  {service.message}
-                </p>
+                <p className="text-xs text-[var(--text-tertiary)]">{description}</p>
               )}
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-2 shrink-0">
-            <span
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold ${config.pillBg} ${config.pillText} ${config.pillBorder}`}
-            >
-              <span className="relative flex h-2 w-2">
-                {config.dotPulse && (
-                  <span
-                    className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${config.barColor}`}
-                  />
-                )}
-                <span className={`relative inline-flex h-2 w-2 rounded-full ${config.barColor}`} />
-              </span>
-              {config.label}
-            </span>
-            <span className="text-[10px] text-[var(--text-tertiary)] tabular-nums">
-              Checked {timeAgo(service.lastChecked)}
+          <div className="flex items-center gap-4 shrink-0">
+            {hasData && (
+              <div className="text-right">
+                <p className="text-lg font-bold tabular-nums text-[var(--text-primary)]">
+                  {service.uptimePct.toFixed(service.uptimePct === 100 ? 0 : 2)}%
+                </p>
+                <p className="text-[10px] text-[var(--text-tertiary)]">Uptime</p>
+              </div>
+            )}
+            <span className={`${colors.text} text-xs font-semibold`}>
+              {statusLabel(service.status)}
             </span>
           </div>
         </div>
+
+        {service.message && (
+          <p className="mt-3 rounded-[var(--radius-sm)] bg-[var(--background-tertiary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+            {service.message}
+          </p>
+        )}
       </div>
+
+      {/* Uptime bar */}
+      {hasDays && (
+        <div className="px-5 pb-4">
+          <UptimeBar days={service.days} />
+          <div className="mt-1.5 flex justify-between text-[10px] text-[var(--text-tertiary)]">
+            <span>{service.days.length} days ago</span>
+            <span>Today</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -218,6 +201,14 @@ export default function StatusPage() {
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
+  const overallStatus: ServiceStatus | null = data
+    ? data.services.some((s) => s.status === "down")
+      ? "down"
+      : data.services.some((s) => s.status === "degraded")
+        ? "degraded"
+        : "operational"
+    : null;
+
   return (
     <div className="flex min-h-screen flex-col bg-[var(--background-primary)]">
       {/* Background glow */}
@@ -243,9 +234,7 @@ export default function StatusPage() {
             disabled={loading}
             className="flex items-center gap-1.5 rounded-full border border-[var(--border-default)] bg-[var(--background-tertiary)] px-3.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-all hover:border-[var(--border-subtle)] hover:text-[var(--text-primary)] disabled:opacity-50"
           >
-            <RefreshCw
-              className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
-            />
+            <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </button>
         </div>
@@ -258,21 +247,40 @@ export default function StatusPage() {
           </div>
         )}
 
-        {data && (
+        {data && overallStatus && (
           <>
-            {/* Title */}
-            <div className="mb-8 text-center">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
-                Service Health
-              </p>
-              <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
-                System Status
-              </h1>
-            </div>
+            {/* Hero status indicator */}
+            <div className="mb-10 flex flex-col items-center text-center">
+              <div
+                className={`mb-5 flex h-20 w-20 items-center justify-center rounded-full ${
+                  overallStatus === "operational"
+                    ? "bg-emerald-500/15 shadow-[0_0_40px_rgba(16,185,129,0.2)]"
+                    : overallStatus === "degraded"
+                      ? "bg-yellow-500/15 shadow-[0_0_40px_rgba(234,179,8,0.2)]"
+                      : "bg-red-500/15 shadow-[0_0_40px_rgba(239,68,68,0.2)]"
+                }`}
+              >
+                {overallStatus === "operational" ? (
+                  <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+                ) : overallStatus === "degraded" ? (
+                  <AlertTriangle className="h-10 w-10 text-yellow-400" />
+                ) : (
+                  <XCircle className="h-10 w-10 text-red-400" />
+                )}
+              </div>
 
-            {/* Overall banner */}
-            <div className="mb-6">
-              <OverallBanner allOperational={data.allOperational} />
+              <h1 className={`text-2xl font-bold sm:text-3xl ${statusColor(overallStatus).text}`}>
+                {overallStatus === "operational"
+                  ? "All Systems Operational"
+                  : overallStatus === "degraded"
+                    ? "Degraded Performance"
+                    : "Service Disruption"}
+              </h1>
+              <p className="mt-1.5 text-sm text-[var(--text-tertiary)]">
+                {overallStatus === "operational"
+                  ? "Everything is running smoothly"
+                  : "We're aware and working on it"}
+              </p>
             </div>
 
             {/* Global message */}
@@ -283,11 +291,18 @@ export default function StatusPage() {
               </div>
             )}
 
-            {/* Services */}
-            <div className="space-y-3">
-              <h2 className="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-tertiary)]">
-                Services
+            {/* Section heading */}
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-tertiary)]">
+                Live Status
               </h2>
+              <span className="text-[10px] text-[var(--text-tertiary)]">
+                Uptime over the past 90 days
+              </span>
+            </div>
+
+            {/* Service cards */}
+            <div className="space-y-4">
               {data.services.map((service) => (
                 <ServiceCard key={service.id} service={service} />
               ))}

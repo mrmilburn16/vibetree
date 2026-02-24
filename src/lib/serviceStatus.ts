@@ -1,10 +1,12 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 
 const STATUS_PATH = join(process.cwd(), "data", "service-status.json");
+const UPTIME_LOG_PATH = join(process.cwd(), "data", "uptime-history.jsonl");
 const STALE_MS = 60_000;
 const PING_TIMEOUT_MS = 5_000;
 const DEGRADED_THRESHOLD_MS = 3_000;
+const UPTIME_DAYS = 90;
 
 export type ServiceStatusValue = "operational" | "degraded" | "down";
 
@@ -22,6 +24,27 @@ export interface ServiceEntry {
 export interface StatusData {
   services: ServiceEntry[];
   globalMessage: string | null;
+}
+
+export interface UptimeCheckEntry {
+  ts: string;
+  serviceId: string;
+  status: ServiceStatusValue;
+}
+
+export interface DayBucket {
+  date: string;
+  status: ServiceStatusValue;
+  checks: number;
+  operational: number;
+  degraded: number;
+  down: number;
+}
+
+export interface ServiceUptimeHistory {
+  serviceId: string;
+  uptimePct: number;
+  days: DayBucket[];
 }
 
 const DEFAULT_SERVICES: ServiceEntry[] = [
@@ -119,6 +142,8 @@ export async function runHealthChecks(baseUrl: string): Promise<StatusData> {
     if (newEffective !== oldEffective) {
       service.lastChanged = now;
     }
+
+    logUptimeCheck(service.id, newEffective);
   }
 
   saveStatus(data);
@@ -157,6 +182,90 @@ export function setGlobalMessage(message: string | null): void {
   const data = loadStatus();
   data.globalMessage = message;
   saveStatus(data);
+}
+
+function logUptimeCheck(serviceId: string, status: ServiceStatusValue): void {
+  const entry: UptimeCheckEntry = {
+    ts: new Date().toISOString(),
+    serviceId,
+    status,
+  };
+  const dir = dirname(UPTIME_LOG_PATH);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  appendFileSync(UPTIME_LOG_PATH, JSON.stringify(entry) + "\n", "utf8");
+}
+
+function dateKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+export function getUptimeHistory(): ServiceUptimeHistory[] {
+  const entries: UptimeCheckEntry[] = [];
+  if (existsSync(UPTIME_LOG_PATH)) {
+    try {
+      const raw = readFileSync(UPTIME_LOG_PATH, "utf8");
+      for (const line of raw.split(/\r?\n/).filter(Boolean)) {
+        try {
+          entries.push(JSON.parse(line));
+        } catch { /* skip bad lines */ }
+      }
+    } catch { /* no file yet */ }
+  }
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - UPTIME_DAYS);
+  cutoff.setHours(0, 0, 0, 0);
+  const cutoffKey = dateKey(cutoff);
+
+  const filtered = entries.filter((e) => e.ts.slice(0, 10) >= cutoffKey);
+
+  const serviceIds = ["website", "app-generation", "xcode-builds"];
+  const results: ServiceUptimeHistory[] = [];
+
+  for (const sid of serviceIds) {
+    const mine = filtered.filter((e) => e.serviceId === sid);
+
+    const byDay = new Map<string, { operational: number; degraded: number; down: number }>();
+    for (const e of mine) {
+      const dk = e.ts.slice(0, 10);
+      const cur = byDay.get(dk) ?? { operational: 0, degraded: 0, down: 0 };
+      cur[e.status] += 1;
+      byDay.set(dk, cur);
+    }
+
+    const days: DayBucket[] = [];
+    const cursor = new Date(cutoff);
+    const today = dateKey(new Date());
+    while (dateKey(cursor) <= today) {
+      const dk = dateKey(cursor);
+      const counts = byDay.get(dk);
+      const total = counts ? counts.operational + counts.degraded + counts.down : 0;
+
+      let dayStatus: ServiceStatusValue = "operational";
+      if (counts) {
+        if (counts.down > 0) dayStatus = counts.down > total / 2 ? "down" : "degraded";
+        else if (counts.degraded > 0) dayStatus = "degraded";
+      }
+
+      days.push({
+        date: dk,
+        status: total === 0 ? "operational" : dayStatus,
+        checks: total,
+        operational: counts?.operational ?? 0,
+        degraded: counts?.degraded ?? 0,
+        down: counts?.down ?? 0,
+      });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const totalChecks = mine.length;
+    const opChecks = mine.filter((e) => e.status === "operational").length;
+    const uptimePct = totalChecks > 0 ? (opChecks / totalChecks) * 100 : 100;
+
+    results.push({ serviceId: sid, uptimePct, days });
+  }
+
+  return results;
 }
 
 export function getServiceAlerts(): Array<{ id: string; type: string; title: string; message: string }> {

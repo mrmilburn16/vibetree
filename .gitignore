@@ -37,6 +37,7 @@ ios/**/DerivedData/
 data/*.jsonl
 data/project-chats/
 data/service-status.json
+data/uptime-history.jsonl
 
 # debug
 npm-debug.log*
