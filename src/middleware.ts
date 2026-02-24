@@ -23,14 +23,32 @@ function isAllowedIp(request: NextRequest): boolean {
 
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+
+  // Admin IP guard
   if (path.startsWith("/admin") || path.startsWith("/api/admin")) {
     if (!isAllowedIp(request)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
+
+  // A/B variant cookie for /waitlist
+  if (path === "/waitlist" || path.startsWith("/waitlist/")) {
+    const response = NextResponse.next();
+    if (!request.cookies.has("ab_variant")) {
+      const variant = Math.random() < 0.5 ? "a" : "b";
+      response.cookies.set("ab_variant", variant, {
+        httpOnly: false, // readable by client JS
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 90, // 90 days
+        path: "/",
+      });
+    }
+    return response;
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/admin/:path*", "/api/admin/:path*", "/waitlist", "/waitlist/:path*"],
 };
