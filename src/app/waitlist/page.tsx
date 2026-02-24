@@ -426,7 +426,7 @@ export default function WaitlistPage() {
         {/* Page 1: hero + join fit in one viewport; scroll snaps to this or to actions below */}
         <div className="flex min-h-[calc(100dvh-4rem)] flex-col snap-start">
           {/* Hero — compact so sign-up card sits higher */}
-          <section className="landing-section relative flex flex-shrink-0 flex-col justify-center overflow-hidden px-4 py-8 sm:px-6 sm:py-10">
+          <section className="landing-section relative flex flex-shrink-0 flex-col justify-center overflow-hidden px-4 pt-[calc(4rem-2vh)] pb-4 sm:px-6 sm:pt-[calc(5rem-2vh)] sm:pb-6">
             <div
               className="absolute inset-0 opacity-30"
               style={{
@@ -446,7 +446,7 @@ export default function WaitlistPage() {
           </section>
 
           {/* Join form / confirmation */}
-          <section id="join" className="landing-section flex flex-1 flex-col justify-center px-4 pt-2 pb-4 sm:px-6 sm:pt-4 sm:pb-6">
+          <section id="join" className="landing-section -mt-[2vh] flex flex-1 flex-col justify-center px-4 pt-2 pb-4 sm:px-6 sm:pt-4 sm:pb-6">
             <div className="mx-auto w-full max-w-xl">
             {joined && status ? (
               <Card className="animate-fade-in py-10 text-center">
@@ -498,13 +498,13 @@ export default function WaitlistPage() {
               </Card>
             ) : (
               <Card className="animate-fade-in p-6 sm:p-8">
-                <h2 className="text-heading-card mb-1">Join the waitlist</h2>
-                <p className="text-body-muted mb-6 text-sm">
+                <h2 className="text-heading-card mb-6 text-center">Join the waitlist</h2>
+                <p className="text-body-muted mb-6 text-center text-sm">
                   Enter your email to reserve your spot. Complete actions below to move up.
                 </p>
                 <form onSubmit={handleJoin} className="space-y-4">
                   <div>
-                    <label htmlFor="waitlist-email" className="text-body-muted mb-1.5 block text-sm font-medium">
+                    <label htmlFor="waitlist-email" className="text-body-muted mb-1.5 block pl-3 text-sm font-medium">
                       Email
                     </label>
                     <Input
@@ -518,7 +518,7 @@ export default function WaitlistPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="waitlist-name" className="text-body-muted mb-1.5 block text-sm font-medium">
+                    <label htmlFor="waitlist-name" className="text-body-muted mb-1.5 block pl-3 text-sm font-medium">
                       Name <span className="text-[var(--text-tertiary)]">(optional)</span>
                     </label>
                     <Input
@@ -532,7 +532,7 @@ export default function WaitlistPage() {
                     />
                   </div>
                   {error && <p className="text-sm text-[var(--semantic-error)]">{error}</p>}
-                  <div className="flex justify-center">
+                  <div className="flex justify-center pt-4 pb-2">
                     <Button type="submit" variant="primary" disabled={loading} className="w-full sm:w-auto">
                       {loading ? "Joining…" : "Join the waitlist"}
                     </Button>
