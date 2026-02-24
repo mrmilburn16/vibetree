@@ -13,6 +13,7 @@ import {
   Cpu,
   FileCode2,
   BarChart3,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui";
 
@@ -60,6 +61,7 @@ export default function SkillsDashboardPage() {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<"name" | "compileRate" | "totalBuilds">("name");
+  const [copied, setCopied] = useState(false);
 
   const fetchSkills = useCallback(async () => {
     setLoading(true);
@@ -96,6 +98,61 @@ export default function SkillsDashboardPage() {
       : 0;
   const totalGolden = skills.reduce((s, sk) => s + sk.stats.goldenExamples.length, 0);
 
+  const generateReport = useCallback(() => {
+    const lines: string[] = [];
+    lines.push("## Skills Health Report");
+    lines.push(`- Total skills: ${skills.length}`);
+    lines.push(`- Total skill builds: ${totalBuilds}`);
+    lines.push(`- Avg compile rate: ${totalBuilds > 0 ? `${avgCompileRate}%` : "N/A"}`);
+    lines.push(`- Golden examples: ${totalGolden}`);
+    lines.push("");
+
+    const withData = sorted.filter((s) => s.stats.totalBuilds > 0);
+    const noData = sorted.filter((s) => s.stats.totalBuilds === 0);
+
+    if (withData.length > 0) {
+      lines.push("### Skills with Data");
+      lines.push("");
+      lines.push("| Skill | Builds | Compile | Functional | Golden | Status |");
+      lines.push("|-------|--------|---------|------------|--------|--------|");
+      for (const sk of withData) {
+        const s = sk.stats;
+        const status = healthLabel(s.compileRate);
+        const funcRate = s.functionalRate > 0 ? `${s.functionalRate}%` : "--";
+        lines.push(`| ${sk.name} | ${s.totalBuilds} | ${s.compileRate}% | ${funcRate} | ${s.goldenExamples.length} | ${status} |`);
+      }
+      lines.push("");
+    }
+
+    const critical = withData.filter((s) => s.stats.compileRate < 70);
+    if (critical.length > 0) {
+      lines.push("### Critical Skills (< 70% compile)");
+      for (const sk of critical) {
+        lines.push(`- **${sk.name}** — ${sk.stats.compileRate}% (${sk.stats.totalBuilds} builds)`);
+        if (sk.stats.commonErrors.length > 0) {
+          for (const err of sk.stats.commonErrors.slice(0, 3)) {
+            lines.push(`  - ${err}`);
+          }
+        }
+      }
+      lines.push("");
+    }
+
+    if (noData.length > 0) {
+      lines.push(`### No Data (${noData.length} skills)`);
+      lines.push(noData.map((s) => s.name).join(", "));
+      lines.push("");
+    }
+
+    return lines.join("\n");
+  }, [skills, sorted, totalBuilds, avgCompileRate, totalGolden]);
+
+  const copyReport = useCallback(() => {
+    navigator.clipboard.writeText(generateReport());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [generateReport]);
+
   return (
     <div className="min-h-screen bg-[var(--background-primary)] text-[var(--text-primary)]">
       <div className="mx-auto max-w-6xl px-6 py-8">
@@ -111,13 +168,32 @@ export default function SkillsDashboardPage() {
             </Link>
             <h1 className="text-2xl font-semibold">Skills Health</h1>
           </div>
-          <Button
-            onClick={fetchSkills}
-            variant="secondary"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={copyReport}
+              variant="ghost"
+              disabled={skills.length === 0}
+            >
+              {copied ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2 text-green-400" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy Report
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={fetchSkills}
+              variant="secondary"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {/* Summary Cards */}

@@ -425,6 +425,15 @@ textarea:-webkit-autofill:active {
   animation: bubble-float 12s ease-in-out infinite;
 }
 
+/* Waitlist: subtle arrow down/up hint */
+@keyframes arrow-nudge-down {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+.animate-arrow-nudge {
+  animation: arrow-nudge-down 1.8s ease-in-out infinite;
+}
+
 /* Respect prefers-reduced-motion: disable non-essential animations */
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
@@ -444,6 +453,7 @@ textarea:-webkit-autofill:active {
   .animate-skeleton,
   .gradient-text-hero,
   .animate-bubble-float,
+  .animate-arrow-nudge,
   .sign-in-loading-enter,
   .sign-in-loading-bar,
   .sign-in-loading-glow,

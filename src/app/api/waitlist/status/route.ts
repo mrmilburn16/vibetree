@@ -38,16 +38,26 @@ export async function GET(request: NextRequest) {
 
     const rank = higher + tiesBefore + 1;
 
+    // Count how many people signed up using this user's referral code
+    const referralCode = data.referralCode as string;
+    const referralSnap = await db
+      .collection("waitlist")
+      .where("referredBy", "==", referralCode)
+      .count()
+      .get();
+    const referralCount = referralSnap.data().count;
+
     return NextResponse.json({
       token: data.token as string,
       email: data.email as string,
       name: data.name as string,
-      referralCode: data.referralCode as string,
+      referralCode,
       position: rank,
       signupPosition: myPosition,
       points,
       completedActions: data.completedActions as string[],
       abVariant: data.abVariant as "a" | "b",
+      referralCount,
     });
   } catch (err) {
     console.error("[waitlist/status]", err);
