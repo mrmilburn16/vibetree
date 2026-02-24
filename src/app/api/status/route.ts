@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   runHealthChecksIfStale,
   getEffectiveStatus,
+  getEffectiveSubStatus,
   getUptimeHistory,
 } from "@/lib/serviceStatus";
 
@@ -25,6 +26,11 @@ export async function GET(request: NextRequest) {
       lastChecked: s.lastChecked,
       uptimePct: history?.uptimePct ?? 100,
       days: history?.days ?? [],
+      subServices: s.subServices?.map((sub) => ({
+        id: sub.id,
+        name: sub.name,
+        status: getEffectiveSubStatus(sub),
+      })),
     };
   });
 

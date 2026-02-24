@@ -10,6 +10,13 @@ const UPTIME_DAYS = 90;
 
 export type ServiceStatusValue = "operational" | "degraded" | "down";
 
+export interface SubServiceEntry {
+  id: string;
+  name: string;
+  status: ServiceStatusValue;
+  override: ServiceStatusValue | null;
+}
+
 export interface ServiceEntry {
   id: string;
   name: string;
@@ -19,6 +26,7 @@ export interface ServiceEntry {
   overrideMessage: string | null;
   lastChecked: string | null;
   lastChanged: string | null;
+  subServices?: SubServiceEntry[];
 }
 
 export interface StatusData {
@@ -51,9 +59,29 @@ const DEFAULT_SERVICES: ServiceEntry[] = [
   { id: "website", name: "Website", status: "operational", autoDetected: true, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
   { id: "app-generation", name: "App Generation", status: "operational", autoDetected: true, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
   { id: "xcode-builds", name: "Xcode Builds", status: "operational", autoDetected: true, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
-  { id: "cloud-services", name: "Cloud Services", status: "operational", autoDetected: false, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
-  { id: "push-notifications", name: "Push Notifications", status: "operational", autoDetected: false, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
-  { id: "authentication", name: "Authentication", status: "operational", autoDetected: false, override: null, overrideMessage: null, lastChecked: null, lastChanged: null },
+  {
+    id: "cloud-services", name: "Cloud Services", status: "operational", autoDetected: false, override: null, overrideMessage: null, lastChecked: null, lastChanged: null,
+    subServices: [
+      { id: "firebase-db", name: "Firestore Database", status: "operational", override: null },
+      { id: "firebase-storage", name: "Cloud Storage", status: "operational", override: null },
+      { id: "firebase-analytics", name: "Analytics", status: "operational", override: null },
+    ],
+  },
+  {
+    id: "push-notifications", name: "Push Notifications", status: "operational", autoDetected: false, override: null, overrideMessage: null, lastChecked: null, lastChanged: null,
+    subServices: [
+      { id: "apns-relay", name: "APNs Relay", status: "operational", override: null },
+      { id: "notification-scheduler", name: "Notification Scheduler", status: "operational", override: null },
+    ],
+  },
+  {
+    id: "authentication", name: "Authentication", status: "operational", autoDetected: false, override: null, overrideMessage: null, lastChecked: null, lastChanged: null,
+    subServices: [
+      { id: "apple-signin", name: "Sign in with Apple", status: "operational", override: null },
+      { id: "google-signin", name: "Google Sign-In", status: "operational", override: null },
+      { id: "email-auth", name: "Email / Password", status: "operational", override: null },
+    ],
+  },
 ];
 
 function ensureFile() {
@@ -85,8 +113,22 @@ export function saveStatus(data: StatusData): void {
   writeFileSync(STATUS_PATH, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 
+export function getEffectiveSubStatus(sub: SubServiceEntry): ServiceStatusValue {
+  return sub.override ?? sub.status;
+}
+
+export function deriveGroupStatus(service: ServiceEntry): ServiceStatusValue {
+  if (!service.subServices?.length) return service.override ?? service.status;
+  const statuses = service.subServices.map(getEffectiveSubStatus);
+  if (statuses.every((s) => s === "operational")) return "operational";
+  if (statuses.some((s) => s === "down")) return "degraded";
+  return "degraded";
+}
+
 export function getEffectiveStatus(service: ServiceEntry): ServiceStatusValue {
-  return service.override ?? service.status;
+  if (service.override) return service.override;
+  if (service.subServices?.length) return deriveGroupStatus(service);
+  return service.status;
 }
 
 function isStale(data: StatusData): boolean {
@@ -179,6 +221,29 @@ export function setServiceOverride(
 
   saveStatus(data);
   return service;
+}
+
+export function setSubServiceOverride(
+  serviceId: string,
+  subServiceId: string,
+  override: ServiceStatusValue | null,
+): SubServiceEntry | null {
+  const data = loadStatus();
+  const service = data.services.find((s) => s.id === serviceId);
+  if (!service?.subServices) return null;
+  const sub = service.subServices.find((s) => s.id === subServiceId);
+  if (!sub) return null;
+
+  sub.override = override;
+
+  const oldEffective = getEffectiveStatus(service);
+  const newEffective = getEffectiveStatus(service);
+  if (newEffective !== oldEffective) {
+    service.lastChanged = new Date().toISOString();
+  }
+
+  saveStatus(data);
+  return sub;
 }
 
 export function setGlobalMessage(message: string | null): void {

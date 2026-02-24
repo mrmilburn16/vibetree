@@ -13,6 +13,14 @@ import { DropdownSelect } from "@/components/ui";
 
 type ServiceStatusValue = "operational" | "degraded" | "down";
 
+interface AdminSubService {
+  id: string;
+  name: string;
+  status: ServiceStatusValue;
+  override: ServiceStatusValue | null;
+  effectiveStatus: ServiceStatusValue;
+}
+
 interface AdminService {
   id: string;
   name: string;
@@ -23,6 +31,7 @@ interface AdminService {
   lastChecked: string | null;
   lastChanged: string | null;
   effectiveStatus: ServiceStatusValue;
+  subServices?: AdminSubService[];
 }
 
 interface AdminStatusResponse {
@@ -102,6 +111,16 @@ export default function AdminStatusPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "override", serviceId, override: overrideVal, overrideMessage }),
+    });
+    if (res.ok) await fetchData();
+  };
+
+  const handleSubOverride = async (serviceId: string, subServiceId: string, value: string) => {
+    const override = value === "auto" ? null : value;
+    const res = await fetch("/api/admin/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "subOverride", serviceId, subServiceId, override }),
     });
     if (res.ok) await fetchData();
   };
@@ -259,6 +278,37 @@ export default function AdminStatusPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Sub-services */}
+              {service.subServices && service.subServices.length > 0 && (
+                <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-primary)]">
+                  <p className="px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-[var(--text-tertiary)] border-b border-[var(--border-default)]">
+                    Components
+                  </p>
+                  <div className="divide-y divide-[var(--border-default)]">
+                    {service.subServices.map((sub) => {
+                      const subInfo = statusLabel(sub.effectiveStatus);
+                      const SubIcon = subInfo.icon;
+                      const subOverrideVal = sub.override ?? "auto";
+                      return (
+                        <div key={sub.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <SubIcon className={`h-3.5 w-3.5 ${subInfo.color}`} />
+                            <span className="text-xs text-[var(--text-primary)]">{sub.name}</span>
+                          </div>
+                          <DropdownSelect
+                            options={OVERRIDE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                            value={subOverrideVal}
+                            onChange={(val) => handleSubOverride(service.id, sub.id, val)}
+                            aria-label={`Override status for ${sub.name}`}
+                            className="text-xs"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

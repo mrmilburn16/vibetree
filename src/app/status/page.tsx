@@ -14,6 +14,7 @@ import {
   Cloud,
   Bell,
   ShieldCheck,
+  ChevronDown,
 } from "lucide-react";
 
 type ServiceStatus = "operational" | "degraded" | "down";
@@ -27,6 +28,12 @@ type DayBucket = {
   down: number;
 };
 
+type SubService = {
+  id: string;
+  name: string;
+  status: ServiceStatus;
+};
+
 type Service = {
   id: string;
   name: string;
@@ -35,6 +42,7 @@ type Service = {
   lastChecked: string | null;
   uptimePct: number;
   days: DayBucket[];
+  subServices?: SubService[];
 };
 
 type StatusResponse = {
@@ -126,12 +134,27 @@ function UptimeBar({ days }: { days: DayBucket[] }) {
   );
 }
 
+function SubServiceRow({ sub }: { sub: SubService }) {
+  const colors = statusColor(sub.status);
+  return (
+    <div className="flex items-center justify-between py-2">
+      <span className="text-xs text-[var(--text-secondary)]">{sub.name}</span>
+      <span className={`flex items-center gap-1.5 text-[11px] font-medium ${colors.text}`}>
+        <span className={`inline-block h-1.5 w-1.5 rounded-full ${colors.bg}`} />
+        {statusLabel(sub.status)}
+      </span>
+    </div>
+  );
+}
+
 function ServiceCard({ service }: { service: Service }) {
+  const [expanded, setExpanded] = useState(false);
   const colors = statusColor(service.status);
   const ServiceIcon = SERVICE_ICONS[service.id] ?? Server;
   const description = SERVICE_DESCRIPTIONS[service.id];
   const hasDays = service.days.length > 0;
   const hasData = service.days.some((d) => d.checks > 0);
+  const hasSubs = service.subServices && service.subServices.length > 0;
 
   return (
     <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] transition-colors hover:border-[var(--border-subtle)]">
@@ -173,12 +196,35 @@ function ServiceCard({ service }: { service: Service }) {
 
       {/* Uptime bar */}
       {hasDays && (
-        <div className="px-5 pb-4">
+        <div className="px-5 pb-3">
           <UptimeBar days={service.days} />
           <div className="mt-1.5 flex justify-between text-[10px] text-[var(--text-tertiary)]">
             <span>{service.days.length} days ago</span>
             <span>Today</span>
           </div>
+        </div>
+      )}
+
+      {/* Sub-services expand toggle */}
+      {hasSubs && (
+        <div className="border-t border-[var(--border-default)]">
+          <button
+            type="button"
+            onClick={() => setExpanded((p) => !p)}
+            className="flex w-full items-center justify-between px-5 py-2.5 text-[11px] font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+          >
+            <span>{service.subServices!.length} components</span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+            />
+          </button>
+          {expanded && (
+            <div className="border-t border-[var(--border-default)] px-5 pb-3 pt-1 divide-y divide-[var(--border-default)]">
+              {service.subServices!.map((sub) => (
+                <SubServiceRow key={sub.id} sub={sub} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
