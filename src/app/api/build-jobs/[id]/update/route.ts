@@ -65,11 +65,11 @@ export async function POST(
   if (!job) return Response.json({ error: "Job not found" }, { status: 404 });
 
   const body = await request.json().catch(() => ({}));
-  const logs = Array.isArray(body?.logs) ? body.logs.filter((x: any) => typeof x === "string") : [];
+  const logs = Array.isArray(body?.logs) ? body.logs.filter((x: unknown) => typeof x === "string") : [];
   if (logs.length) appendBuildJobLogs(id, logs);
 
   const compilerErrors = Array.isArray(body?.compilerErrors)
-    ? body.compilerErrors.filter((x: any) => typeof x === "string")
+    ? body.compilerErrors.filter((x: unknown) => typeof x === "string")
     : [];
   if (compilerErrors.length) setBuildJobCompilerErrors(id, compilerErrors);
 

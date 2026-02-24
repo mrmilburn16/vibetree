@@ -1,4 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
+import { Dirent } from "node:fs";
 import path from "node:path";
 
 export const runtime = "nodejs";
@@ -42,9 +43,9 @@ async function listMarkdownFiles(rootAbs: string): Promise<string[]> {
   const stack: string[] = [rootAbs];
   while (stack.length) {
     const dir = stack.pop()!;
-    let entries: Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
+    let entries: Dirent[];
     try {
-      entries = (await readdir(dir, { withFileTypes: true })) as any;
+      entries = await readdir(dir, { withFileTypes: true });
     } catch {
       continue;
     }

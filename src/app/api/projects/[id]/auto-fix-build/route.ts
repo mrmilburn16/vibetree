@@ -280,7 +280,7 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       return { fixedFiles, explanation, raw: textContent, stopReason: String(msg.stop_reason ?? "") };
     }
 
-    let result = await callLLMStreaming(prompt);
+    const result = await callLLMStreaming(prompt);
     let fixedFiles = result.fixedFiles;
     let explanation = result.explanation;
 
