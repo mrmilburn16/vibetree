@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/adminAuth";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { getServiceAlerts } from "@/lib/serviceStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -198,7 +199,9 @@ export async function GET(request: Request) {
     "GPT-5.2": 15,
   };
 
+  const statusAlerts = getServiceAlerts();
   const alerts = [
+    ...statusAlerts,
     { id: "1", type: "warning", title: "Sonnet margin < 10%", message: "Consider raising credit cost for Sonnet 4.6 or reviewing prompts." },
     { id: "2", type: "info", title: "3 flagged users (24h)", message: "Review Fraud & suspicious usage section." },
     { id: "3", type: "success", title: "MRR up 12% vs last period", message: "Revenue trend is positive." },
