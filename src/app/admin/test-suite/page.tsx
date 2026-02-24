@@ -69,6 +69,7 @@ type TestResult = {
   designRating?: number;
   functionalityRating?: number;
   notes?: string;
+  issueTags?: string[];
   liveStatus?: string;
   startedAt?: number;
   liveEvents?: Array<{ at: number; msg: string }>;
@@ -965,12 +966,24 @@ function ResultRow({
                 </div>
               </div>
               <textarea
-                placeholder="Add notes (e.g. broken button, layout issue, Xcode runtime error)..."
+                placeholder={"What's broken or off? e.g.\n• menu overlaps the start button • can't tap settings • navigation doesn't go back • slider covers the text"}
                 value={result.notes ?? ""}
                 onChange={(e) => onUpdate({ notes: e.target.value })}
                 rows={2}
-                className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-primary)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]/50 focus:border-[var(--button-primary-bg)] focus:outline-none resize-y"
+                className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-primary)] px-3 py-2 text-xs leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]/50 focus:border-[var(--button-primary-bg)] focus:outline-none resize-y"
               />
+              {(result.issueTags?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {result.issueTags!.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400"
+                    >
+                      {tag.replace(/_/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1317,6 +1330,7 @@ function loadPersistedState(storageKey: string = TEST_SUITE_STORAGE_KEY): {
         designRating: typeof row.designRating === "number" ? (row.designRating as number) : undefined,
         functionalityRating: typeof row.functionalityRating === "number" ? (row.functionalityRating as number) : undefined,
         notes: typeof row.notes === "string" ? (row.notes as string) : undefined,
+        issueTags: Array.isArray(row.issueTags) ? (row.issueTags as string[]) : undefined,
       };
     });
     const computedCompletedCount = results.filter((r) => !r.excluded && r.status !== "pending").length;
@@ -1471,13 +1485,56 @@ export default function TestSuitePage() {
     }
   }, [results, running, syncingActive]);
 
+  const syncTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  const syncToBuildLog = useCallback((buildResultId: string, updates: Partial<TestResult>, index?: number) => {
+    const payload: Record<string, unknown> = {};
+    if (updates.notes !== undefined) payload.userNotes = updates.notes;
+    if (updates.designRating !== undefined) payload.userDesignScore = updates.designRating ?? null;
+    if (updates.functionalityRating !== undefined) payload.userFunctionalScore = updates.functionalityRating ?? null;
+    if (Object.keys(payload).length === 0) return;
+
+    const doSync = () => {
+      fetch(`/api/build-results/${buildResultId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .then((json) => {
+          if (json?.result?.issueTags && index !== undefined) {
+            setResults((prev) => {
+              const next = [...prev];
+              next[index] = { ...next[index], issueTags: json.result.issueTags };
+              return next;
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
+    if (index !== undefined && updates.notes !== undefined) {
+      clearTimeout(syncTimers.current[index]);
+      syncTimers.current[index] = setTimeout(doSync, 800);
+    } else {
+      doSync();
+    }
+  }, []);
+
   const updateResult = useCallback((index: number, updates: Partial<TestResult>) => {
+    const hasQAField = "notes" in updates || "designRating" in updates || "functionalityRating" in updates;
+
     setResults((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], ...updates };
+
+      if (hasQAField && next[index].buildResultId) {
+        syncToBuildLog(next[index].buildResultId!, updates, index);
+      }
+
       return next;
     });
-  }, []);
+  }, [syncToBuildLog]);
 
   const pushLiveEvent = useCallback((index: number, msg: string) => {
     setResults((prev) => {
@@ -1785,25 +1842,32 @@ export default function TestSuitePage() {
 
         const durationMs = Date.now() - t0;
 
-        await fetch("/api/build-results", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId,
-            projectName: idea.title,
-            prompt: idea.prompt,
-            tier: idea.tier,
-            category: idea.category,
-            compiled,
-            attempts,
-            autoFixUsed: attempts > 1,
-            compilerErrors,
-            fileCount,
-            fileNames: projectFiles.map((f) => f.path),
-            durationMs,
-            skillsUsed: Array.isArray(done?.skillIds) ? done.skillIds : [],
-          }),
-        });
+        let buildResultId: string | undefined;
+        try {
+          const brRes = await fetch("/api/build-results", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              projectId,
+              projectName: idea.title,
+              prompt: idea.prompt,
+              tier: idea.tier,
+              category: idea.category,
+              compiled,
+              attempts,
+              autoFixUsed: attempts > 1,
+              compilerErrors,
+              fileCount,
+              fileNames: projectFiles.map((f) => f.path),
+              durationMs,
+              skillsUsed: Array.isArray(done?.skillIds) ? done.skillIds : [],
+            }),
+          });
+          if (brRes.ok) {
+            const brJson = await brRes.json();
+            buildResultId = brJson.result?.id;
+          }
+        } catch {}
 
         const finalResult: Partial<TestResult> = {
           status: compiled ? "succeeded" : "failed",
@@ -1816,6 +1880,7 @@ export default function TestSuitePage() {
           buildMs,
           fileCount,
           model: config.model,
+          buildResultId,
           liveStatus: undefined,
           startedAt: undefined,
           ...(builtFiles?.length ? { projectFiles: builtFiles } : {}),
@@ -1828,6 +1893,7 @@ export default function TestSuitePage() {
           idea,
           projectId,
           buildJobId: buildRes.job.id,
+          buildResultId,
           ...finalResult,
         } as TestResult;
       } catch (err) {
