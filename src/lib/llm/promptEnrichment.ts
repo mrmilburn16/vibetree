@@ -4,8 +4,9 @@ import {
   loadSkill,
 } from "@/lib/skills/registry";
 import type { SkillMatch } from "@/lib/skills/types";
+import type { ProjectType } from "@/types";
 
-export type ProjectType = "standard" | "pro";
+export type { ProjectType };
 
 export interface EnrichmentResult {
   message: string;

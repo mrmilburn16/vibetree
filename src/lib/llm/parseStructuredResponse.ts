@@ -4,15 +4,13 @@
  * Strips optional markdown code fence (```json ... ```) before parsing.
  */
 
-export interface ParsedFile {
-  path: string;
-  content: string;
-}
+import type { CodeFile, StructuredLLMResponse } from "@/types";
 
-export interface StructuredResponse {
-  summary: string;
-  files: ParsedFile[];
-}
+/** @deprecated Use CodeFile from @/types instead. */
+export type ParsedFile = CodeFile;
+
+/** @deprecated Use StructuredLLMResponse from @/types instead. */
+export type StructuredResponse = StructuredLLMResponse;
 
 const REQUIRED_KEYS = ["summary", "files"] as const;
 

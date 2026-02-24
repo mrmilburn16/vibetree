@@ -6,6 +6,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
+import type { LLMAdapterResponse, StructuredLLMResponse, ProjectType } from "@/types";
 import type { LLMResponse } from "./mockAdapter";
 import {
   parseStructuredResponse,
@@ -174,7 +175,7 @@ function previewText(text: string, max = 240): string {
   return s.slice(0, max) + "…";
 }
 
-export type ProjectType = "standard" | "pro";
+export type { ProjectType };
 
 export interface GetClaudeResponseOptions {
   /** Current project files; when present, the user message is treated as a follow-up (e.g. change color, add feature). */

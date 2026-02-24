@@ -1,4 +1,6 @@
-export type SwiftTextFile = { path: string; content: string };
+import type { CodeFile } from "@/types";
+
+export type SwiftTextFile = CodeFile;
 
 /**
  * Best-effort fixes for common, safe-to-repair SwiftUI compile issues in LLM output.

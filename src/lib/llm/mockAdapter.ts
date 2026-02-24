@@ -3,19 +3,10 @@
  * Used when ANTHROPIC_API_KEY is unset or for pre-LLM testing.
  */
 
-export interface ParsedFile {
-  path: string;
-  content: string;
-}
+import type { LLMAdapterResponse, ProjectType } from "@/types";
 
-export interface LLMResponse {
-  content: string;
-  editedFiles: string[];
-  /** When present (e.g. from structured Claude response), route can persist these files. */
-  parsedFiles?: ParsedFile[];
-  /** Token usage from the API (real LLM only). Used to show cost after build. */
-  usage?: { input_tokens: number; output_tokens: number };
-}
+/** @deprecated Use LLMAdapterResponse from @/types instead. */
+export type LLMResponse = LLMAdapterResponse;
 
 const MOCK_APP_JS = `import { StatusBar } from "expo-status-bar";
 import { StyleSheet, Text, View } from "react-native";
@@ -129,8 +120,8 @@ const MOCK_DELAY_MS = 1200 + Math.random() * 1200;
 export async function mockGetResponse(
   _message: string,
   _model?: string,
-  projectType: "standard" | "pro" = "standard"
-): Promise<LLMResponse> {
+  projectType: ProjectType = "standard"
+): Promise<LLMAdapterResponse> {
   await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
   const pool = projectType === "pro" ? MOCK_RESPONSES_PRO : MOCK_RESPONSES_STANDARD;
   const mock = pool[Math.floor(Math.random() * pool.length)];
