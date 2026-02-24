@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { applyRateLimit, RATE_LIMITS } from "@/lib/rateLimit";
+import { loginUser } from "@/lib/auth";
 
 /**
  * POST /api/auth/login
- * Stub auth for the iOS companion app. Accepts any email/password and
- * returns a placeholder token so the app can proceed. Replace with real
- * auth (e.g. NextAuth, your own user store) when ready.
+ * Authenticate with email and password, returns a JWT token.
  */
 export async function POST(request: Request) {
   const limited = applyRateLimit(request, RATE_LIMITS.auth);
@@ -13,6 +12,7 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const email = typeof body?.email === "string" ? body.email.trim() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
 
   if (!email) {
     return NextResponse.json(
@@ -21,12 +21,18 @@ export async function POST(request: Request) {
     );
   }
 
-  // Demo: accept any credentials and return a placeholder token.
-  // In production, validate against your user store and issue a real JWT/session.
-  const token = `demo_${Buffer.from(`${email}:${Date.now()}`).toString("base64")}`;
+  if (!password) {
+    return NextResponse.json(
+      { error: "Password is required" },
+      { status: 400 }
+    );
+  }
 
-  return NextResponse.json({
-    token,
-    email,
-  });
+  try {
+    const { token, user } = await loginUser(email, password);
+    return NextResponse.json({ token, email: user.email, name: user.name });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Authentication failed";
+    return NextResponse.json({ error: message }, { status: 401 });
+  }
 }
