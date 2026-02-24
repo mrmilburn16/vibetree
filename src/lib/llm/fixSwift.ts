@@ -82,6 +82,56 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       content = "import UserNotifications\n" + content;
     }
 
+    const usesWidgetKit = /\b(TimelineProvider|TimelineEntry|WidgetConfiguration|StaticConfiguration|AppIntentConfiguration|WidgetFamily|WidgetBundle|Widget\b(?!Extension))\b/.test(content);
+    if (usesWidgetKit && !content.includes("import WidgetKit")) {
+      content = "import WidgetKit\n" + content;
+    }
+
+    const usesActivityKit = /\b(Activity<|ActivityAttributes|ActivityContent|ActivityConfiguration)\b/.test(content);
+    if (usesActivityKit && !content.includes("import ActivityKit")) {
+      content = "import ActivityKit\n" + content;
+    }
+
+    const usesARKit = /\b(ARSession|ARWorldTrackingConfiguration|ARPlaneAnchor|ARRaycastResult|ARSCNView|ARAnchor|ARFrame)\b/.test(content);
+    if (usesARKit && !content.includes("import ARKit")) {
+      content = "import ARKit\n" + content;
+    }
+
+    const usesRealityKit = /\b(ARView|AnchorEntity|ModelEntity|Entity|RealityKit|SimpleMaterial)\b/.test(content);
+    if (usesRealityKit && !content.includes("import RealityKit")) {
+      content = "import RealityKit\n" + content;
+    }
+
+    const usesHealthKit = /\b(HKHealthStore|HKQuantityType|HKSampleQuery|HKStatisticsQuery|HKWorkout|HKUnit|HKObjectType)\b/.test(content);
+    if (usesHealthKit && !content.includes("import HealthKit")) {
+      content = "import HealthKit\n" + content;
+    }
+
+    const usesShazamKit = /\b(SHSession|SHManagedSession|SHMatch|SHMediaItem|SHSignature|SHCatalog)\b/.test(content);
+    if (usesShazamKit && !content.includes("import ShazamKit")) {
+      content = "import ShazamKit\n" + content;
+    }
+
+    const usesSoundAnalysis = /\b(SNAudioStreamAnalyzer|SNClassifySoundRequest|SNClassificationResult|SNResultsObserving|SNRequest)\b/.test(content);
+    if (usesSoundAnalysis && !content.includes("import SoundAnalysis")) {
+      content = "import SoundAnalysis\n" + content;
+    }
+
+    const usesVisionKit = /\b(DataScannerViewController|VNDocumentCameraViewController)\b/.test(content);
+    if (usesVisionKit && !content.includes("import VisionKit")) {
+      content = "import VisionKit\n" + content;
+    }
+
+    const usesUIKit = /\b(UIView\b|UIViewController|UIColor|UIFont|UIImage|UIApplication|UIViewRepresentable|UIViewControllerRepresentable|UITapGestureRecognizer|UIPasteboard|UIScreen|UIActivityViewController)\b/.test(content);
+    if (usesUIKit && !content.includes("import UIKit") && !content.includes("import SwiftUI")) {
+      content = "import UIKit\n" + content;
+    }
+
+    const usesCombine = /\b(PassthroughSubject|CurrentValueSubject|AnyCancellable|\.sink\(|\.assign\(|Publishers\.)\b/.test(content);
+    if (usesCombine && !content.includes("import Combine")) {
+      content = "import Combine\n" + content;
+    }
+
     const importRe = /^import\s+\w+$/gm;
     const seenImports = new Set<string>();
     content = content.replace(importRe, (match) => {
@@ -187,6 +237,97 @@ export function applyRuleBasedFixesFromBuild(
         result = result.map((f) => f.path === file.path ? addImportToFile(f, "MapKit") : f);
         changed = true;
       }
+    }
+  }
+
+  if (/cannot find type 'UIView' in scope|cannot find type 'UIViewController' in scope|cannot find 'UIColor'/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "UIKit") && /\b(UIView\b|UIViewController|UIColor|UIViewRepresentable|UIViewControllerRepresentable|UITapGestureRecognizer)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "UIKit") : f);
+        changed = true;
+      }
+    }
+  }
+
+  if (/Cannot find.*(ARView|AnchorEntity|ModelEntity|ARWorldTrackingConfiguration)/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "RealityKit") && /\b(ARView|AnchorEntity|ModelEntity|Entity)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "RealityKit") : f);
+        changed = true;
+      }
+      if (!hasImport(file.content, "ARKit") && /\b(ARSession|ARWorldTrackingConfiguration|ARPlaneAnchor)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "ARKit") : f);
+        changed = true;
+      }
+    }
+  }
+
+  if (/Cannot find.*(HKHealthStore|HKQuantityType|HKSampleQuery)/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "HealthKit") && /\b(HKHealthStore|HKQuantityType|HKSampleQuery|HKWorkout)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "HealthKit") : f);
+        changed = true;
+      }
+    }
+  }
+
+  if (/Cannot find.*(TimelineProvider|TimelineEntry|WidgetConfiguration|StaticConfiguration)/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "WidgetKit") && /\b(TimelineProvider|TimelineEntry|WidgetConfiguration|StaticConfiguration)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "WidgetKit") : f);
+        changed = true;
+      }
+    }
+  }
+
+  if (/Cannot find.*(Activity<|ActivityAttributes|ActivityContent)/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "ActivityKit") && /\b(Activity<|ActivityAttributes|ActivityContent|ActivityConfiguration)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "ActivityKit") : f);
+        changed = true;
+      }
+    }
+  }
+
+  if (/Cannot find.*(SHSession|SHManagedSession|SHMatch|SHMediaItem)/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "ShazamKit") && /\b(SHSession|SHManagedSession|SHMatch|SHMediaItem)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "ShazamKit") : f);
+        changed = true;
+      }
+    }
+  }
+
+  if (/Cannot find.*(SNAudioStreamAnalyzer|SNClassifySoundRequest|SNClassificationResult)/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "SoundAnalysis") && /\b(SNAudioStreamAnalyzer|SNClassifySoundRequest|SNClassificationResult)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "SoundAnalysis") : f);
+        changed = true;
+      }
+    }
+  }
+
+  if (/Cannot find.*(DataScannerViewController)/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "VisionKit") && /\bDataScannerViewController\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "VisionKit") : f);
+        changed = true;
+      }
+    }
+  }
+
+  for (const file of result) {
+    let c = file.content;
+    let fileChanged = false;
+
+    if (/for\s+(\w+)\s+in\s+\w+\.recognizedItems\b/.test(c) && !/for\s+await\s/.test(c)) {
+      c = c.replace(/for\s+(\w+)\s+in\s+(\w+\.recognizedItems)\b/g, "for await $1 in $2");
+      fileChanged = true;
+    }
+
+    if (fileChanged) {
+      result = result.map((f) => f.path === file.path ? { ...f, content: c } : f);
+      changed = true;
     }
   }
 

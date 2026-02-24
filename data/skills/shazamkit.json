@@ -1,0 +1,55 @@
+{
+  "id": "shazamkit",
+  "name": "Music Recognition (ShazamKit)",
+  "frameworks": [
+    "ShazamKit",
+    "AVFoundation"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "shazam",
+      "shazamkit",
+      "song identification",
+      "song id",
+      "identify song",
+      "music recognition",
+      "what song is this",
+      "recognize music",
+      "music detection",
+      "identify music",
+      "name that song",
+      "song recognition",
+      "audio matching",
+      "playlist ideas"
+    ],
+    "excludeKeywords": [
+      "sound analysis",
+      "sound classification"
+    ]
+  },
+  "promptInjection": "CAPABILITY: Music Recognition (ShazamKit)\n\nShazamKit identifies songs from audio using Apple's music catalog. It captures audio, generates a signature, and matches against Shazam's database.\n\nIMPORTS:\n- `import ShazamKit` for SHSession, SHManagedSession, SHMatch, SHMediaItem.\n- `import AVFoundation` for audio capture.\n\nSIMPLEST APPROACH (iOS 17+ SHManagedSession):\n```\nclass MusicRecognizer: ObservableObject {\n    @Published var matchedSong: SHMediaItem?\n    @Published var isListening = false\n    private let session = SHManagedSession()\n\n    func identify() async {\n        isListening = true\n        let result = await session.result()\n        switch result {\n        case .match(let match):\n            matchedSong = match.mediaItems.first\n        case .noMatch:\n            matchedSong = nil\n        case .error(let error, _):\n            print(error.localizedDescription)\n        }\n        isListening = false\n    }\n}\n```\n\nMEDIA ITEM PROPERTIES:\n- `.title` — song title (String?)\n- `.artist` — artist name (String?)\n- `.artworkURL` — album art URL (URL?)\n- `.appleMusicURL` — Apple Music link (URL?)\n- `.genres` — genre list ([String])\n- `.isrc` — International Standard Recording Code (String?)\n\nMANUAL APPROACH (iOS 15+ SHSession):\n1. Create SHSession() and set its delegate.\n2. Use AVAudioEngine to capture microphone audio.\n3. Generate SHSignature from audio buffers.\n4. Call session.match(signature) to find matches.\n5. Receive results via SHSessionDelegate: session(_:didFind:) and session(_:didNotFindMatchFor:).\n\nDATA MODEL:\n- Use unique IDs for recognized songs. SHMediaItem doesn't conform to Identifiable by default.\n- Wrap in your own model struct conforming to Identifiable and Hashable.\n- NEVER declare a property with the same name as an existing one in the same scope (\"invalid redeclaration\").\n\nANTI-PATTERNS:\n- NEVER redeclare a property that already exists in the same type — causes 'invalid redeclaration' compiler error. Check for duplicate stored properties.\n- NEVER use SHManagedSession on iOS 15/16 — it's iOS 17+ only. Use SHSession with delegate for broader compatibility.\n- NEVER forget to request microphone permission — ShazamKit needs audio capture.\n- NEVER assume the match will always succeed — handle .noMatch and .error cases.\n- NEVER access SHMediaItem properties without optional chaining — most properties are optional.",
+  "canonicalCode": {
+    "ViewModels/MusicRecognizer.swift": "import Foundation\nimport ShazamKit\n\n@Observable\nclass MusicRecognizer {\n    var matchedTitle: String = \"\"\n    var matchedArtist: String = \"\"\n    var artworkURL: URL?\n    var isListening = false\n    var noMatch = false\n    var errorMessage: String?\n\n    private let session = SHManagedSession()\n\n    func startRecognition() async {\n        isListening = true\n        noMatch = false\n        errorMessage = nil\n\n        let result = await session.result()\n        switch result {\n        case .match(let match):\n            if let item = match.mediaItems.first {\n                matchedTitle = item.title ?? \"Unknown\"\n                matchedArtist = item.artist ?? \"Unknown\"\n                artworkURL = item.artworkURL\n            }\n        case .noMatch:\n            noMatch = true\n        case .error(let error, _):\n            errorMessage = error.localizedDescription\n        }\n        isListening = false\n    }\n\n    func reset() {\n        matchedTitle = \"\"\n        matchedArtist = \"\"\n        artworkURL = nil\n        noMatch = false\n        errorMessage = nil\n    }\n}",
+    "Views/SongIDView.swift": "import SwiftUI\n\nstruct SongIDView: View {\n    @State private var recognizer = MusicRecognizer()\n\n    var body: some View {\n        VStack(spacing: 24) {\n            if recognizer.isListening {\n                ProgressView(\"Listening...\")\n                    .font(.title3)\n            } else if !recognizer.matchedTitle.isEmpty {\n                VStack(spacing: 8) {\n                    if let url = recognizer.artworkURL {\n                        AsyncImage(url: url) { image in\n                            image.resizable().scaledToFit()\n                        } placeholder: {\n                            Color.gray.opacity(0.3)\n                        }\n                        .frame(width: 200, height: 200)\n                        .clipShape(RoundedRectangle(cornerRadius: 16))\n                    }\n                    Text(recognizer.matchedTitle)\n                        .font(.title2).fontWeight(.bold)\n                    Text(recognizer.matchedArtist)\n                        .font(.body).foregroundStyle(.secondary)\n                }\n            } else if recognizer.noMatch {\n                Text(\"No match found. Try again.\")\n                    .foregroundStyle(.secondary)\n            }\n\n            Button(recognizer.matchedTitle.isEmpty ? \"Identify Song\" : \"Try Again\") {\n                if !recognizer.matchedTitle.isEmpty { recognizer.reset() }\n                Task { await recognizer.startRecognition() }\n            }\n            .buttonStyle(.borderedProminent)\n            .disabled(recognizer.isListening)\n        }\n        .padding()\n        .navigationTitle(\"Song ID\")\n    }\n}"
+  },
+  "antiPatterns": [
+    "Redeclaring properties that already exist — causes 'invalid redeclaration' compiler error",
+    "Using SHManagedSession on iOS 15/16 — it requires iOS 17+",
+    "Forgetting to request microphone permission before audio capture",
+    "Not handling .noMatch and .error cases from SHSession results",
+    "Accessing SHMediaItem properties without optional chaining"
+  ],
+  "requiredPermissions": [
+    "NSMicrophoneUsageDescription"
+  ],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "id": "visionkit-scanner",
+  "name": "Live Text & Document Scanner (VisionKit DataScanner)",
+  "frameworks": [
+    "VisionKit"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "live text",
+      "data scanner",
+      "DataScannerViewController",
+      "text recognition camera",
+      "scan text from camera",
+      "real-time text recognition",
+      "point camera at text",
+      "camera text",
+      "meeting notes scanner",
+      "scan and recognize",
+      "VisionKit",
+      "live text scanning"
+    ],
+    "excludeKeywords": [
+      "document scanner",
+      "VNDocumentCameraViewController",
+      "OCR from photo",
+      "Vision framework"
+    ]
+  },
+  "promptInjection": "CAPABILITY: Live Text & Data Scanner (VisionKit DataScannerViewController)\n\nDataScannerViewController is a UIKit view controller for real-time camera-based text and barcode recognition. It requires UIViewControllerRepresentable bridging for SwiftUI.\n\nIMPORTS:\n- `import VisionKit` for DataScannerViewController and RecognizedItem.\n- `import UIKit` is REQUIRED in the representable file.\n\nAVAILABILITY CHECK:\n- `DataScannerViewController.isSupported` — requires device with camera and Neural Engine.\n- `DataScannerViewController.isAvailable` — checks if the user has granted camera permission.\n- Both must be true before presenting the scanner.\n\nBASIC SETUP:\n```\nlet scanner = DataScannerViewController(\n    recognizedDataTypes: [.text()],\n    qualityLevel: .balanced,\n    recognizesMultipleItems: true,\n    isHighFrameRateTrackingEnabled: false,\n    isHighlightingEnabled: true\n)\ntry scanner.startScanning()\n```\n\nUIViewControllerRepresentable PATTERN:\n```\nstruct DataScannerView: UIViewControllerRepresentable {\n    @Binding var scannedText: [String]\n\n    func makeUIViewController(context: Context) -> DataScannerViewController {\n        let scanner = DataScannerViewController(\n            recognizedDataTypes: [.text()],\n            qualityLevel: .balanced,\n            recognizesMultipleItems: true,\n            isHighlightingEnabled: true\n        )\n        scanner.delegate = context.coordinator\n        return scanner\n    }\n\n    func updateUIViewController(_ uiViewController: DataScannerViewController, context: Context) {}\n\n    func makeCoordinator() -> Coordinator { Coordinator(self) }\n\n    class Coordinator: NSObject, DataScannerViewControllerDelegate {\n        var parent: DataScannerView\n        init(_ parent: DataScannerView) { self.parent = parent }\n\n        func dataScanner(_ dataScanner: DataScannerViewController, didTapOn item: RecognizedItem) {\n            if case .text(let text) = item {\n                parent.scannedText.append(text.transcript)\n            }\n        }\n    }\n}\n```\n\nRecognizedItem HANDLING:\n- RecognizedItem is an ENUM: `.text(RecognizedItem.Text)` and `.barcode(RecognizedItem.Barcode)`.\n- Access text via `.transcript` on the Text case.\n- Access barcode via `.payloadStringValue` on the Barcode case.\n- Use `dataScanner(_:didAdd:)` for newly recognized items.\n- The `recognizedItems` property on the scanner is an AsyncStream — iterate with `for await` in a Task, NOT with a regular for-in loop.\n\nAsyncStream ITERATION (CRITICAL):\n- `scanner.recognizedItems` is `AsyncStream<[RecognizedItem]>` — it does NOT conform to `Sequence`.\n- You MUST use `for await items in scanner.recognizedItems { }` inside a Task.\n- Do NOT use `for items in scanner.recognizedItems` — AsyncStream is not Sequence.\n\nANTI-PATTERNS:\n- NEVER iterate AsyncStream with `for ... in` — use `for await ... in` inside a Task.\n- NEVER forget `import UIKit` in the representable file.\n- NEVER present DataScannerViewController without checking isSupported and isAvailable first.\n- NEVER call startScanning() in makeUIViewController — call it in onAppear or after the view appears.\n- NEVER assume DataScannerViewController works in Simulator — provide fallback UI.",
+  "canonicalCode": {
+    "Views/DataScannerView.swift": "import SwiftUI\nimport VisionKit\nimport UIKit\n\nstruct DataScannerView: UIViewControllerRepresentable {\n    @Binding var recognizedTexts: [String]\n    let onDismiss: () -> Void\n\n    func makeUIViewController(context: Context) -> DataScannerViewController {\n        let scanner = DataScannerViewController(\n            recognizedDataTypes: [.text()],\n            qualityLevel: .balanced,\n            recognizesMultipleItems: true,\n            isHighlightingEnabled: true\n        )\n        scanner.delegate = context.coordinator\n        return scanner\n    }\n\n    func updateUIViewController(_ uiViewController: DataScannerViewController, context: Context) {}\n\n    func makeCoordinator() -> Coordinator {\n        Coordinator(self)\n    }\n\n    class Coordinator: NSObject, DataScannerViewControllerDelegate {\n        var parent: DataScannerView\n\n        init(_ parent: DataScannerView) {\n            self.parent = parent\n        }\n\n        func dataScanner(_ dataScanner: DataScannerViewController, didTapOn item: RecognizedItem) {\n            switch item {\n            case .text(let text):\n                parent.recognizedTexts.append(text.transcript)\n            case .barcode(let barcode):\n                if let value = barcode.payloadStringValue {\n                    parent.recognizedTexts.append(value)\n                }\n            @unknown default:\n                break\n            }\n        }\n\n        func dataScanner(_ dataScanner: DataScannerViewController, becameUnavailableWithError error: DataScannerViewController.ScanningUnavailable) {\n            parent.onDismiss()\n        }\n    }\n}"
+  },
+  "antiPatterns": [
+    "Iterating AsyncStream with `for ... in` instead of `for await ... in` — AsyncStream does not conform to Sequence",
+    "Forgetting `import UIKit` in UIViewControllerRepresentable files",
+    "Presenting DataScannerViewController without checking isSupported and isAvailable",
+    "Calling startScanning() inside makeUIViewController instead of after view appears",
+    "Assuming DataScannerViewController works in Simulator"
+  ],
+  "requiredPermissions": [
+    "NSCameraUsageDescription"
+  ],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

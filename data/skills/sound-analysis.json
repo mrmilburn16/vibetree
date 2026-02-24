@@ -1,0 +1,56 @@
+{
+  "id": "sound-analysis",
+  "name": "Sound Classification (SoundAnalysis)",
+  "frameworks": [
+    "SoundAnalysis",
+    "AVFoundation"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "sound analysis",
+      "sound classification",
+      "sound detection",
+      "baby cry",
+      "baby cry detector",
+      "dog bark",
+      "ambient sound",
+      "noise detection",
+      "audio classification",
+      "SoundAnalysis",
+      "SNClassifySoundRequest",
+      "sound recognition",
+      "environmental sound",
+      "classify sound",
+      "detect sound"
+    ],
+    "excludeKeywords": [
+      "sound effect",
+      "play sound",
+      "sound board"
+    ]
+  },
+  "promptInjection": "CAPABILITY: Sound Classification (SoundAnalysis)\n\nSoundAnalysis uses Apple's built-in sound classifier to detect 300+ sound types (baby crying, dog barking, music, speech, etc.) from live or recorded audio.\n\nIMPORTS:\n- `import SoundAnalysis` for SNClassifySoundRequest, SNAudioStreamAnalyzer, SNClassificationResult.\n- `import AVFoundation` for AVAudioEngine, audio session management.\n- `import Combine` if using publishers for results.\n\nARCHITECTURE:\n1. AVAudioEngine captures microphone audio.\n2. SNAudioStreamAnalyzer processes the audio stream.\n3. SNClassifySoundRequest specifies what to classify (use .version1 for the built-in classifier).\n4. Results come through SNResultsObserving delegate.\n\nSETUP PATTERN:\n```\nclass SoundClassifier: NSObject, ObservableObject, SNResultsObserving {\n    @Published var detectedSound: String = \"\"\n    @Published var confidence: Double = 0\n    private let audioEngine = AVAudioEngine()\n    private var analyzer: SNAudioStreamAnalyzer?\n\n    func startListening() throws {\n        let session = AVAudioSession.sharedInstance()\n        try session.setCategory(.record, mode: .measurement)\n        try session.setActive(true)\n\n        let inputNode = audioEngine.inputNode\n        let format = inputNode.outputFormat(forBus: 0)\n        analyzer = SNAudioStreamAnalyzer(format: format)\n\n        let request = try SNClassifySoundRequest(classifierIdentifier: .version1)\n        try analyzer?.add(request, withObserver: self)\n\n        inputNode.installTap(onBus: 0, bufferSize: 8192, format: format) { [weak self] buffer, time in\n            self?.analyzer?.analyze(buffer, atAudioFramePosition: time.sampleTime)\n        }\n\n        try audioEngine.start()\n    }\n\n    func request(_ request: SNRequest, didProduce result: SNResult) {\n        guard let classification = result as? SNClassificationResult,\n              let top = classification.classifications.first else { return }\n        DispatchQueue.main.async {\n            self.detectedSound = top.identifier\n            self.confidence = top.confidence\n        }\n    }\n}\n```\n\nCLASSIFICATION RESULTS:\n- SNClassificationResult.classifications is [SNClassification] sorted by confidence (highest first).\n- Each SNClassification has `.identifier` (String, e.g. \"baby_crying\") and `.confidence` (Double, 0-1).\n- Filter by confidence threshold (typically > 0.5 for reliable detection).\n\nCOMMON SOUND IDENTIFIERS:\n- \"baby_crying\", \"dog_bark\", \"cat_meow\", \"speech\", \"music\", \"laughter\"\n- \"siren\", \"car_horn\", \"door_knock\", \"glass_breaking\", \"applause\"\n\nANTI-PATTERNS:\n- NEVER add trailing closures to SNClassifySoundRequest — it takes named parameters only.\n- NEVER access `.animation` or `.accentColor` on the classifier or its results — these are audio analysis objects, not SwiftUI views.\n- NEVER forget to request microphone permission before starting the audio engine.\n- NEVER call audioEngine.start() without installing a tap first.\n- NEVER create the analyzer with a different format than the audio engine's input format.",
+  "canonicalCode": {
+    "ViewModels/ClassifierViewModel.swift": "import Foundation\nimport SoundAnalysis\nimport AVFoundation\nimport Combine\n\nclass ClassifierViewModel: NSObject, ObservableObject, SNResultsObserving {\n    @Published var topClassification: String = \"Listening...\"\n    @Published var confidence: Double = 0.0\n    @Published var isListening = false\n    @Published var errorMessage: String?\n\n    private let audioEngine = AVAudioEngine()\n    private var analyzer: SNAudioStreamAnalyzer?\n\n    func startListening() {\n        do {\n            let session = AVAudioSession.sharedInstance()\n            try session.setCategory(.record, mode: .measurement)\n            try session.setActive(true)\n\n            let inputNode = audioEngine.inputNode\n            let format = inputNode.outputFormat(forBus: 0)\n\n            analyzer = SNAudioStreamAnalyzer(format: format)\n            let request = try SNClassifySoundRequest(classifierIdentifier: .version1)\n            try analyzer?.add(request, withObserver: self)\n\n            inputNode.installTap(onBus: 0, bufferSize: 8192, format: format) { [weak self] buffer, time in\n                self?.analyzer?.analyze(buffer, atAudioFramePosition: time.sampleTime)\n            }\n\n            try audioEngine.start()\n            isListening = true\n        } catch {\n            errorMessage = error.localizedDescription\n        }\n    }\n\n    func stopListening() {\n        audioEngine.stop()\n        audioEngine.inputNode.removeTap(onBus: 0)\n        analyzer = nil\n        isListening = false\n    }\n\n    func request(_ request: SNRequest, didProduce result: SNResult) {\n        guard let classification = result as? SNClassificationResult,\n              let top = classification.classifications.first,\n              top.confidence > 0.3 else { return }\n        DispatchQueue.main.async {\n            self.topClassification = top.identifier.replacingOccurrences(of: \"_\", with: \" \").capitalized\n            self.confidence = top.confidence\n        }\n    }\n\n    func request(_ request: SNRequest, didFailWithError error: Error) {\n        DispatchQueue.main.async {\n            self.errorMessage = error.localizedDescription\n            self.isListening = false\n        }\n    }\n}"
+  },
+  "antiPatterns": [
+    "Adding trailing closures to SNClassifySoundRequest initializer",
+    "Accessing .animation or .accentColor on classifier objects — these are audio objects not SwiftUI views",
+    "Starting AVAudioEngine without installing a tap on the input node first",
+    "Forgetting to request microphone permission before audio capture",
+    "Creating SNAudioStreamAnalyzer with a format that doesn't match the audio engine input"
+  ],
+  "requiredPermissions": [
+    "NSMicrophoneUsageDescription"
+  ],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}
