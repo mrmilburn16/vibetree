@@ -161,11 +161,18 @@ function ServiceCard({ service }: { service: Service }) {
       <div className="p-5 pb-3">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className={`flex h-9 w-9 items-center justify-center rounded-full ${colors.bgSoft}`}>
-              <ServiceIcon className={`h-4 w-4 ${colors.text}`} />
+            <div className={`flex h-9 w-9 items-center justify-center rounded-full ${hasData ? colors.bgSoft : "bg-[var(--background-tertiary)]"}`}>
+              <ServiceIcon className={`h-4 w-4 ${hasData ? colors.text : "text-[var(--text-tertiary)]"}`} />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-[var(--text-primary)]">{service.name}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">{service.name}</h3>
+                {!hasData && (
+                  <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)]">
+                    Coming Soon
+                  </span>
+                )}
+              </div>
               {description && (
                 <p className="text-xs text-[var(--text-tertiary)]">{description}</p>
               )}
@@ -194,8 +201,8 @@ function ServiceCard({ service }: { service: Service }) {
         )}
       </div>
 
-      {/* Uptime bar */}
-      {hasDays && (
+      {/* Uptime bar -- only shown if there's real check data */}
+      {hasDays && hasData && (
         <div className="px-5 pb-3">
           <UptimeBar days={service.days} />
           <div className="mt-1.5 flex justify-between text-[10px] text-[var(--text-tertiary)]">
