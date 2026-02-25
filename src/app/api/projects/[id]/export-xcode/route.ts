@@ -24,12 +24,18 @@ function isValidBundleId(value: string): boolean {
   return /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/i.test(value);
 }
 
-function buildWidgetInfoPlist(): string {
+function buildWidgetInfoPlist(widgetBundleId: string, widgetName: string): string {
   // Minimal WidgetKit extension Info.plist; required for the extension target.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>CFBundleExecutable</key>
+  <string>${widgetName}</string>
+  <key>CFBundleIdentifier</key>
+  <string>${widgetBundleId}</string>
+  <key>CFBundlePackageType</key>
+  <string>XPC!</string>
   <key>NSExtension</key>
   <dict>
     <key>NSExtensionPointIdentifier</key>
@@ -155,9 +161,11 @@ struct AppLiveActivityWidget: Widget {
     (p) => p.startsWith("LiveActivity/") && !/Manager\.swift$/i.test(p)
   );
   const widgetSources = widgetSwiftPaths.length > 0 ? Array.from(new Set([...widgetSwiftPaths, ...sharedForWidget])) : [];
+  const widgetName = `${options.projectName}Widget`;
+  const widgetBundleId = `${options.bundleId}.widget`;
   const widgetInfoPlistPath = widgetSources.length > 0 ? "WidgetExtension/Info.plist" : null;
   if (widgetInfoPlistPath) {
-    filesMap[widgetInfoPlistPath] = buildWidgetInfoPlist();
+    filesMap[widgetInfoPlistPath] = buildWidgetInfoPlist(widgetBundleId, widgetName);
   }
 
   const allPaths = widgetInfoPlistPath ? [...swiftPaths, widgetInfoPlistPath] : [...swiftPaths];
@@ -170,7 +178,7 @@ struct AppLiveActivityWidget: Widget {
   const entitlements = detectEntitlements(allSwiftFiles);
   const entitlementsPath = entitlements ? "App.entitlements" : undefined;
 
-  const pbxproj = buildPbxproj(allPaths, {
+  const buildResult = buildPbxproj(allPaths, {
     deploymentTarget,
     projectName: options.projectName,
     bundleId: options.bundleId,
@@ -194,7 +202,33 @@ struct AppLiveActivityWidget: Widget {
   const zipOpt = { date: fileDate };
 
   const zip = new JSZip();
-  zip.file(`${options.projectName}.xcodeproj/project.pbxproj`, pbxproj, zipOpt);
+  zip.file(`${options.projectName}.xcodeproj/project.pbxproj`, buildResult.pbxproj, zipOpt);
+
+  const schemePath = `${options.projectName}.xcodeproj/xcshareddata/xcschemes/${options.projectName}.xcscheme`;
+  zip.file(schemePath, buildResult.scheme, zipOpt);
+
+  const schemeManagement = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+\t<key>SchemeUserState</key>
+\t<dict>
+\t\t<key>${options.projectName}.xcscheme_^#shared#^_</key>
+\t\t<dict>
+\t\t\t<key>orderHint</key>
+\t\t\t<integer>0</integer>
+\t\t</dict>
+\t</dict>
+\t<key>SuppressBuildableAutocreation</key>
+\t<dict/>
+</dict>
+</plist>
+`;
+  zip.file(
+    `${options.projectName}.xcodeproj/xcuserdata/vibetree.xcuserdatad/xcschemes/xcschememanagement.plist`,
+    schemeManagement,
+    zipOpt
+  );
 
   const preferredDevice = (options.preferredRunDevice ?? "").trim();
   if (preferredDevice) {
@@ -247,12 +281,14 @@ export async function POST(
   const files = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : [];
   const providedName = typeof body?.projectName === "string" ? body.projectName : "";
   const providedBundleId = typeof body?.bundleId === "string" ? body.bundleId : "";
-  const providedTeam = typeof body?.developmentTeam === "string" ? body.developmentTeam : "";
+  const providedTeam = typeof body?.developmentTeam === "string" && body.developmentTeam.trim()
+    ? body.developmentTeam.trim()
+    : process.env.DEFAULT_DEVELOPMENT_TEAM ?? "";
   const project = getProject(id) ?? ensureProject(id, providedName || "Untitled app");
   const projectName = sanitizeXcodeName(providedName || project.name, "VibetreeApp");
   const candidateBundleId = (providedBundleId || project.bundleId || "com.vibetree.app").trim();
   const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";
-  const developmentTeam = providedTeam.trim();
+  const developmentTeam = providedTeam;
   const preferredRunDevice = (typeof body?.preferredRunDevice === "string" ? body.preferredRunDevice : "").trim();
   const timezoneOffsetMinutes =
     typeof body?.timezoneOffsetMinutes === "number" ? body.timezoneOffsetMinutes : undefined;
@@ -279,7 +315,8 @@ export async function GET(
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
   const url = new URL(request.url);
-  const developmentTeam = (url.searchParams.get("developmentTeam") ?? "").trim();
+  const paramTeam = (url.searchParams.get("developmentTeam") ?? "").trim();
+  const developmentTeam = paramTeam || process.env.DEFAULT_DEVELOPMENT_TEAM || "";
   const preferredRunDevice = (url.searchParams.get("preferredRunDevice") ?? "").trim();
   const timezoneOffsetParam = url.searchParams.get("timezoneOffsetMinutes");
   const timezoneOffsetMinutes =
