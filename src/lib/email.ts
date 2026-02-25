@@ -63,6 +63,28 @@ export async function sendContactConfirmation(opts: { email: string; name: strin
   }
 }
 
+export async function sendDigestEmail(opts: {
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<{ ok: boolean }> {
+  const resend = getResend();
+  if (!resend) return { ok: true };
+
+  try {
+    await resend.emails.send({
+      from: getFromEmail(),
+      to: opts.to,
+      subject: opts.subject,
+      text: opts.body,
+    });
+    return { ok: true };
+  } catch (e) {
+    console.error("[email] Digest send failed:", e);
+    return { ok: false };
+  }
+}
+
 export async function sendWaitlistWelcome(opts: {
   email: string;
   name: string;

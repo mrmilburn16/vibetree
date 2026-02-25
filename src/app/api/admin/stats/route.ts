@@ -3,6 +3,7 @@ import { getAdminSession } from "@/lib/adminAuth";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getServiceAlerts } from "@/lib/serviceStatus";
+import { getAdminDb } from "@/lib/firebaseAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -145,6 +146,16 @@ export async function GET(request: Request) {
   const prevEnd = addDays(end, -days);
   const prevFeedback = buildFeedbackStats(feedbackEntries, prevStart, prevEnd);
 
+  let waitlistCount = 0;
+  let projectsCount = 0;
+  try {
+    const db = getAdminDb();
+    waitlistCount = (await db.collection("waitlist").count().get()).data().count;
+    projectsCount = (await db.collection("projects").count().get()).data().count;
+  } catch {
+    // Firestore not configured
+  }
+
   // Mock data: revenue, cost by model, credits, growth, fraud, alerts
   const mrr = 12400;
   const oneTime = 800;
@@ -220,6 +231,7 @@ export async function GET(request: Request) {
     range,
     start: start.toISOString().slice(0, 10),
     end: end.toISOString().slice(0, 10),
+    real: { waitlistCount, projectsCount },
     revenue: {
       mrr,
       oneTime,

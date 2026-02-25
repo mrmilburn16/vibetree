@@ -14,6 +14,7 @@ import { RunOnDeviceModal } from "./RunOnDeviceModal";
 import { ShareModal } from "./ShareModal";
 import { PublishModal } from "./PublishModal";
 import { OutOfCreditsModal } from "./OutOfCreditsModal";
+import { EditorTour } from "./EditorTour";
 
 const CHAT_WIDTH_KEY = "vibetree-editor-chat-width";
 const CHAT_WIDTH_MIN = 300;
@@ -225,6 +226,7 @@ export function EditorLayout({ project }: { project: Project }) {
 
   return (
     <div className="flex h-screen flex-col bg-[var(--background-primary)]">
+      <EditorTour />
       <LowCreditBanner />
       {/* Top bar */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b-2 border-[var(--border-default)] px-5 sm:px-6">
