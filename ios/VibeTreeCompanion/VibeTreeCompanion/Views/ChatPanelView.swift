@@ -73,6 +73,7 @@ struct ChatPanelView: View {
                 .foregroundColor(Forest.border),
             alignment: .bottom
         )
+        .onTapGesture { isInputFocused = false }
     }
 
     @ViewBuilder
@@ -251,7 +252,10 @@ struct ChatPanelView: View {
                 }
                 .padding(.horizontal, Forest.space5)
                 .padding(.vertical, Forest.space4)
+                .contentShape(Rectangle())
+                .onTapGesture { isInputFocused = false }
             }
+            .scrollDismissesKeyboard(.interactively)
             .onChange(of: chatService.messages.count) { _, _ in
                 withAnimation(.easeOut(duration: 0.3)) {
                     proxy.scrollTo("bottom", anchor: .bottom)

@@ -4,7 +4,7 @@ import { listProjects, createProject, ensureProject } from "@/lib/projectStore";
 export async function GET() {
   const projects = listProjects().map((p) => ({
     ...p,
-    projectType: (p as Record<string, unknown>).projectType ?? "pro",
+    projectType: (p as unknown as Record<string, unknown>).projectType ?? "pro",
   }));
   return NextResponse.json({ projects });
 }
