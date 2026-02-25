@@ -3,11 +3,13 @@ import SwiftUI
 struct ChatPanelView: View {
     @ObservedObject var chatService: ChatService
     let projectType: ProjectType
+    var pendingPrompt: String?
 
     @State private var inputText = ""
     @State private var selectedModel: LLMOption = .defaultOption
     @State private var selectedProjectType: ProjectType = .pro
     @State private var justSent = false
+    @State private var hasSentPending = false
 
     private let maxChars = 4000
 
@@ -19,11 +21,19 @@ struct ChatPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             messageList
+            streamingProgressBar
             toolbarRow
             inputBar
         }
         .onAppear {
             selectedProjectType = projectType
+            if let prompt = pendingPrompt, !hasSentPending {
+                hasSentPending = true
+                inputText = prompt
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    sendIfPossible()
+                }
+            }
         }
     }
 
@@ -52,6 +62,51 @@ struct ChatPanelView: View {
         }
     }
 
+    // MARK: - Streaming Progress Bar
+
+    @ViewBuilder
+    private var streamingProgressBar: some View {
+        if chatService.isStreaming {
+            let fileCount = chatService.streamingFileCount
+            if fileCount > 0 {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: Forest.space2) {
+                        ProgressView()
+                            .tint(Forest.accent)
+                            .scaleEffect(0.6)
+
+                        Text("Building app… \(fileCount) file\(fileCount == 1 ? "" : "s")")
+                            .font(.system(size: Forest.textXs, weight: .medium))
+                            .foregroundColor(Forest.textSecondary)
+
+                        Spacer()
+                    }
+
+                    if !chatService.recentFiles.isEmpty {
+                        HStack(spacing: Forest.space2) {
+                            ForEach(chatService.recentFiles.suffix(3), id: \.self) { file in
+                                Text(file.components(separatedBy: "/").last ?? file)
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundColor(Forest.textTertiary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+
+                    ProgressView(value: Double(fileCount), total: max(Double(fileCount), 1))
+                        .progressViewStyle(ForestProgressBarStyle(height: 4))
+                }
+                .padding(.horizontal, Forest.space4)
+                .padding(.vertical, Forest.space2)
+                .background(Forest.backgroundSecondary)
+                .overlay(
+                    Rectangle().frame(height: 1).foregroundColor(Forest.border),
+                    alignment: .top
+                )
+            }
+        }
+    }
+
     // MARK: - Toolbar (LLM + Project Type)
 
     private var toolbarRow: some View {
@@ -59,10 +114,15 @@ struct ChatPanelView: View {
             Menu {
                 ForEach(LLMOption.options) { option in
                     Button {
-                        selectedModel = option
+                        if !option.disabled { selectedModel = option }
                     } label: {
                         HStack {
                             Text(option.label)
+                            if option.disabled {
+                                Text("Soon")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(Forest.textTertiary)
+                            }
                             if option.id == selectedModel.id {
                                 Image(systemName: "checkmark")
                             }
@@ -209,6 +269,7 @@ struct ChatPanelView: View {
             }
         }
         .disabled(!canSend)
+        .keyboardShortcut(.return, modifiers: .command)
         .scaleEffect(justSent ? 0.92 : 1.0)
         .animation(.easeOut(duration: 0.1), value: justSent)
     }

@@ -7,18 +7,18 @@ struct CreditBalanceView: View {
         HStack(spacing: 4) {
             Image(systemName: "circle.hexagongrid.fill")
                 .font(.system(size: 12))
-                .foregroundColor(badgeColor)
+                .foregroundColor(iconColor)
             Text("\(credits.balance)")
                 .font(.system(size: Forest.textSm, weight: .bold, design: .monospaced))
-                .foregroundColor(badgeColor)
+                .foregroundColor(Forest.semanticSuccess)
         }
         .padding(.horizontal, Forest.space2)
         .padding(.vertical, 4)
-        .background(badgeColor.opacity(0.12))
+        .background(iconColor.opacity(0.12))
         .cornerRadius(Forest.radiusSm)
     }
 
-    private var badgeColor: Color {
+    private var iconColor: Color {
         if credits.isEmpty { return Forest.error }
         if credits.isLow { return Forest.warning }
         return Forest.accent

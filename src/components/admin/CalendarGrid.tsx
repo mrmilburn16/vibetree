@@ -201,7 +201,7 @@ export function CalendarGrid({
                       key={t.id}
                       type="button"
                       onClick={() => onTaskClick(t)}
-                      className={`absolute left-0.5 right-0.5 z-20 flex flex-col justify-center overflow-hidden rounded-[var(--radius-sm)] border px-1.5 text-left transition-opacity hover:opacity-80 ${
+                      className={`absolute left-0.5 right-0.5 z-20 flex cursor-pointer flex-col justify-center overflow-hidden rounded-[var(--radius-sm)] border px-1.5 text-left transition-opacity hover:opacity-80 ${
                         isDone ? "opacity-50 line-through" : ""
                       } ${PRIORITY_COLORS[t.priority] || PRIORITY_COLORS[3]}`}
                       style={{ top: `${top}px`, height: `${Math.max(height, 14)}px` }}

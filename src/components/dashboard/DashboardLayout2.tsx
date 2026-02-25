@@ -126,7 +126,7 @@ export function DashboardLayout2({ projects, onNewApp, onDelete, onDuplicate }: 
                 <button
                   type="button"
                   onClick={onNewApp}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--background-tertiary)] focus:bg-[var(--background-tertiary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--button-primary-bg)]"
+                  className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--background-tertiary)] focus:bg-[var(--background-tertiary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--button-primary-bg)]"
                 >
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--background-tertiary)] text-[var(--text-tertiary)]">
                     <IconPlus />
@@ -159,7 +159,7 @@ export function DashboardLayout2({ projects, onNewApp, onDelete, onDuplicate }: 
                       <button
                         type="button"
                         onClick={(e) => onDuplicate(e, project.id)}
-                        className="rounded-[var(--radius-sm)] p-2 text-[var(--text-secondary)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--background-tertiary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--button-primary-bg)]"
+                        className="cursor-pointer rounded-[var(--radius-sm)] p-2 text-[var(--text-secondary)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--background-tertiary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--button-primary-bg)]"
                         aria-label="Duplicate project"
                       >
                         <IconCopy />
@@ -167,7 +167,7 @@ export function DashboardLayout2({ projects, onNewApp, onDelete, onDuplicate }: 
                       <button
                         type="button"
                         onClick={(e) => onDelete(e, project.id)}
-                        className="rounded-[var(--radius-sm)] p-2 text-[var(--button-destructive-text)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--button-destructive-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--semantic-error)]"
+                        className="cursor-pointer rounded-[var(--radius-sm)] p-2 text-[var(--button-destructive-text)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--button-destructive-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--semantic-error)]"
                         aria-label="Delete project"
                       >
                         <IconTrash />

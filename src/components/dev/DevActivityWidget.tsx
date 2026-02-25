@@ -60,7 +60,7 @@ export function DevActivityWidget() {
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--background-tertiary)]"
+          className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--background-tertiary)]"
         >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--button-primary-bg)]/20">
             <GitBranch className="h-4 w-4 text-[var(--link-default)]" />
@@ -113,7 +113,7 @@ export function DevActivityWidget() {
           <button
             type="button"
             onClick={refreshPage}
-            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-medium text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]"
+            className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-medium text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh page

@@ -83,7 +83,7 @@ export function PreviewPane({
                 <button
                   type="button"
                   onClick={onOpenRunOnDevice}
-                  className="text-xs font-medium text-[var(--link-default)] hover:underline"
+                  className="cursor-pointer text-xs font-medium text-[var(--link-default)] hover:underline"
                 >
                   Run on device (download source)
                 </button>
@@ -97,7 +97,7 @@ export function PreviewPane({
                   onClick={onOpenRunOnDevice}
                   aria-label="Show larger QR"
                   title="Show larger QR"
-                  className="absolute right-2 top-2 rounded p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
+                  className="absolute right-2 top-2 cursor-pointer rounded p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
                 >
                   <Maximize2 className="h-4 w-4" aria-hidden />
                 </button>
@@ -124,7 +124,7 @@ export function PreviewPane({
                 <button
                   type="button"
                   onClick={onOpenRunOnDevice}
-                  className="text-xs font-medium text-[var(--link-default)] hover:underline"
+                  className="cursor-pointer text-xs font-medium text-[var(--link-default)] hover:underline"
                 >
                   Run on device
                 </button>

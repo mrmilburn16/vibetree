@@ -22,6 +22,7 @@ enum Forest {
 
     // MARK: - Semantic
     static let success             = Color(hex: "22C55E")
+    static let semanticSuccess     = Color(hex: "22C55E")
     static let warning             = Color(hex: "EAB308")
     static let error               = Color(hex: "EF4444")
 

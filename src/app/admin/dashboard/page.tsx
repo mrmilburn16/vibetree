@@ -840,7 +840,213 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         </section>
+
+        {/* 7. Prompt Caching ROI */}
+        <CachingROISection />
       </main>
     </div>
+  );
+}
+
+// ─── Prompt Caching ROI Section ──────────────────────────────────────────
+
+interface CachingROI {
+  totalRequests: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCostUsd: number;
+  avgBuildDurationMs: number;
+  avgGapBetweenMessagesMs: number | null;
+  medianGapMs: number | null;
+  pctWithin5min: number;
+  pctWithin1hr: number;
+  projectedMonthlyCostNone: number;
+  projectedMonthlyCost5min: number;
+  projectedMonthlyCost1hr: number;
+  uniqueProjects: number;
+  byModel: Record<string, { requests: number; inputTokens: number; costUsd: number }>;
+  gapDistribution: number[];
+  recentCounts: { last24h: number; last7d: number; last30d: number };
+}
+
+function CachingROISection() {
+  const [data, setData] = useState<CachingROI | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/admin/caching-roi")
+      .then((r) => r.json())
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <section className="space-y-6">
+        <div className="space-y-2">
+          <h2 className="text-heading-section">Prompt Caching ROI</h2>
+          <div className="h-0.5 w-10 rounded-full bg-[var(--link-default)]/50" aria-hidden />
+        </div>
+        <div className="h-40 animate-pulse rounded-[var(--radius-lg)] bg-[var(--background-secondary)]" />
+      </section>
+    );
+  }
+
+  if (!data || data.totalRequests === 0) {
+    return (
+      <section className="space-y-6">
+        <div className="space-y-2">
+          <h2 className="text-heading-section">Prompt Caching ROI</h2>
+          <div className="h-0.5 w-10 rounded-full bg-[var(--link-default)]/50" aria-hidden />
+        </div>
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-6">
+          <p className="text-sm text-[var(--text-secondary)]">
+            No LLM request data yet. Data will appear here after users generate apps.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  const fmtMs = (ms: number) => {
+    if (ms < 60_000) return `${(ms / 1000).toFixed(0)}s`;
+    return `${(ms / 60_000).toFixed(1)}m`;
+  };
+
+  const savings5 = data.projectedMonthlyCostNone - data.projectedMonthlyCost5min;
+  const savings1h = data.projectedMonthlyCostNone - data.projectedMonthlyCost1hr;
+  const bestTTL = savings1h >= savings5 ? "1 hour" : "5 min";
+  const bestSavings = Math.max(savings5, savings1h);
+  const bestPct = data.projectedMonthlyCostNone > 0
+    ? Math.round((bestSavings / data.projectedMonthlyCostNone) * 100)
+    : 0;
+
+  const gapLabels = ["< 1m", "1–5m", "5–15m", "15–60m", "1h+"];
+  const totalGaps = data.gapDistribution.reduce((a, b) => a + b, 0);
+
+  return (
+    <section aria-labelledby="caching-heading" className="space-y-6">
+      <div className="space-y-2">
+        <h2 id="caching-heading" className="text-heading-section">Prompt Caching ROI</h2>
+        <div className="h-0.5 w-10 rounded-full bg-[var(--link-default)]/50" aria-hidden />
+      </div>
+
+      {/* KPI row */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          title="Total LLM requests"
+          value={data.totalRequests.toLocaleString()}
+          sub={`${data.uniqueProjects} projects`}
+        />
+        <KpiCard
+          title="Avg build time"
+          value={fmtMs(data.avgBuildDurationMs)}
+          sub={`${data.recentCounts.last24h} in last 24h`}
+        />
+        <KpiCard
+          title="Median gap between messages"
+          value={data.medianGapMs !== null ? fmtMs(data.medianGapMs) : "—"}
+          sub={data.avgGapBetweenMessagesMs !== null ? `Avg: ${fmtMs(data.avgGapBetweenMessagesMs)}` : undefined}
+        />
+        <KpiCard
+          title="Current LLM spend"
+          value={`$${data.totalCostUsd.toFixed(2)}`}
+          sub={`${(data.totalInputTokens / 1000).toFixed(0)}k in / ${(data.totalOutputTokens / 1000).toFixed(0)}k out tokens`}
+        />
+      </div>
+
+      {/* Cache hit rate & projections */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <KpiCard
+          title="Would hit 5-min cache"
+          value={`${data.pctWithin5min}%`}
+          sub="Follow-ups within 5 min"
+          status={data.pctWithin5min >= 60 ? "success" : data.pctWithin5min >= 30 ? "warning" : "error"}
+        />
+        <KpiCard
+          title="Would hit 1-hour cache"
+          value={`${data.pctWithin1hr}%`}
+          sub="Follow-ups within 1 hour"
+          status={data.pctWithin1hr >= 60 ? "success" : data.pctWithin1hr >= 30 ? "warning" : "error"}
+        />
+        <KpiCard
+          title="Recommended TTL"
+          value={bestTTL}
+          sub={bestPct > 0 ? `~${bestPct}% savings ($${bestSavings.toFixed(2)}/mo)` : "Not enough data"}
+          status={bestPct >= 10 ? "success" : "info"}
+        />
+      </div>
+
+      {/* Cost comparison table */}
+      <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-5">
+        <p className="mb-3 text-sm font-medium text-[var(--text-secondary)]">Projected monthly cost comparison</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[var(--border-subtle)]">
+                <th className="py-2 text-left font-medium text-[var(--text-secondary)]">Strategy</th>
+                <th className="py-2 text-right font-medium text-[var(--text-secondary)]">Monthly cost</th>
+                <th className="py-2 text-right font-medium text-[var(--text-secondary)]">Savings</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-[var(--border-subtle)]/50">
+                <td className="py-2 text-[var(--text-primary)]">No caching (current)</td>
+                <td className="py-2 text-right tabular-nums text-[var(--text-primary)]">${data.projectedMonthlyCostNone.toFixed(2)}</td>
+                <td className="py-2 text-right text-[var(--text-secondary)]">—</td>
+              </tr>
+              <tr className="border-b border-[var(--border-subtle)]/50">
+                <td className="py-2 text-[var(--text-primary)]">5-minute cache</td>
+                <td className="py-2 text-right tabular-nums text-[var(--text-primary)]">${data.projectedMonthlyCost5min.toFixed(2)}</td>
+                <td className="py-2 text-right tabular-nums text-[var(--semantic-success)]">
+                  {savings5 > 0 ? `-$${savings5.toFixed(2)}` : "—"}
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2 text-[var(--text-primary)]">1-hour cache</td>
+                <td className="py-2 text-right tabular-nums text-[var(--text-primary)]">${data.projectedMonthlyCost1hr.toFixed(2)}</td>
+                <td className="py-2 text-right tabular-nums text-[var(--semantic-success)]">
+                  {savings1h > 0 ? `-$${savings1h.toFixed(2)}` : "—"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Gap distribution */}
+      {totalGaps > 0 && (
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-5">
+          <p className="mb-3 text-sm font-medium text-[var(--text-secondary)]">Time between consecutive messages</p>
+          <div className="flex items-end gap-2" style={{ height: 100 }}>
+            {data.gapDistribution.map((count, i) => {
+              const maxCount = Math.max(...data.gapDistribution, 1);
+              const heightPct = (count / maxCount) * 100;
+              const isGood = i <= 1;
+              return (
+                <div key={i} className="flex flex-1 flex-col items-center gap-1">
+                  <span className="text-xs tabular-nums text-[var(--text-secondary)]">
+                    {count}
+                  </span>
+                  <div
+                    className="w-full rounded-t"
+                    style={{
+                      height: `${Math.max(heightPct, 4)}%`,
+                      background: isGood ? "var(--semantic-success)" : i <= 2 ? "var(--semantic-warning)" : "var(--semantic-error)",
+                      opacity: 0.7,
+                    }}
+                  />
+                  <span className="text-[10px] text-[var(--text-secondary)]">{gapLabels[i]}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-[var(--text-secondary)]">
+            Green bars ({"< 5m"}) would be cache hits with 5-min TTL. Yellow/red would need 1-hour TTL.
+          </p>
+        </div>
+      )}
+    </section>
   );
 }

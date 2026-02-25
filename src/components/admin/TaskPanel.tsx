@@ -95,7 +95,7 @@ export function TaskPanel({
                 key={task.id}
                 type="button"
                 onClick={() => onTaskClick(task)}
-                className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-2 text-left transition-colors hover:bg-[var(--background-tertiary)]"
+                className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-md)] px-2 py-2 text-left transition-colors hover:bg-[var(--background-tertiary)]"
               >
                 <GripVertical className="h-3 w-3 shrink-0 text-[var(--text-tertiary)]/40" aria-hidden />
                 <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${badge.cls}`}>

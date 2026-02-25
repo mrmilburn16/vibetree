@@ -10,6 +10,7 @@ import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { startGeneration, updateGenerationPhase, endGeneration } from "@/lib/activeGenerations";
 import { enrichWithSkills } from "@/lib/llm/promptEnrichment";
 import { detectSkills, buildSkillPromptBlock } from "@/lib/skills/registry";
+import { logLLMAnalytics } from "@/lib/llm/analyticsLog";
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -222,6 +223,18 @@ export async function POST(
           generationId: generation.id,
           ...(skillIds.length > 0 && { skillIds }),
         });
+
+        try {
+          logLLMAnalytics({
+            projectId,
+            model: model ?? "sonnet-4.5",
+            inputTokens: usage?.input_tokens ?? estimatedInputTokens,
+            outputTokens: usage?.output_tokens ?? Math.round(lastReceivedChars / 4),
+            estimatedCostUsd: estimatedCostUsd ?? 0,
+            durationMs: Date.now() - startedAt,
+            projectType,
+          });
+        } catch { /* analytics is best-effort */ }
       } catch (err) {
         const errorMessage =
           err instanceof Error ? err.message : "AI request failed";

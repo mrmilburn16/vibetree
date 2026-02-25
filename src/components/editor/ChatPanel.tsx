@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button, Textarea, DropdownSelect } from "@/components/ui";
-import { Send, Sparkles, Square } from "lucide-react";
+import { Send, Sparkles, Square, Zap } from "lucide-react";
 import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { BuildingIndicator } from "./BuildingIndicator";
@@ -34,7 +34,12 @@ const CHAT_PLACEHOLDERS = [
 
 const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
   ...opt,
-  icon: opt.value.startsWith("gpt") ? <OpenAILogo /> : <AnthropicLogo />,
+  icon:
+    opt.value === "auto"
+      ? <Zap className="h-4 w-4" />
+      : opt.value.startsWith("gpt")
+        ? <OpenAILogo />
+        : <AnthropicLogo />,
 }));
 
 export function ChatPanel({
@@ -127,6 +132,21 @@ export function ChatPanel({
   useEffect(() => {
     onBuildStatusChange(buildStatus);
   }, [buildStatus, onBuildStatusChange]);
+
+  // Auto-send a pending prompt from the dashboard (stored in localStorage before redirect).
+  const pendingPromptSent = useRef(false);
+  useEffect(() => {
+    if (pendingPromptSent.current) return;
+    if (messages.length > 0) return;
+    const pending = localStorage.getItem("vibetree-pending-prompt");
+    if (!pending) return;
+    pendingPromptSent.current = true;
+    localStorage.removeItem("vibetree-pending-prompt");
+    if (guidedMode) handleGuidedModeToggle(false);
+    setTimeout(() => {
+      sendMessage(pending.trim(), llm, projectType);
+    }, 100);
+  }, [messages.length, sendMessage, llm, projectType, guidedMode]);
 
   const [justSent, setJustSent] = useState(false);
 
@@ -250,6 +270,7 @@ export function ChatPanel({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={placeholderText}
+              autoFocus={messages.length === 0}
               className="!border-0 !min-h-[38px] max-h-[112px] w-full resize-none bg-transparent pt-2 pb-3 pr-2 text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none"
               style={{ resize: "none" }}
               rows={1}
@@ -288,7 +309,7 @@ export function ChatPanel({
             <button
               type="button"
               onClick={() => setInput(getRandomAppIdeaPrompt())}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--link-default)] transition-colors"
+              className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--link-default)] transition-colors"
               aria-label="Fill with a random app idea from the list of 100"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />

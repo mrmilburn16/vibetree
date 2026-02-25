@@ -8,6 +8,9 @@ struct ChatMessage: Identifiable, Equatable {
     var editedFiles: [String]?
     var phase: String?
     var isStreaming: Bool
+    var elapsedMs: TimeInterval?
+    var createdAt: Date
+    var discoveredFiles: [String]?
 
     enum Role: String, Equatable {
         case user
@@ -22,7 +25,10 @@ struct ChatMessage: Identifiable, Equatable {
         timestamp: Date = Date(),
         editedFiles: [String]? = nil,
         phase: String? = nil,
-        isStreaming: Bool = false
+        isStreaming: Bool = false,
+        elapsedMs: TimeInterval? = nil,
+        createdAt: Date = Date(),
+        discoveredFiles: [String]? = nil
     ) {
         self.id = id
         self.role = role
@@ -31,14 +37,17 @@ struct ChatMessage: Identifiable, Equatable {
         self.editedFiles = editedFiles
         self.phase = phase
         self.isStreaming = isStreaming
+        self.elapsedMs = elapsedMs
+        self.createdAt = createdAt
+        self.discoveredFiles = discoveredFiles
     }
 
     static func userMessage(_ text: String) -> ChatMessage {
-        ChatMessage(role: .user, text: text)
+        ChatMessage(role: .user, text: text, createdAt: Date())
     }
 
     static func systemMessage(_ text: String, phase: String? = nil) -> ChatMessage {
-        ChatMessage(role: .system, text: text, phase: phase)
+        ChatMessage(role: .system, text: text, phase: phase, createdAt: Date())
     }
 }
 
@@ -49,10 +58,11 @@ struct LLMOption: Identifiable {
     let disabled: Bool
 
     static let options: [LLMOption] = [
+        LLMOption(id: "auto", label: "Auto", modelValue: "auto", disabled: true),
         LLMOption(id: "opus", label: "Claude Opus 4.6", modelValue: "claude-opus-4-6-20250515", disabled: false),
         LLMOption(id: "sonnet", label: "Claude Sonnet 4.6", modelValue: "claude-sonnet-4-6-20250514", disabled: false),
         LLMOption(id: "gpt", label: "GPT 5.2", modelValue: "gpt-5.2", disabled: true)
     ]
 
-    static var defaultOption: LLMOption { options[1] }
+    static var defaultOption: LLMOption { options[2] }
 }

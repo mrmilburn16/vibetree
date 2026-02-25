@@ -6,6 +6,8 @@ final class ChatService: ObservableObject {
     @Published var isStreaming = false
     @Published var buildStatus: BuildStatus = .idle
     @Published var error: String?
+    @Published var streamingFileCount = 0
+    @Published var recentFiles: [String] = []
 
     enum BuildStatus: Equatable {
         case idle
@@ -39,13 +41,16 @@ final class ChatService: ObservableObject {
         isStreaming = true
         buildStatus = .building
         error = nil
+        streamingFileCount = 0
+        recentFiles = []
 
         let assistantId = UUID().uuidString
         messages.append(ChatMessage(
             id: assistantId,
             role: .assistant,
             text: "",
-            isStreaming: true
+            isStreaming: true,
+            createdAt: Date()
         ))
 
         streamTask = Task { [weak self] in
@@ -63,6 +68,8 @@ final class ChatService: ObservableObject {
         streamTask?.cancel()
         streamTask = nil
         isStreaming = false
+        streamingFileCount = 0
+        recentFiles = []
     }
 
     // MARK: - Streaming
@@ -73,6 +80,8 @@ final class ChatService: ObservableObject {
         projectType: ProjectType,
         assistantMessageId: String
     ) async {
+        let streamStart = Date()
+
         do {
             let request = try await APIService.shared.streamMessageRequest(
                 projectId: projectId,
@@ -90,6 +99,7 @@ final class ChatService: ObservableObject {
 
             var fullText = ""
             var editedFiles: [String] = []
+            var discoveredFiles: [String] = []
 
             for try await line in bytes.lines {
                 if Task.isCancelled { break }
@@ -102,15 +112,21 @@ final class ChatService: ObservableObject {
                         json,
                         fullText: &fullText,
                         editedFiles: &editedFiles,
+                        discoveredFiles: &discoveredFiles,
                         assistantMessageId: assistantMessageId
                     )
                 }
             }
 
+            let elapsed = Date().timeIntervalSince(streamStart) * 1000
+
             if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
                 messages[idx].text = fullText.isEmpty ? "Build complete." : fullText
                 messages[idx].editedFiles = editedFiles.isEmpty ? nil : editedFiles
+                messages[idx].discoveredFiles = discoveredFiles.isEmpty ? nil : discoveredFiles
                 messages[idx].isStreaming = false
+                messages[idx].elapsedMs = elapsed
+                messages[idx].createdAt = Date()
             }
 
             buildStatus = .ready
@@ -118,18 +134,22 @@ final class ChatService: ObservableObject {
             if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
                 messages[idx].text = "Error: \(error.localizedDescription)"
                 messages[idx].isStreaming = false
+                messages[idx].createdAt = Date()
             }
             buildStatus = .failed(error.localizedDescription)
             self.error = error.localizedDescription
         }
 
         isStreaming = false
+        streamingFileCount = 0
+        recentFiles = []
     }
 
     private func processStreamChunk(
         _ json: [String: Any],
         fullText: inout String,
         editedFiles: inout [String],
+        discoveredFiles: inout [String],
         assistantMessageId: String
     ) async {
         if let phase = json["phase"] as? String {
@@ -157,6 +177,11 @@ final class ChatService: ObservableObject {
         }
 
         if let filePath = json["discoveredFile"] as? String {
+            if !discoveredFiles.contains(filePath) {
+                discoveredFiles.append(filePath)
+                streamingFileCount = discoveredFiles.count
+                recentFiles = Array(discoveredFiles.suffix(5))
+            }
             if !editedFiles.contains(filePath) {
                 editedFiles.append(filePath)
             }

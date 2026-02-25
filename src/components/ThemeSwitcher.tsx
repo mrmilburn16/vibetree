@@ -77,7 +77,7 @@ export function ThemeSwitcher() {
         aria-haspopup="listbox"
         aria-label="Choose theme"
         className="
-          flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)]
+          flex cursor-pointer items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)]
           bg-[var(--background-secondary)] px-3 py-2
           text-sm text-[var(--text-secondary)]
           transition-all duration-200

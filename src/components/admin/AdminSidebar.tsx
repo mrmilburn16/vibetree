@@ -63,7 +63,7 @@ export function AdminSidebar() {
       <button
         type="button"
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="fixed left-3 top-3 z-50 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[var(--text-secondary)] lg:hidden"
+        className="fixed left-3 top-3 z-50 cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[var(--text-secondary)] lg:hidden"
         aria-label="Toggle admin menu"
       >
         {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -72,7 +72,7 @@ export function AdminSidebar() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-40 cursor-pointer bg-black/50 lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}

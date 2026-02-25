@@ -35,10 +35,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled}
         className={`
           inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)]
-          ${sizeClasses[size]} font-medium
+          ${sizeClasses[size]} font-medium cursor-pointer
           transition-all duration-[var(--transition-normal)] ease-out
           hover:scale-[1.02] active:scale-[0.98]
-          disabled:opacity-50 disabled:pointer-events-none disabled:hover:scale-100 disabled:active:scale-100
+          disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:hover:scale-100 disabled:active:scale-100
           ${variantClasses[variant]}
           ${className}
         `}

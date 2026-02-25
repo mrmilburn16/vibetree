@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Modal, Button, QRCode, Input } from "@/components/ui";
 
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
@@ -8,6 +8,54 @@ const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
 const XCODE_TEAM_ID_STORAGE_PREFIX = "vibetree-xcode-team-id:";
 const XCODE_BUNDLE_ID_OVERRIDE_PREFIX = "vibetree-xcode-bundle-id:";
 const XCODE_PREFERRED_DEVICE_PREFIX = "vibetree-xcode-preferred-device:";
+
+type PreflightResult = {
+  runner: { ok: boolean; runnerId?: string };
+  device: { ok: boolean; name?: string; id?: string };
+  teamId: { ok: boolean; value?: string };
+  files: { ok: boolean; count?: number };
+};
+
+function usePreflightChecks(
+  projectId: string,
+  teamId: string,
+  isOpen: boolean
+) {
+  const [checks, setChecks] = useState<PreflightResult | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const run = useCallback(async () => {
+    if (!projectId) return;
+    setLoading(true);
+    try {
+      const q = new URLSearchParams();
+      q.set("projectId", projectId);
+      if (teamId.trim()) q.set("teamId", teamId.trim());
+      const res = await fetch(`/api/macos/preflight?${q.toString()}`);
+      if (res.ok) {
+        const data: PreflightResult = await res.json();
+        setChecks(data);
+      }
+    } catch {
+      // keep previous checks on error
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, teamId]);
+
+  useEffect(() => {
+    if (isOpen) run();
+  }, [isOpen, run]);
+
+  const allPassed =
+    checks != null &&
+    checks.runner.ok &&
+    checks.device.ok &&
+    checks.teamId.ok &&
+    checks.files.ok;
+
+  return { checks, allPassed, loading, recheck: run };
+}
 
 export function RunOnDeviceModal({
   isOpen,
@@ -21,9 +69,7 @@ export function RunOnDeviceModal({
   onClose: () => void;
   projectId: string;
   expoUrl?: string | null;
-  /** When we get a URL from the API, pass it to the parent so the preview pane can show the QR too. */
   onExpoUrl?: (url: string) => void;
-  /** "pro" = native Swift: show download CTA. From localStorage or parent. */
   projectType?: "standard" | "pro";
 }) {
   const [expoUrlLocal, setExpoUrlLocal] = useState<string | null>(null);
@@ -33,38 +79,38 @@ export function RunOnDeviceModal({
   const [teamId, setTeamId] = useState("");
   const [preferredRunDevice, setPreferredRunDevice] = useState("");
   const [bundleIdOverride, setBundleIdOverride] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [validateLoading, setValidateLoading] = useState(false);
-  const [validateJobId, setValidateJobId] = useState<string | null>(null);
-  const [validateStatus, setValidateStatus] = useState<string | null>(null);
-  const [validateLogTail, setValidateLogTail] = useState<string[]>([]);
-  const [copyFeedback, setCopyFeedback] = useState(false);
-  const [validateStartedAt, setValidateStartedAt] = useState<number | null>(null);
-  const [validateElapsed, setValidateElapsed] = useState(0);
-  const [validateAttempt, setValidateAttempt] = useState(1);
-  const [validateMaxAttempts, setValidateMaxAttempts] = useState(3);
-  const [validateFixing, setValidateFixing] = useState(false);
-  const [validateHadCompilerErrors, setValidateHadCompilerErrors] = useState(false);
-  const [validateFailureReason, setValidateFailureReason] = useState<string | null>(null);
   const [errorCopyFeedback, setErrorCopyFeedback] = useState(false);
-  const [simulateLoading, setSimulateLoading] = useState(false);
-  const [validateIsSimulated, setValidateIsSimulated] = useState(false);
   const [installLoading, setInstallLoading] = useState(false);
   const [installJobId, setInstallJobId] = useState<string | null>(null);
   const [installStatus, setInstallStatus] = useState<string | null>(null);
   const [installLogTail, setInstallLogTail] = useState<string[]>([]);
+  const [installElapsed, setInstallElapsed] = useState(0);
+  const [installStartedAt, setInstallStartedAt] = useState<number | null>(
+    null
+  );
+  const [showTeamIdInput, setShowTeamIdInput] = useState(false);
 
   const projectType =
     projectTypeProp ??
-    (typeof window !== "undefined" && (localStorage.getItem(PROJECT_TYPE_STORAGE_KEY) === "pro" ? "pro" : "standard"));
+    (typeof window !== "undefined" &&
+    localStorage.getItem(PROJECT_TYPE_STORAGE_KEY) === "pro"
+      ? "pro"
+      : "standard");
 
   const expoUrl = expoUrlProp ?? expoUrlLocal;
 
+  const { checks, allPassed, loading: preflightLoading, recheck } =
+    usePreflightChecks(projectId, teamId, isOpen && projectType === "pro");
+
+  // Load saved settings from localStorage on open
   useEffect(() => {
     if (!isOpen || !projectId) return;
     if (typeof window !== "undefined") {
       try {
-        let t = localStorage.getItem(`${XCODE_TEAM_ID_STORAGE_PREFIX}${projectId}`) ?? "";
+        let t =
+          localStorage.getItem(
+            `${XCODE_TEAM_ID_STORAGE_PREFIX}${projectId}`
+          ) ?? "";
         if (!t) {
           const universal = localStorage.getItem("vibetree-universal-defaults");
           if (universal) {
@@ -74,23 +120,28 @@ export function RunOnDeviceModal({
             } catch {}
           }
         }
-        let d = localStorage.getItem(`${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`) ?? "";
+        let d =
+          localStorage.getItem(
+            `${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`
+          ) ?? "";
         if (!d) {
           const universal = localStorage.getItem("vibetree-universal-defaults");
           if (universal) {
             try {
               const parsed = JSON.parse(universal);
-              if (typeof parsed.preferredRunDevice === "string") d = parsed.preferredRunDevice;
+              if (typeof parsed.preferredRunDevice === "string")
+                d = parsed.preferredRunDevice;
             } catch {}
           }
         }
-        const b = localStorage.getItem(`${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`) ?? "";
+        const b =
+          localStorage.getItem(
+            `${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`
+          ) ?? "";
         setTeamId(t);
         setPreferredRunDevice(d);
         setBundleIdOverride(b);
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
     if (projectType === "pro") {
       setError(null);
@@ -105,25 +156,34 @@ export function RunOnDeviceModal({
     setError(null);
     (async () => {
       try {
-        let res = await fetch(`/api/projects/${projectId}/run-on-device?projectType=standard`);
+        let res = await fetch(
+          `/api/projects/${projectId}/run-on-device?projectType=standard`
+        );
         let data = await res.json().catch(() => ({}));
         if (data.expoUrl) {
           setExpoUrlLocal(data.expoUrl);
           onExpoUrl?.(data.expoUrl);
           return;
         }
-        const noFiles = res.status === 400 && (data.code === "NO_FILES" || data.code === "NO_APP");
+        const noFiles =
+          res.status === 400 &&
+          (data.code === "NO_FILES" || data.code === "NO_APP");
         if (noFiles && typeof window !== "undefined") {
           try {
-            const raw = localStorage.getItem(`${PROJECT_FILES_STORAGE_PREFIX}${projectId}`);
+            const raw = localStorage.getItem(
+              `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`
+            );
             const parsed = raw ? JSON.parse(raw) : null;
             const files = Array.isArray(parsed?.files) ? parsed.files : [];
             if (files.length > 0) {
-              res = await fetch(`/api/projects/${projectId}/run-on-device?projectType=standard`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ files }),
-              });
+              res = await fetch(
+                `/api/projects/${projectId}/run-on-device?projectType=standard`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ files }),
+                }
+              );
               data = await res.json().catch(() => ({}));
               if (data.expoUrl) {
                 setExpoUrlLocal(data.expoUrl);
@@ -131,9 +191,7 @@ export function RunOnDeviceModal({
                 return;
               }
             }
-          } catch {
-            // ignore
-          }
+          } catch {}
         }
         if (data.error) setError(data.error);
       } catch {
@@ -144,76 +202,7 @@ export function RunOnDeviceModal({
     })();
   }, [isOpen, projectId, projectType, expoUrlProp, onExpoUrl]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    if (!validateJobId) return;
-    let cancelled = false;
-    let currentJobId = validateJobId;
-
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/build-jobs/${currentJobId}`);
-        if (!res.ok) return;
-        const data = await res.json().catch(() => ({}));
-        const job = data?.job;
-        if (!job || cancelled) return;
-
-        const status = typeof job.status === "string" ? job.status : null;
-        const attempt = typeof job.request?.attempt === "number" ? job.request.attempt : 1;
-        const maxAttempts = typeof job.request?.maxAttempts === "number" ? job.request.maxAttempts : 5;
-        const nextJobId = typeof job.nextJobId === "string" ? job.nextJobId : null;
-
-        setValidateAttempt(attempt);
-        setValidateMaxAttempts(maxAttempts);
-
-        if (status === "failed" && nextJobId) {
-          setValidateFixing(true);
-          setValidateStatus("fixing");
-          setValidateLogTail([`Auto-fixing Swift errors (attempt ${attempt + 1}/${maxAttempts})…`]);
-          currentJobId = nextJobId;
-          setValidateJobId(nextJobId);
-          setTimeout(poll, 2000);
-          return;
-        }
-
-        setValidateFixing(false);
-        setValidateStatus(status);
-        const logs = Array.isArray(job.logs) ? job.logs.filter((x: any) => typeof x === "string") : [];
-        setValidateLogTail(logs.slice(-10));
-        if (status === "failed") {
-          setValidateHadCompilerErrors((Array.isArray(job.compilerErrors) ? job.compilerErrors.length : 0) > 0);
-          const err = typeof job.error === "string" && job.error.trim() ? job.error.trim() : null;
-          const firstCompiler = Array.isArray(job.compilerErrors) && job.compilerErrors.length > 0
-            ? String(job.compilerErrors[0]).trim()
-            : null;
-          setValidateFailureReason(err || firstCompiler || (logs.length > 0 ? "See log below." : null));
-        } else {
-          setValidateFailureReason(null);
-        }
-
-        if (status === "succeeded" || status === "failed") {
-          return;
-        }
-        setTimeout(poll, 2000);
-      } catch {
-        // ignore
-      }
-    };
-    poll();
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, validateJobId]);
-
-  useEffect(() => {
-    if (!validateStartedAt || !validateStatus) return;
-    if (validateStatus === "succeeded" || validateStatus === "failed") return;
-    const iv = setInterval(() => {
-      setValidateElapsed(Math.floor((Date.now() - validateStartedAt) / 1000));
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [validateStartedAt, validateStatus, validateFixing]);
-
+  // Poll install job status
   useEffect(() => {
     if (!isOpen || !installJobId) return;
     let cancelled = false;
@@ -228,8 +217,11 @@ export function RunOnDeviceModal({
         if (!job || cancelled) return;
 
         const status = typeof job.status === "string" ? job.status : null;
-        const nextJobId = typeof job.nextJobId === "string" ? job.nextJobId : null;
-        const logs = Array.isArray(job.logs) ? job.logs.filter((x: unknown) => typeof x === "string") : [];
+        const nextJobId =
+          typeof job.nextJobId === "string" ? job.nextJobId : null;
+        const logs = Array.isArray(job.logs)
+          ? job.logs.filter((x: unknown) => typeof x === "string")
+          : [];
         setInstallLogTail(logs.slice(-10));
 
         if (status === "failed" && nextJobId) {
@@ -247,19 +239,35 @@ export function RunOnDeviceModal({
       }
     };
     poll();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, installJobId]);
+
+  // Install elapsed timer
+  useEffect(() => {
+    if (!installStartedAt || !installStatus) return;
+    if (installStatus === "succeeded" || installStatus === "failed") return;
+    const iv = setInterval(() => {
+      setInstallElapsed(Math.floor((Date.now() - installStartedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [installStartedAt, installStatus]);
 
   async function handleInstallOnDevice() {
     setInstallLoading(true);
     setError(null);
     setInstallStatus("queued");
     setInstallLogTail([]);
+    setInstallStartedAt(Date.now());
+    setInstallElapsed(0);
     try {
       let files: { path: string; content: string }[] = [];
       if (typeof window !== "undefined") {
         try {
-          const raw = localStorage.getItem(`${PROJECT_FILES_STORAGE_PREFIX}${projectId}`);
+          const raw = localStorage.getItem(
+            `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`
+          );
           const parsed = raw ? JSON.parse(raw) : null;
           files = Array.isArray(parsed?.files) ? parsed.files : [];
         } catch {}
@@ -271,7 +279,9 @@ export function RunOnDeviceModal({
         try {
           const projectsRaw = localStorage.getItem("vibetree-projects");
           const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
-          const p = Array.isArray(projects) ? projects.find((x: { id?: string }) => x?.id === projectId) : null;
+          const p = Array.isArray(projects)
+            ? projects.find((x: { id?: string }) => x?.id === projectId)
+            : null;
           if (p?.name) projectName = String(p.name);
           if (p?.bundleId) bundleId = String(p.bundleId);
         } catch {}
@@ -313,26 +323,30 @@ export function RunOnDeviceModal({
     try {
       let res: Response | null = null;
       const getFilenameFromHeaders = (r: Response): string | null => {
-        const cd = r.headers.get("Content-Disposition") || r.headers.get("content-disposition");
+        const cd =
+          r.headers.get("Content-Disposition") ||
+          r.headers.get("content-disposition");
         if (!cd) return null;
         const m = cd.match(/filename=\"([^\"]+)\"/);
         return m?.[1] ?? null;
       };
 
-      // Prefer exporting from client-cached Swift files (survives refresh/dev reload).
       if (typeof window !== "undefined") {
         try {
-          const raw = localStorage.getItem(`${PROJECT_FILES_STORAGE_PREFIX}${projectId}`);
+          const raw = localStorage.getItem(
+            `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`
+          );
           const parsed = raw ? JSON.parse(raw) : null;
           const files = Array.isArray(parsed?.files) ? parsed.files : [];
           if (files.length > 0) {
-            // Best-effort: include project name + bundle id for a nicer Xcode project name.
             let projectName = "Untitled app";
             let bundleId = "";
             try {
               const projectsRaw = localStorage.getItem("vibetree-projects");
               const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
-              const p = Array.isArray(projects) ? projects.find((x: any) => x?.id === projectId) : null;
+              const p = Array.isArray(projects)
+                ? projects.find((x: { id?: string }) => x?.id === projectId)
+                : null;
               if (p?.name) projectName = String(p.name);
               if (p?.bundleId) bundleId = String(p.bundleId);
             } catch {}
@@ -353,18 +367,21 @@ export function RunOnDeviceModal({
               }),
             });
           }
-        } catch {
-          // ignore and fall back to server cache
-        }
+        } catch {}
       }
 
-      // Fallback: server-side in-memory cache (include team, preferred device, timezone so signing/README/dates are correct)
       if (!res) {
         const q = new URLSearchParams();
         if (teamId.trim()) q.set("developmentTeam", teamId.trim());
-        if (preferredRunDevice.trim()) q.set("preferredRunDevice", preferredRunDevice.trim());
-        q.set("timezoneOffsetMinutes", String(new Date().getTimezoneOffset()));
-        res = await fetch(`/api/projects/${projectId}/export-xcode?${q.toString()}`);
+        if (preferredRunDevice.trim())
+          q.set("preferredRunDevice", preferredRunDevice.trim());
+        q.set(
+          "timezoneOffsetMinutes",
+          String(new Date().getTimezoneOffset())
+        );
+        res = await fetch(
+          `/api/projects/${projectId}/export-xcode?${q.toString()}`
+        );
       }
 
       if (!res.ok) {
@@ -375,418 +392,292 @@ export function RunOnDeviceModal({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = getFilenameFromHeaders(res) ?? `VibetreeApp-${projectId.slice(0, 12)}.zip`;
+      a.download =
+        getFilenameFromHeaders(res) ??
+        `VibetreeApp-${projectId.slice(0, 12)}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Download failed. Try again.");
+      setError(
+        e instanceof Error ? e.message : "Download failed. Try again."
+      );
     } finally {
       setDownloadLoading(false);
     }
   }
 
-  async function handleValidateBuild() {
-    setValidateLoading(true);
-    setError(null);
-    setValidateStatus("queued");
-    setValidateLogTail([]);
-    try {
-      // Prefer client-cached Swift files (survives refresh/dev reload).
-      let files: any[] = [];
-      if (typeof window !== "undefined") {
-        try {
-          const raw = localStorage.getItem(`${PROJECT_FILES_STORAGE_PREFIX}${projectId}`);
-          const parsed = raw ? JSON.parse(raw) : null;
-          const arr = Array.isArray(parsed?.files) ? parsed.files : [];
-          files = arr;
-        } catch {}
-      }
-
-      // Best-effort: include project name + bundle id for consistent scheme/id.
-      let projectName = "Untitled app";
-      let bundleId = "";
-      if (typeof window !== "undefined") {
-        try {
-          const projectsRaw = localStorage.getItem("vibetree-projects");
-          const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
-          const p = Array.isArray(projects) ? projects.find((x: any) => x?.id === projectId) : null;
-          if (p?.name) projectName = String(p.name);
-          if (p?.bundleId) bundleId = String(p.bundleId);
-        } catch {}
-      }
-
-      const finalBundleId = bundleIdOverride.trim() || bundleId;
-      const finalTeamId = teamId.trim();
-
-      const res = await fetch(`/api/projects/${projectId}/validate-xcode`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...(files.length > 0 ? { files } : {}),
-          projectName,
-          bundleId: finalBundleId,
-          developmentTeam: finalTeamId,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error ?? "Validation request failed");
-      }
-      const data = await res.json().catch(() => ({}));
-      const jobId = typeof data?.job?.id === "string" ? data.job.id : null;
-      if (!jobId) throw new Error("No job id returned");
-      setValidateJobId(jobId);
-      setValidateStatus("queued");
-      setValidateStartedAt(Date.now());
-      setValidateElapsed(0);
-      setValidateAttempt(1);
-      setValidateMaxAttempts(3);
-      setValidateFixing(false);
-      setValidateHadCompilerErrors(false);
-      setValidateFailureReason(null);
-      setValidateLogTail([]);
-      setValidateIsSimulated(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Validation failed. Try again.");
-      setValidateStatus("failed");
-    } finally {
-      setValidateLoading(false);
-    }
-  }
-
-  async function handleSimulateBuild() {
-    setSimulateLoading(true);
-    setError(null);
-    setValidateStatus("queued");
-    setValidateLogTail([]);
-    try {
-      // Best-effort: include project name + bundle id for consistent UI.
-      let projectName = "Untitled app";
-      let bundleId = "";
-      if (typeof window !== "undefined") {
-        try {
-          const projectsRaw = localStorage.getItem("vibetree-projects");
-          const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
-          const p = Array.isArray(projects) ? projects.find((x: any) => x?.id === projectId) : null;
-          if (p?.name) projectName = String(p.name);
-          if (p?.bundleId) bundleId = String(p.bundleId);
-        } catch {}
-      }
-
-      const finalBundleId = bundleIdOverride.trim() || bundleId;
-
-      const res = await fetch(`/api/projects/${projectId}/simulate-build`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectName,
-          bundleId: finalBundleId,
-          durationSeconds: 45,
-          fail: false,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error ?? "Simulate build request failed");
-      }
-      const data = await res.json().catch(() => ({}));
-      const jobId = typeof data?.job?.id === "string" ? data.job.id : null;
-      if (!jobId) throw new Error("No job id returned");
-      setValidateJobId(jobId);
-      setValidateStatus("queued");
-      setValidateStartedAt(Date.now());
-      setValidateElapsed(0);
-      setValidateAttempt(1);
-      setValidateMaxAttempts(1);
-      setValidateFixing(false);
-      setValidateHadCompilerErrors(false);
-      setValidateFailureReason(null);
-      setValidateLogTail([]);
-      setValidateIsSimulated(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Simulated build failed. Try again.");
-      setValidateStatus("failed");
-    } finally {
-      setSimulateLoading(false);
-    }
-  }
-
-  async function handleDownloadSource() {
-    setDownloadLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/export?projectType=pro`);
-      if (!res.ok) throw new Error("Export failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Vibetree-${projectId.slice(0, 20)}.swift`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      setError("Download failed. Try again.");
-    } finally {
-      setDownloadLoading(false);
-    }
-  }
-
-  if (projectType === "pro") {
+  // ───────── Preflight check row ─────────
+  function CheckRow({
+    ok,
+    loading: rowLoading,
+    label,
+    detail,
+    action,
+  }: {
+    ok: boolean | null;
+    loading: boolean;
+    label: string;
+    detail?: string;
+    action?: React.ReactNode;
+  }) {
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="Run on your iPhone (Pro)">
+      <div className="flex items-start gap-2.5 py-1.5">
+        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+          {rowLoading || ok === null ? (
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[var(--border-default)] border-t-[var(--primary-default)]" />
+          ) : ok ? (
+            <span className="text-sm text-green-400">&#10003;</span>
+          ) : (
+            <span className="text-sm text-red-400">&#10007;</span>
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="text-sm text-[var(--text-default)]">{label}</span>
+          {detail && (
+            <span className="ml-1.5 text-xs text-[var(--text-tertiary)]">
+              {detail}
+            </span>
+          )}
+          {action && <div className="mt-1.5">{action}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  // ───────── Pro mode ─────────
+  if (projectType === "pro") {
+    const isBuilding =
+      installStatus === "queued" || installStatus === "running";
+    const isDone =
+      installStatus === "succeeded" || installStatus === "failed";
+
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="Run on your iPhone">
         <div className="space-y-4">
+          <p className="text-sm text-[var(--text-secondary)]">
+            Build and install your app directly to your iPhone.
+          </p>
+
           {error && (
             <div className="rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-2">
-              <p className="text-sm text-[var(--text-secondary)]">{error}</p>
+              <p className="text-sm text-red-400">{error}</p>
             </div>
           )}
-          <div className="space-y-2">
-            <p className="text-body-muted text-sm">
-              Pro apps are native Swift/SwiftUI. Download for Xcode (zip), unzip, double‑click the project, then Run on your iPhone or simulator. Note: Xcode opens with whatever Run destination you last used — the exported project can’t force it to switch automatically. If Xcode defaults to a simulator, select your physical iPhone from the device dropdown once—Xcode will remember it.
-            </p>
-            <div className="rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-2">
-              <p className="text-caption text-xs text-[var(--text-tertiary)]">
-                Set your <span className="text-[var(--text-secondary)]">Team ID</span> below once—we’ll embed it in the zip so Xcode won’t ask you to pick a team. (That team appears in Xcode as e.g. &quot;Michael Milburn (Individual)&quot;.)
-              </p>
+
+          {/* ── Preflight checklist ── */}
+          <div className="rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
+                Preflight
+              </span>
+              {checks && !preflightLoading && (
+                <button
+                  type="button"
+                  onClick={recheck}
+                  className="cursor-pointer text-xs text-[var(--link-default)] hover:underline"
+                >
+                  Re-check
+                </button>
+              )}
             </div>
+
+            <CheckRow
+              ok={checks?.runner.ok ?? null}
+              loading={preflightLoading && !checks}
+              label="Mac runner"
+              detail={
+                checks?.runner.ok
+                  ? "Connected"
+                  : checks && !checks.runner.ok
+                    ? "Not running \u2014 start npm run mac-runner"
+                    : undefined
+              }
+            />
+            <CheckRow
+              ok={checks?.device.ok ?? null}
+              loading={preflightLoading && !checks}
+              label="iPhone connected"
+              detail={
+                checks?.device.ok
+                  ? checks.device.name ?? "Detected"
+                  : checks && !checks.device.ok
+                    ? "Connect via USB or same WiFi"
+                    : undefined
+              }
+            />
+            <CheckRow
+              ok={checks?.teamId.ok ?? null}
+              loading={preflightLoading && !checks}
+              label="Team ID"
+              detail={
+                checks?.teamId.ok
+                  ? checks.teamId.value
+                  : checks && !checks.teamId.ok
+                    ? "Required for code signing"
+                    : undefined
+              }
+              action={
+                checks && !checks.teamId.ok ? (
+                  showTeamIdInput ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="preflight-team-id"
+                        value={teamId}
+                        onChange={(e) => {
+                          const v = e.target.value
+                            .toUpperCase()
+                            .replace(/[^A-Z0-9]/g, "");
+                          setTeamId(v);
+                          try {
+                            localStorage.setItem(
+                              `${XCODE_TEAM_ID_STORAGE_PREFIX}${projectId}`,
+                              v
+                            );
+                          } catch {}
+                        }}
+                        placeholder="ABCDE12345"
+                        className="w-32 font-mono text-xs"
+                        inputMode="text"
+                        autoCapitalize="characters"
+                        spellCheck={false}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={recheck}
+                        className="cursor-pointer whitespace-nowrap rounded bg-[var(--primary-default)] px-2 py-1 text-xs font-medium text-white hover:bg-[var(--primary-hover)]"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowTeamIdInput(true)}
+                      className="cursor-pointer text-xs text-[var(--link-default)] hover:underline"
+                    >
+                      Set Team ID
+                    </button>
+                  )
+                ) : undefined
+              }
+            />
+            <CheckRow
+              ok={checks?.files.ok ?? null}
+              loading={preflightLoading && !checks}
+              label="Project files"
+              detail={
+                checks?.files.ok
+                  ? `${checks.files.count} Swift file${(checks.files.count ?? 0) !== 1 ? "s" : ""}`
+                  : checks && !checks.files.ok
+                    ? "Build your app in the editor first"
+                    : undefined
+              }
+            />
           </div>
-          <div className="flex flex-col gap-3 rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
-            {validateStatus === "succeeded" && (
-              <p className="text-sm text-[var(--text-secondary)]">
-                Build validated. Download the zip below, then unzip and open in Xcode to run on your iPhone.
-              </p>
-            )}
-            <Button
-              type="button"
-              onClick={handleInstallOnDevice}
-              disabled={installLoading || installStatus === "queued" || installStatus === "running"}
-              className="w-full"
-            >
-              {installLoading
-                ? "Starting…"
-                : installStatus === "queued" || installStatus === "running"
-                ? "Building & installing…"
+
+          {/* ── Install button ── */}
+          <Button
+            type="button"
+            onClick={handleInstallOnDevice}
+            disabled={
+              !allPassed || installLoading || isBuilding
+            }
+            className="w-full"
+          >
+            {installLoading
+              ? "Starting\u2026"
+              : isBuilding
+                ? `Building & installing\u2026 (${installElapsed}s)`
                 : installStatus === "succeeded"
-                ? "Re-install on iPhone"
-                : "Install on iPhone"}
-            </Button>
-            {installStatus && (
-              <div className="rounded border border-[var(--border-default)] bg-[var(--background-default)] p-3">
-                <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-                  {(installStatus === "queued" || installStatus === "running") && (
-                    <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--primary-default)]" />
-                  )}
-                  {installStatus === "succeeded" && (
-                    <span className="text-green-400">&#10003;</span>
-                  )}
-                  {installStatus === "failed" && (
-                    <span className="text-red-400">&#10007;</span>
-                  )}
-                  <span>
-                    {installStatus === "queued" && "Waiting for runner to start device build…"}
-                    {installStatus === "running" && "Building for device & installing…"}
-                    {installStatus === "succeeded" && "App installed & launched on your iPhone! Check your phone."}
-                    {installStatus === "failed" && "Install failed — try Download for Xcode instead"}
-                  </span>
-                </div>
-                {installLogTail.length > 0 && (
-                  <pre className="mt-2 max-h-[120px] overflow-auto rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
-                    {installLogTail.join("\n")}
-                  </pre>
+                  ? "Re-install on iPhone"
+                  : "Install on iPhone"}
+          </Button>
+
+          {/* ── Build progress ── */}
+          {installStatus && (
+            <div className="rounded border border-[var(--border-default)] bg-[var(--background-default)] p-3">
+              <div className="flex items-center gap-2">
+                {isBuilding && (
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--primary-default)]" />
                 )}
+                {installStatus === "succeeded" && (
+                  <span className="text-green-400">&#10003;</span>
+                )}
+                {installStatus === "failed" && (
+                  <span className="text-red-400">&#10007;</span>
+                )}
+                <span
+                  className={
+                    installStatus === "succeeded"
+                      ? "text-sm font-medium text-[var(--text-default)]"
+                      : installStatus === "failed"
+                        ? "text-sm text-red-400"
+                        : "text-xs text-[var(--text-tertiary)]"
+                  }
+                >
+                  {installStatus === "queued" &&
+                    "Waiting for Mac runner to start build\u2026"}
+                  {installStatus === "running" &&
+                    "Building for device & installing\u2026"}
+                  {installStatus === "succeeded" &&
+                    "Your app is installed! Check your iPhone."}
+                  {installStatus === "failed" &&
+                    "Install failed \u2014 try downloading for Xcode instead."}
+                </span>
               </div>
-            )}
-            <div className="border-t border-[var(--border-default)] pt-3">
-              <p className="mb-2 text-xs text-[var(--text-tertiary)]">Or download and open in Xcode manually:</p>
+              {installLogTail.length > 0 && (
+                <pre className="mt-2 max-h-[120px] overflow-auto rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                  {installLogTail.join("\n")}
+                </pre>
+              )}
             </div>
-            <Button
+          )}
+
+          {/* ── Fallback download link ── */}
+          <div className="pt-1 text-center">
+            <button
               type="button"
-              variant="secondary"
               onClick={handleDownloadForXcode}
               disabled={downloadLoading}
-              className="w-full"
+              className="cursor-pointer text-xs text-[var(--text-tertiary)] hover:text-[var(--link-default)] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {downloadLoading ? "Preparing…" : "Download for Xcode (.zip)"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleValidateBuild}
-              disabled={validateLoading}
-              className="w-full"
-            >
-              {validateLoading ? "Queueing build check…" : validateStatus === "succeeded" ? "Re-validate build" : "Validate build on Mac (xcodebuild)"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleSimulateBuild}
-              disabled={simulateLoading}
-              className="w-full"
-            >
-              {simulateLoading ? "Starting simulated build…" : "Simulate build (no credits) — test Live Activity"}
-            </Button>
-            {validateStatus && (
-              <div className="rounded border border-[var(--border-default)] bg-[var(--background-default)] p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-                    {(validateStatus === "queued" || validateStatus === "running" || validateStatus === "fixing") && (
-                      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--primary-default)]" />
-                    )}
-                    {validateStatus === "succeeded" && (
-                      <span className="text-green-400">&#10003;</span>
-                    )}
-                    {validateStatus === "failed" && (
-                      <span className="text-red-400">&#10007;</span>
-                    )}
-                    <span>
-                      {validateIsSimulated && <span className="mr-1 rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">SIM</span>}
-                      {validateStatus === "queued" && (validateIsSimulated ? `Simulated build queued… (${validateElapsed}s)` : `Waiting for runner… (${validateElapsed}s)`)}
-                      {validateStatus === "running" && (validateIsSimulated ? `Simulated xcodebuild… (${validateElapsed}s)` : `Building with xcodebuild… (${validateElapsed}s)${validateAttempt > 1 ? ` — Attempt ${validateAttempt}/${validateMaxAttempts}` : ""}`)}
-                      {validateStatus === "fixing" && `Auto-fixing Swift errors… (${validateElapsed}s) — Attempt ${validateAttempt + 1}/${validateMaxAttempts}`}
-                      {validateStatus === "succeeded" && (validateAttempt > 1 ? `Build succeeded on attempt ${validateAttempt}/${validateMaxAttempts}` : "Build succeeded")}
-                      {validateStatus === "failed" && (
-                        validateFailureReason
-                          ? `Build failed: ${validateFailureReason}`
-                          : (validateAttempt > 1 ? `Build failed after ${validateAttempt} attempt${validateAttempt > 1 ? "s" : ""}` : "Build failed")
-                      )}
-                      {validateStatus !== "queued" && validateStatus !== "running" && validateStatus !== "fixing" && validateStatus !== "succeeded" && validateStatus !== "failed" && validateStatus}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const statusLine = `Build validation status: ${validateStatus}${validateJobId ? ` · job ${validateJobId}` : ""}`;
-                      const logBlock = validateLogTail.length > 0 ? `\n${validateLogTail.join("\n")}` : "";
-                      const text = `${statusLine}${logBlock}`;
-                      try {
-                        await navigator.clipboard.writeText(text);
-                        setCopyFeedback(true);
-                        setTimeout(() => setCopyFeedback(false), 2000);
-                      } catch {
-                        // ignore
-                      }
-                    }}
-                    className="shrink-0 rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-2 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--background-tertiary)] hover:text-[var(--text-default)]"
-                  >
-                    {copyFeedback ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-                {validateLogTail.length > 0 && (
-                  <pre className="mt-2 max-h-[160px] overflow-auto rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
-                    {validateLogTail.join("\n")}
-                  </pre>
-                )}
-                {validateStatus === "failed" && !validateHadCompilerErrors && (
-                  <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-                    Auto-fix only runs for Swift compiler errors. This failure (e.g. ValidateEmbeddedBinary) may be due to signing or project setup—check the log above.
-                  </p>
-                )}
-                {(validateStatus === "queued" || validateStatus === "running" || validateStatus === "fixing") && (
-                  <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-                    {validateIsSimulated
-                      ? "This is a fake build job for testing Live Activities. It will auto-complete."
-                      : validateStatus === "fixing"
-                      ? "Sending compiler errors to LLM for auto-fix…"
-                      : <>Requires a Mac runner with Xcode. Run <span className="font-mono">npm run mac-runner</span> on your Mac with{" "}<span className="font-mono">MAC_RUNNER_TOKEN</span> set.</>
-                    }
-                  </p>
-                )}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((v) => !v)}
-              className="text-body-muted text-xs font-medium hover:text-[var(--link-default)] hover:underline"
-            >
-              {showAdvanced ? "Hide Advanced" : "Advanced (optional): set Team ID / Bundle ID"}
+              {downloadLoading
+                ? "Preparing download\u2026"
+                : "Or download Xcode project (.zip)"}
             </button>
-            {showAdvanced && (
-              <div className="space-y-3 rounded border border-[var(--border-default)] bg-[var(--background-default)] p-3">
-                <div>
-                  <label htmlFor="xcode-team-id" className="text-body-muted mb-1.5 block text-sm">
-                    Team ID
-                  </label>
-                  <Input
-                    id="xcode-team-id"
-                    value={teamId}
-                    onChange={(e) => {
-                      const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-                      setTeamId(v);
-                      try {
-                        localStorage.setItem(`${XCODE_TEAM_ID_STORAGE_PREFIX}${projectId}`, v);
-                      } catch {}
-                    }}
-                    placeholder="ABCDE12345"
-                    inputMode="text"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                  />
-                  <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                    Easiest: Apple Developer → Account → Membership details → copy <span className="font-mono">Team ID</span> (10 characters). Alternative: in Xcode, pick your team once, then open <span className="font-mono">project.pbxproj</span> and search for <span className="font-mono">DEVELOPMENT_TEAM</span>.
-                  </p>
-                </div>
-                <div>
-                  <label htmlFor="xcode-bundle-id" className="text-body-muted mb-1.5 block text-sm">
-                    Bundle ID (override)
-                  </label>
-                  <Input
-                    id="xcode-bundle-id"
-                    value={bundleIdOverride}
-                    onChange={(e) => {
-                      const v = e.target.value.trim();
-                      setBundleIdOverride(v);
-                      try {
-                        localStorage.setItem(`${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`, v);
-                      } catch {}
-                    }}
-                    placeholder="com.yourcompany.appname"
-                    inputMode="text"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                  />
-                  <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                    Leave blank to use the project’s bundle ID from settings.
-                  </p>
-                </div>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={handleDownloadSource}
-              disabled={downloadLoading}
-              className="text-body-muted text-xs font-medium hover:text-[var(--link-default)] hover:underline disabled:opacity-50"
-            >
-              Or download single .swift file
-            </button>
-            <p className="text-caption text-xs text-[var(--text-tertiary)]">
-              Unzip → double‑click the .xcodeproj → connect iPhone → Run. No Expo Go needed. Xcode may open with a simulator you used previously — select your physical iPhone from the device dropdown (e.g. &quot;iPhone (9)&quot;) once and Xcode will remember it next time.
-            </p>
           </div>
         </div>
       </Modal>
     );
   }
 
+  // ───────── Standard (Expo) mode ─────────
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Preview on your iPhone">
       <div className="space-y-4">
         <p className="text-body-muted text-sm">
-          Scan the QR code with your iPhone camera or from inside the Expo Go app. Your app will load with no install step—no Apple Developer account needed.
+          Scan the QR code with your iPhone camera or from inside the Expo Go
+          app. Your app will load with no install step—no Apple Developer
+          account needed.
         </p>
         {loading ? (
           <div className="flex h-[200px] flex-col items-center justify-center gap-3 rounded border border-[var(--border-default)] bg-[var(--background-secondary)]">
-            <span className="text-sm text-[var(--text-tertiary)]">Starting Expo server…</span>
-            <span className="text-xs text-[var(--text-tertiary)]">This may take 1–2 minutes the first time.</span>
+            <span className="text-sm text-[var(--text-tertiary)]">
+              Starting Expo server\u2026
+            </span>
+            <span className="text-xs text-[var(--text-tertiary)]">
+              This may take 1\u20132 minutes the first time.
+            </span>
           </div>
         ) : error ? (
           <div className="rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
             <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 flex-1 text-sm text-[var(--text-secondary)]">{error}</p>
+              <p className="min-w-0 flex-1 text-sm text-[var(--text-secondary)]">
+                {error}
+              </p>
               <button
                 type="button"
                 onClick={async () => {
@@ -794,29 +685,38 @@ export function RunOnDeviceModal({
                     await navigator.clipboard.writeText(error);
                     setErrorCopyFeedback(true);
                     setTimeout(() => setErrorCopyFeedback(false), 2000);
-                  } catch {
-                    // ignore
-                  }
+                  } catch {}
                 }}
-                className="shrink-0 rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
+                className="shrink-0 cursor-pointer rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
               >
                 {errorCopyFeedback ? "Copied" : "Copy"}
               </button>
             </div>
             <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-              {error.includes("Build your app") || error.includes("Generated app must include")
-                ? "Describe an app in the chat (e.g. &quot;A simple counter app&quot;), wait for it to build, then try again."
-                : "If you haven’t built an app yet, describe one in the chat first. Otherwise the Expo server may have failed—check the terminal where the dev server is running for details."}
+              {error.includes("Build your app") ||
+              error.includes("Generated app must include")
+                ? 'Describe an app in the chat (e.g. "A simple counter app"), wait for it to build, then try again.'
+                : "If you haven't built an app yet, describe one in the chat first. Otherwise the Expo server may have failed\u2014check the terminal where the dev server is running for details."}
             </p>
           </div>
         ) : expoUrl ? (
           <div className="flex flex-col items-start gap-2">
-            <QRCode value={expoUrl} size={200} className="rounded border border-[var(--border-default)] bg-white p-2" />
-            <p className="text-caption text-xs text-[var(--text-tertiary)]">Open the Expo Go app, then scan this QR code.</p>
-            <p className="text-caption text-xs text-[var(--text-tertiary)]">Or use the QR code in the preview pane to the right.</p>
+            <QRCode
+              value={expoUrl}
+              size={200}
+              className="rounded border border-[var(--border-default)] bg-white p-2"
+            />
+            <p className="text-caption text-xs text-[var(--text-tertiary)]">
+              Open the Expo Go app, then scan this QR code.
+            </p>
+            <p className="text-caption text-xs text-[var(--text-tertiary)]">
+              Or use the QR code in the preview pane to the right.
+            </p>
           </div>
         ) : (
-          <p className="text-caption text-xs text-[var(--text-tertiary)]">Build your app first, then the QR code will appear here.</p>
+          <p className="text-caption text-xs text-[var(--text-tertiary)]">
+            Build your app first, then the QR code will appear here.
+          </p>
         )}
       </div>
     </Modal>

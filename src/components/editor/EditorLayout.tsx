@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Settings, Smartphone, Share2, Upload } from "lucide-react";
+import { Settings, Smartphone, Share2, Keyboard } from "lucide-react";
 import { Button, BetaBadge, Toast } from "@/components/ui";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
 import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
@@ -12,7 +12,6 @@ import { PreviewPane } from "./PreviewPane";
 import { ProjectSettingsModal } from "./ProjectSettingsModal";
 import { RunOnDeviceModal } from "./RunOnDeviceModal";
 import { ShareModal } from "./ShareModal";
-import { PublishModal } from "./PublishModal";
 import { OutOfCreditsModal } from "./OutOfCreditsModal";
 
 const CHAT_WIDTH_KEY = "vibetree-editor-chat-width";
@@ -57,7 +56,6 @@ export function EditorLayout({ project }: { project: Project }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [runOnDeviceOpen, setRunOnDeviceOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [publishOpen, setPublishOpen] = useState(false);
   const [buildStatus, setBuildStatus] = useState<"idle" | "building" | "live" | "failed">("idle");
   const [buildFailureReason, setBuildFailureReason] = useState<string | null>(null);
   const [expoUrl, setExpoUrl] = useState<string | null>(null);
@@ -65,9 +63,29 @@ export function EditorLayout({ project }: { project: Project }) {
   const [outOfCreditsOpen, setOutOfCreditsOpen] = useState(false);
   const [chatWidth, setChatWidth] = useState(CHAT_WIDTH_DEFAULT);
   const [isResizing, setIsResizing] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   useEffect(() => {
     setChatWidth(getStoredChatWidth());
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key === "r" && !e.shiftKey) {
+        e.preventDefault();
+        setRunOnDeviceOpen(true);
+      } else if (e.key === "s" && !e.shiftKey) {
+        e.preventDefault();
+        setShareOpen(true);
+      } else if (e.key === "/") {
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, []);
 
   useEffect(() => {
@@ -227,7 +245,7 @@ export function EditorLayout({ project }: { project: Project }) {
     <div className="flex h-screen flex-col bg-[var(--background-primary)]">
       <LowCreditBanner />
       {/* Top bar */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b-2 border-[var(--border-default)] px-5 sm:px-6">
+      <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b-2 border-[var(--border-default)] px-5 sm:px-6">
         <div className="flex items-center gap-4">
           <BetaBadge />
           <Link
@@ -243,21 +261,23 @@ export function EditorLayout({ project }: { project: Project }) {
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="text-left text-sm font-medium text-[var(--text-primary)] hover:underline"
+            className="cursor-pointer text-left text-sm font-medium text-[var(--text-primary)] hover:underline"
           >
             {projectName}
           </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex justify-center">
           <CreditsWidget />
+        </div>
+        <div className="flex items-center justify-end gap-2">
           <Button
             variant="secondary"
-            className="gap-1.5 text-xs"
+            className="!px-2 text-xs"
             onClick={() => setSettingsOpen(true)}
-            title="Project settings: signing, deployment, export"
+            title="Project settings"
+            aria-label="Project settings"
           >
-            <Settings className="h-3.5 w-3.5" aria-hidden />
-            Settings
+            <Settings className="h-4 w-4" aria-hidden />
           </Button>
           <Button
             variant="secondary"
@@ -272,20 +292,33 @@ export function EditorLayout({ project }: { project: Project }) {
             variant="secondary"
             className="gap-1.5 text-xs"
             onClick={() => setShareOpen(true)}
-            title="Get TestFlight link, invite testers, or install via desktop agent"
+            title="Share, distribute, or publish your app"
           >
             <Share2 className="h-3.5 w-3.5" aria-hidden />
             Share
           </Button>
-          <Button
-            variant="secondary"
-            className="gap-1.5 text-xs"
-            onClick={() => setPublishOpen(true)}
-            title="Sign in with Apple to publish"
-          >
-            <Upload className="h-3.5 w-3.5" aria-hidden />
-            Publish
-          </Button>
+          <div className="relative">
+            <Button
+              variant="secondary"
+              className="!px-2 text-xs"
+              onClick={() => setShortcutsOpen((v) => !v)}
+              title="Keyboard shortcuts (⌘/)"
+              aria-label="Keyboard shortcuts"
+            >
+              <Keyboard className="h-4 w-4" aria-hidden />
+            </Button>
+            {shortcutsOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-3 shadow-lg">
+                <p className="mb-2 text-xs font-semibold text-[var(--text-primary)]">Keyboard shortcuts</p>
+                <div className="space-y-1.5 text-xs text-[var(--text-secondary)]">
+                  <div className="flex items-center justify-between"><span>Send message</span><kbd className="rounded bg-[var(--background-tertiary)] px-1.5 py-0.5 font-mono text-[10px]">Enter</kbd></div>
+                  <div className="flex items-center justify-between"><span>Run on device</span><kbd className="rounded bg-[var(--background-tertiary)] px-1.5 py-0.5 font-mono text-[10px]">⌘R</kbd></div>
+                  <div className="flex items-center justify-between"><span>Share / Export</span><kbd className="rounded bg-[var(--background-tertiary)] px-1.5 py-0.5 font-mono text-[10px]">⌘S</kbd></div>
+                  <div className="flex items-center justify-between"><span>Toggle shortcuts</span><kbd className="rounded bg-[var(--background-tertiary)] px-1.5 py-0.5 font-mono text-[10px]">⌘/</kbd></div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -366,7 +399,6 @@ export function EditorLayout({ project }: { project: Project }) {
         onClose={() => setShareOpen(false)}
         projectId={project.id}
       />
-      <PublishModal isOpen={publishOpen} onClose={() => setPublishOpen(false)} />
       <OutOfCreditsModal
         isOpen={outOfCreditsOpen}
         onClose={() => setOutOfCreditsOpen(false)}

@@ -13,11 +13,14 @@ final class AuthService: ObservableObject {
     private let keychainService = "com.vibetree.companion"
     private let keychainAccount = "session_token"
 
+    var currentToken: String? {
+        loadTokenFromKeychain()
+    }
+
     init() {
-        if let token = loadTokenFromKeychain() {
+        if loadTokenFromKeychain() != nil {
             isAuthenticated = true
             userEmail = UserDefaults.standard.string(forKey: "vibetree-user-email")
-            _ = token
         }
     }
 

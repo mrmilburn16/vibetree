@@ -135,6 +135,19 @@ export function ShareModal({
             Download desktop agent for Mac
           </Button>
         </section>
+
+        {/* Publish to App Store — coming soon */}
+        <section className="border-t border-[var(--border-default)] pt-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-medium text-[var(--text-primary)]">Publish to App Store</h3>
+            <span className="rounded-full bg-[var(--button-primary-bg)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--button-primary-bg)]">
+              Coming soon
+            </span>
+          </div>
+          <p className="text-body-muted mt-1 text-sm">
+            One-click submission to the App Store with automatic archiving, code signing, and upload. Sign in with your Apple Developer account and submit in seconds.
+          </p>
+        </section>
       </div>
     </Modal>
   );

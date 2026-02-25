@@ -33,9 +33,13 @@ export type BuildJobRecord = {
   autoFixInProgress?: boolean;
   /** Path to built IPA (set by runner when outputType=ipa). */
   ipaPath?: string;
+  /** Updated on claim and every log append; used for stale-runner detection. */
+  lastActivityAt?: number;
 };
 
 const MAX_LOG_LINES = 1500;
+/** If a "running" job has no activity for this long, assume the runner died and re-queue it. */
+const STALE_JOB_TIMEOUT_MS = 5 * 60 * 1000;
 
 // Use globalThis so the store survives Next.js hot-reloads and is shared across all routes.
 const g = globalThis as unknown as { __buildJobs?: Map<string, BuildJobRecord>; __buildQueue?: string[] };
@@ -77,6 +81,7 @@ export function appendBuildJobLogs(id: string, lines: string[]): void {
   if (rec.logs.length > MAX_LOG_LINES) {
     rec.logs = rec.logs.slice(rec.logs.length - MAX_LOG_LINES);
   }
+  rec.lastActivityAt = Date.now();
   jobs.set(id, rec);
 }
 
@@ -113,6 +118,26 @@ export function setBuildJobAutoFixInProgress(id: string, inProgress: boolean): v
 }
 
 export function claimNextBuildJob(runnerId: string): BuildJobRecord | undefined {
+  // First, recover any stale "running" jobs whose runner likely died.
+  const now = Date.now();
+  for (const rec of jobs.values()) {
+    if (rec.status !== "running") continue;
+    const lastActive = rec.lastActivityAt ?? rec.startedAt ?? rec.createdAt;
+    if (now - lastActive > STALE_JOB_TIMEOUT_MS) {
+      console.log(
+        `[build-jobs] Re-queuing stale job ${rec.id} (runner ${rec.runnerId}, ` +
+        `idle ${Math.round((now - lastActive) / 1000)}s)`
+      );
+      rec.status = "queued";
+      rec.runnerId = undefined;
+      rec.startedAt = undefined;
+      rec.lastActivityAt = undefined;
+      rec.logs.push(`⚠️ Previous runner stopped responding — re-queued automatically`);
+      jobs.set(rec.id, rec);
+      queue.push(rec.id);
+    }
+  }
+
   while (queue.length > 0) {
     const id = queue.shift()!;
     const rec = jobs.get(id);
@@ -120,6 +145,7 @@ export function claimNextBuildJob(runnerId: string): BuildJobRecord | undefined 
     if (rec.status !== "queued") continue;
     rec.status = "running";
     rec.startedAt = Date.now();
+    rec.lastActivityAt = Date.now();
     rec.runnerId = runnerId;
     jobs.set(id, rec);
     return rec;

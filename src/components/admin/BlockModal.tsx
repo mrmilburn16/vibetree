@@ -119,7 +119,7 @@ export function BlockModal({ isOpen, onClose, onSave, prefillDate }: BlockModalP
                 key={p.label}
                 type="button"
                 onClick={() => applyPreset(p)}
-                className="flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-tertiary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--button-primary-bg)]/50 hover:text-[var(--text-primary)]"
+                className="flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-tertiary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--button-primary-bg)]/50 hover:text-[var(--text-primary)]"
               >
                 <p.icon className="h-3.5 w-3.5" aria-hidden />
                 {p.label}

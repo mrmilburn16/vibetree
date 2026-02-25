@@ -82,11 +82,59 @@ struct MessageBubbleView: View {
                     }
                     .padding(.vertical, Forest.space1)
                 }
+
+                if !message.isStreaming {
+                    metadataFooter
+                }
             }
             .modifier(ForestAssistantBubbleModifier())
 
             Spacer(minLength: 40)
         }
+    }
+
+    // MARK: - Metadata Footer
+
+    @ViewBuilder
+    private var metadataFooter: some View {
+        let parts = metadataParts
+        if !parts.isEmpty {
+            HStack(spacing: Forest.space2) {
+                ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
+                    Text(part)
+                        .font(.system(size: 10))
+                        .foregroundColor(Forest.textTertiary)
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private var metadataParts: [String] {
+        var parts: [String] = []
+
+        if let elapsed = message.elapsedMs {
+            let seconds = Int(elapsed / 1000)
+            if seconds > 0 {
+                parts.append("Generated in \(seconds)s")
+            }
+        }
+
+        let age = Date().timeIntervalSince(message.createdAt)
+        if age > 60 {
+            parts.append("Built \(formatTimeAgo(age))")
+        }
+
+        return parts
+    }
+
+    private func formatTimeAgo(_ interval: TimeInterval) -> String {
+        let minutes = Int(interval / 60)
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
+        if hours < 24 { return "\(hours)h ago" }
+        let days = hours / 24
+        return "\(days)d ago"
     }
 
     // MARK: - System

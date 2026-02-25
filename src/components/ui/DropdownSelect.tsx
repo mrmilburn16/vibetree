@@ -81,7 +81,7 @@ export function DropdownSelect({
         aria-label={ariaLabel}
         className={`
           flex min-w-[160px] items-center justify-between gap-2
-          rounded-[var(--radius-md)] border-2
+          rounded-[var(--radius-md)] border-2 cursor-pointer
           bg-[var(--input-bg)] px-3 py-1.5 pr-8
           text-left text-sm text-[var(--input-text)]
           transition-colors duration-[var(--transition-fast)]
@@ -135,7 +135,12 @@ export function DropdownSelect({
                   {opt.icon}
                 </span>
               )}
-              {opt.label}
+              <span className="flex-1">{opt.label}</span>
+              {opt.disabled && (
+                <span className="ml-1 rounded-full bg-[var(--button-primary-bg)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--button-primary-bg)]">
+                  Soon
+                </span>
+              )}
             </li>
           ))}
         </ul>

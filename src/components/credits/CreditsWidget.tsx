@@ -49,14 +49,14 @@ export function CreditsWidget() {
         aria-label="Credits balance and options"
         className={`
           flex items-center gap-2 rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium
-          transition-colors
+          cursor-pointer transition-colors
           ${isLow ? "border-[var(--link-default)]/50 bg-[color-mix(in_srgb,var(--button-primary-bg)_12%,var(--background-secondary))] text-[var(--link-default)]" : "border-[var(--border-default)] bg-[var(--background-secondary)] text-[var(--text-primary)] hover:bg-[var(--background-tertiary)]"}
         `}
       >
         <span className="flex items-center text-[var(--text-secondary)]" aria-hidden>
           <IconCoins />
         </span>
-        <span>{balance}</span>
+        <span className="text-[var(--semantic-success)]">{balance}</span>
         <span className={isLow ? "text-[var(--link-default)]/80" : "text-[var(--text-tertiary)]"}>{balance === 1 ? "credit" : "credits"}</span>
         <span
           className={`inline-flex text-[var(--text-tertiary)] transition-transform duration-200 ease-out ${open ? "rotate-180" : ""}`}
@@ -69,7 +69,7 @@ export function CreditsWidget() {
       <div
         aria-hidden={!open}
         className={`
-          absolute right-0 top-full z-50 mt-1 min-w-[220px] rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] py-2 shadow-lg
+          absolute left-1/2 top-full z-50 mt-1 min-w-[220px] -translate-x-1/2 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] py-2 shadow-lg
           transition-[opacity,transform] duration-200 ease-out
           ${open ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0 pointer-events-none"}
         `}

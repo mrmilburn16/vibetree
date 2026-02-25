@@ -73,7 +73,7 @@ export function DashboardCard({ project, onDelete, onDuplicate }: DashboardCardP
             <button
               type="button"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDuplicate(e, project.id); }}
-              className="rounded-[var(--radius-sm)] p-2 text-[var(--text-secondary)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--background-tertiary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--button-primary-bg)]"
+              className="cursor-pointer rounded-[var(--radius-sm)] p-2 text-[var(--text-secondary)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--background-tertiary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--button-primary-bg)]"
               aria-label="Duplicate project"
             >
               <IconCopy />
@@ -81,7 +81,7 @@ export function DashboardCard({ project, onDelete, onDuplicate }: DashboardCardP
             <button
               type="button"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(e, project.id); }}
-              className="rounded-[var(--radius-sm)] p-2 text-[var(--button-destructive-text)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--button-destructive-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--semantic-error)]"
+              className="cursor-pointer rounded-[var(--radius-sm)] p-2 text-[var(--button-destructive-text)] opacity-60 transition-opacity hover:opacity-100 hover:bg-[var(--button-destructive-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--semantic-error)]"
               aria-label="Delete project"
             >
               <IconTrash />
@@ -108,7 +108,7 @@ export function NewAppCard({ onClick, index }: NewAppCardProps) {
     <button
       type="button"
       onClick={onClick}
-      className="dashboard-card-hover dashboard-new-app-card group flex h-full min-h-[180px] flex-col items-center justify-center gap-2 rounded-[var(--radius-lg)] border-2 border-dashed border-[var(--border-default)] bg-[var(--background-secondary)] text-[var(--text-secondary)] transition-colors hover:border-[var(--button-primary-bg)]/50 hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--button-primary-bg)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background-primary)] animate-stagger-in"
+      className="dashboard-card-hover dashboard-new-app-card group flex h-full min-h-[180px] cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-lg)] border-2 border-dashed border-[var(--border-default)] bg-[var(--background-secondary)] text-[var(--text-secondary)] transition-colors hover:border-[var(--button-primary-bg)]/50 hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--button-primary-bg)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background-primary)] animate-stagger-in"
       style={{ animationDelay: `${index * 60}ms` }}
     >
       <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--background-tertiary)] text-[var(--text-tertiary)] transition-transform group-hover:scale-110 group-hover:bg-[var(--button-primary-bg)]/20 group-hover:text-[var(--link-default)]">

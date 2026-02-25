@@ -56,7 +56,7 @@ function OptionPill({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full rounded-[var(--radius-md)] border-2 px-4 py-3 text-left transition-all duration-[var(--transition-fast)] ${
+      className={`w-full cursor-pointer rounded-[var(--radius-md)] border-2 px-4 py-3 text-left transition-all duration-[var(--transition-fast)] ${
         selected
           ? "border-[var(--button-primary-bg)] bg-[var(--button-primary-bg)]/10"
           : "border-[var(--border-default)] bg-[var(--background-secondary)] hover:border-[var(--border-subtle)] hover:bg-[var(--background-tertiary)]"
@@ -179,7 +179,7 @@ export function GuidedModeWizard({
           <button
             type="button"
             onClick={onSkip}
-            className="flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
+            className="flex cursor-pointer items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
             aria-label="Skip guided mode"
           >
             <X className="h-3.5 w-3.5" aria-hidden />

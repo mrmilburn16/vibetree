@@ -15,6 +15,10 @@ export interface ChatMessage {
   usage?: { input_tokens: number; output_tokens: number };
   /** Estimated cost in USD for this message (real LLM only). */
   estimatedCostUsd?: number;
+  /** How long the LLM took to generate this response (ms). */
+  elapsedMs?: number;
+  /** When this message was created (epoch ms). Used for "Built X ago" on restored messages. */
+  createdAt?: number;
 }
 
 const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
@@ -62,6 +66,8 @@ function loadChatMessagesFromLocalStorage(projectId: string): ChatMessage[] | nu
           ? { usage: m.usage as { input_tokens: number; output_tokens: number } }
           : {}),
         ...(typeof m.estimatedCostUsd === "number" ? { estimatedCostUsd: m.estimatedCostUsd } : {}),
+        ...(typeof m.elapsedMs === "number" ? { elapsedMs: m.elapsedMs } : {}),
+        ...(typeof m.createdAt === "number" ? { createdAt: m.createdAt } : {}),
       }));
 
     // Drop stale in-flight progress messages on restore.
@@ -789,6 +795,7 @@ export function useChat(
             Array.isArray(doneEvent.projectFiles) &&
             doneEvent.projectFiles.some((f: { path: string }) => f.path.endsWith(".swift"));
           const validateMessageId = `validate-${Date.now()}`;
+          const generationElapsedMs = Date.now() - localStartedAt;
           const realMessage: ChatMessage = {
             id: am?.id ?? validateMessageId,
             role: "assistant",
@@ -796,6 +803,8 @@ export function useChat(
             editedFiles,
             ...(usage && { usage }),
             ...(estimatedCostUsd !== undefined && { estimatedCostUsd }),
+            elapsedMs: generationElapsedMs,
+            createdAt: Date.now(),
           };
 
           if (isProBuild && onProBuildComplete) {
@@ -892,10 +901,11 @@ export function useChat(
                   result.status === "succeeded"
                     ? `${content}\n\n${validationLine}`
                     : validationLine;
+                const totalElapsedMs = Date.now() - localStartedAt;
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === validateMessageId
-                      ? { ...m, content: finalContent, editedFiles, ...(usage && { usage }), ...(estimatedCostUsd !== undefined && { estimatedCostUsd }) }
+                      ? { ...m, content: finalContent, editedFiles, ...(usage && { usage }), ...(estimatedCostUsd !== undefined && { estimatedCostUsd }), elapsedMs: totalElapsedMs, createdAt: Date.now() }
                       : m
                   )
                 );
@@ -974,6 +984,7 @@ export function useChat(
         id: `user-${Date.now()}`,
         role: "user",
         content: trimmed.slice(0, MAX_MESSAGE_LENGTH),
+        createdAt: Date.now(),
       };
       setMessages((prev) => {
         const next = [...prev, userMsg];

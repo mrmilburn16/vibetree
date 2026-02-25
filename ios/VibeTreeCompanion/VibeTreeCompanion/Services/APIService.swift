@@ -8,7 +8,11 @@ actor APIService {
     }
 
     private var apiToken: String {
-        UserDefaults.standard.string(forKey: "apiToken") ?? ""
+        get async {
+            let keychain = await AuthService.shared.currentToken
+            if let keychain, !keychain.isEmpty { return keychain }
+            return UserDefaults.standard.string(forKey: "apiToken") ?? ""
+        }
     }
 
     private let decoder: JSONDecoder = {
@@ -23,8 +27,9 @@ actor APIService {
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !apiToken.isEmpty {
-            req.setValue("Bearer \(apiToken)", forHTTPHeaderField: "Authorization")
+        let token = await apiToken
+        if !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         req.httpBody = body
         req.timeoutInterval = 10
@@ -85,15 +90,16 @@ actor APIService {
 
     // MARK: - Chat / Messaging
 
-    func streamMessageRequest(projectId: String, message: String, model: String, projectType: String) throws -> URLRequest {
+    func streamMessageRequest(projectId: String, message: String, model: String, projectType: String) async throws -> URLRequest {
         guard let url = URL(string: "\(baseURL)/api/projects/\(projectId)/message/stream") else {
             throw APIError.invalidURL
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !apiToken.isEmpty {
-            req.setValue("Bearer \(apiToken)", forHTTPHeaderField: "Authorization")
+        let token = await apiToken
+        if !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         req.timeoutInterval = 300
         let payload: [String: Any] = [

@@ -486,6 +486,17 @@ textarea:-webkit-autofill:active {
     0 12px 28px -8px rgba(0, 0, 0, 0.35);
 }
 
+/* Ensure all interactive elements show pointer cursor */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary {
+  cursor: pointer;
+}
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
   .animate-fade-in-fast,

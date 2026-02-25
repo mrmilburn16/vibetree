@@ -202,7 +202,7 @@ function InheritedBadge({ isOverridden, onReset }: { isOverridden: boolean; onRe
       <button
         type="button"
         onClick={onReset}
-        className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--button-primary-bg)] hover:text-[var(--link-default)]"
+        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--button-primary-bg)] hover:text-[var(--link-default)]"
         title="Reset to your default"
       >
         <RotateCcw className="h-2.5 w-2.5" aria-hidden />
@@ -595,7 +595,7 @@ export function ProjectSettingsModal({
                 <button
                   type="button"
                   onClick={() => markAsOverride("deploymentTarget")}
-                  className="mt-1 text-[10px] text-[var(--link-default)] hover:underline"
+                  className="mt-1 cursor-pointer text-[10px] text-[var(--link-default)] hover:underline"
                 >
                   Override for this project only
                 </button>
@@ -621,7 +621,7 @@ export function ProjectSettingsModal({
                 <button
                   type="button"
                   onClick={() => markAsOverride("deviceFamily")}
-                  className="mt-1 text-[10px] text-[var(--link-default)] hover:underline"
+                  className="mt-1 cursor-pointer text-[10px] text-[var(--link-default)] hover:underline"
                 >
                   Override for this project only
                 </button>
@@ -647,7 +647,7 @@ export function ProjectSettingsModal({
                 <button
                   type="button"
                   onClick={() => markAsOverride("orientation")}
-                  className="mt-1 text-[10px] text-[var(--link-default)] hover:underline"
+                  className="mt-1 cursor-pointer text-[10px] text-[var(--link-default)] hover:underline"
                 >
                   Override for this project only
                 </button>

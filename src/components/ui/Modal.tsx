@@ -43,7 +43,7 @@ export function Modal({ isOpen, onClose, title, children, footer, dialogClassNam
       role="dialog"
     >
       <div
-        className="absolute inset-0 bg-black/60"
+        className="absolute inset-0 cursor-pointer bg-black/60"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -61,7 +61,7 @@ export function Modal({ isOpen, onClose, title, children, footer, dialogClassNam
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="relative z-10 rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
+            className="relative z-10 cursor-pointer rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M18 6 6 18M6 6l12 12" />

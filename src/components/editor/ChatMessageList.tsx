@@ -1,8 +1,27 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 import { Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
 import type { ChatMessage } from "./useChat";
+
+function formatElapsed(ms: number): string {
+  const s = Math.max(1, Math.round(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
+}
+
+function formatTimeAgo(epochMs: number): string | null {
+  const diff = Date.now() - epochMs;
+  if (diff < 60_000) return null;
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 const STREAM_WORD_DELAY_MS = 45;
 
@@ -24,10 +43,55 @@ const REASONING_PHRASES = new Set([
 
 function isReasoningMessage(msg: { id?: string; role: string; content: string; editedFiles?: string[] }): boolean {
   if (msg.role !== "assistant" || (msg.editedFiles?.length ?? 0) > 0) return false;
-  // Status/progress messages should render immediately and update live (muted styling).
   if (typeof msg.id === "string" && msg.id.startsWith("stream-")) return true;
   if (msg.content.startsWith("Validating build on Mac…")) return true;
   return msg.content.length < 50 || REASONING_PHRASES.has(msg.content.trim());
+}
+
+function isStreamFileMessage(msg: ChatMessage): boolean {
+  return typeof msg.id === "string" && msg.id.startsWith("stream-file-");
+}
+
+function StreamProgressBar({ messages }: { messages: ChatMessage[] }) {
+  const fileMessages = messages.filter(isStreamFileMessage);
+  if (fileMessages.length === 0) return null;
+
+  const lastFile = fileMessages[fileMessages.length - 1];
+  const countMatch = lastFile.content.match(/\(file (\d+)\)/);
+  const currentCount = countMatch ? parseInt(countMatch[1], 10) : fileMessages.length;
+  const fileNames = fileMessages.map((m) => {
+    const match = m.content.match(/^Generating (.+?)(?:\s+\(file|$| ·)/);
+    return match?.[1] ?? m.content;
+  });
+
+  return (
+    <div className="mb-1 rounded-lg border border-[var(--border-default)]/50 bg-[var(--background-secondary)]/50 px-3 py-2">
+      <div className="mb-1.5 flex items-center justify-between text-xs text-[var(--text-tertiary)]">
+        <span>Building app…</span>
+        <span className="font-mono">{currentCount} {currentCount === 1 ? "file" : "files"}</span>
+      </div>
+      <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--border-default)]/40">
+        <div
+          className="h-full rounded-full bg-[var(--button-primary-bg)] transition-all duration-300 ease-out"
+          style={{ width: "100%" }}
+        />
+      </div>
+      {fileNames.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
+          {fileNames.slice(-8).map((name, i) => (
+            <span key={i} className="text-[10px] font-mono text-[var(--text-tertiary)]/70">
+              {name}
+            </span>
+          ))}
+          {fileNames.length > 8 && (
+            <span className="text-[10px] text-[var(--text-tertiary)]/50">
+              +{fileNames.length - 8} more
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function BuildFeedback({ projectId }: { projectId?: string }) {
@@ -62,7 +126,7 @@ function BuildFeedback({ projectId }: { projectId?: string }) {
       <button
         type="button"
         onClick={() => handleRate("up")}
-        className="rounded p-1 text-[var(--text-tertiary)] hover:text-green-400 hover:bg-green-400/10 transition-colors"
+        className="cursor-pointer rounded p-1 text-[var(--text-tertiary)] hover:text-green-400 hover:bg-green-400/10 transition-colors"
         title="Good build"
       >
         <ThumbsUp className="h-3.5 w-3.5" />
@@ -70,7 +134,7 @@ function BuildFeedback({ projectId }: { projectId?: string }) {
       <button
         type="button"
         onClick={() => handleRate("down")}
-        className="rounded p-1 text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-400/10 transition-colors"
+        className="cursor-pointer rounded p-1 text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-400/10 transition-colors"
         title="Build had issues"
       >
         <ThumbsDown className="h-3.5 w-3.5" />
@@ -244,7 +308,7 @@ export function ChatMessageList({
               <button
                 type="button"
                 onClick={onEnterGuidedMode}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[var(--button-primary-bg)]/30 bg-[var(--button-primary-bg)]/10 px-4 py-2 text-xs font-medium text-[var(--button-primary-bg)] hover:bg-[var(--button-primary-bg)]/20 transition-colors"
+                className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[var(--button-primary-bg)]/30 bg-[var(--button-primary-bg)]/10 px-4 py-2 text-xs font-medium text-[var(--button-primary-bg)] hover:bg-[var(--button-primary-bg)]/20 transition-colors"
               >
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
                 Try Guided Mode
@@ -253,7 +317,12 @@ export function ChatMessageList({
           </div>
         )}
         <div className="space-y-1">
+          {/* Consolidated progress bar for streaming file discovery */}
+          {messages.some(isStreamFileMessage) && (
+            <StreamProgressBar messages={messages} />
+          )}
           {messages.map((msg, index) => {
+          if (isStreamFileMessage(msg)) return null;
           const isStreamingThis = msg.role === "assistant" && msg.id === streamingMessageId;
           const displayContent = isStreamingThis ? streamedContent : msg.content;
           const streamingComplete = !isStreamingThis || streamedContent === msg.content;
@@ -303,19 +372,21 @@ export function ChatMessageList({
                 </p>
               </div>
             )}
-            {msg.role === "assistant" && streamingComplete && (msg.estimatedCostUsd != null || msg.usage) && (
-              <p className="mt-2 text-xs text-[var(--text-tertiary)]" aria-live="polite">
-                {msg.estimatedCostUsd != null && (
-                  <span>~${msg.estimatedCostUsd < 0.005 ? "<0.01" : msg.estimatedCostUsd.toFixed(2)}</span>
-                )}
-                {msg.estimatedCostUsd != null && msg.usage && " · "}
-                {msg.usage && (
-                  <span>
-                    {(msg.usage.input_tokens / 1000).toFixed(1)}k in / {(msg.usage.output_tokens / 1000).toFixed(1)}k out
-                  </span>
-                )}
-              </p>
-            )}
+            {msg.role === "assistant" && streamingComplete && (() => {
+              const timeAgo = msg.createdAt ? formatTimeAgo(msg.createdAt) : null;
+              const hasAny = msg.elapsedMs != null || msg.estimatedCostUsd != null || msg.usage || timeAgo;
+              if (!hasAny) return null;
+              const parts: React.ReactNode[] = [];
+              if (msg.elapsedMs != null) parts.push(<span key="elapsed">Generated in {formatElapsed(msg.elapsedMs)}</span>);
+              if (msg.estimatedCostUsd != null) parts.push(<span key="cost">~${msg.estimatedCostUsd < 0.005 ? "<0.01" : msg.estimatedCostUsd.toFixed(2)}</span>);
+              if (msg.usage) parts.push(<span key="tokens">{(msg.usage.input_tokens / 1000).toFixed(1)}k in / {(msg.usage.output_tokens / 1000).toFixed(1)}k out</span>);
+              if (timeAgo) parts.push(<span key="ago">Built {timeAgo}</span>);
+              return (
+                <p className="mt-2 text-xs text-[var(--text-tertiary)]" aria-live="polite">
+                  {parts.map((p, i) => (<span key={i}>{i > 0 && " · "}{p}</span>))}
+                </p>
+              );
+            })()}
             {msg.role === "assistant" &&
               streamingComplete &&
               msg.editedFiles?.length &&
