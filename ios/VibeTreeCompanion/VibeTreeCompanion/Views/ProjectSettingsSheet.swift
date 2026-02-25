@@ -215,7 +215,7 @@ struct ProjectSettingsSheet: View {
 
             Button {
                 if let url = URL(string:
-                    "\(UserDefaults.standard.string(forKey: "serverURL") ?? "http://localhost:3001")/api/projects/\(project.id)/export-xcode"
+                    "\(UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001")/api/projects/\(project.id)/export-xcode"
                 ) {
                     UIApplication.shared.open(url)
                 }

@@ -14,7 +14,12 @@ export interface LLMResponse {
   /** When present (e.g. from structured Claude response), route can persist these files. */
   parsedFiles?: ParsedFile[];
   /** Token usage from the API (real LLM only). Used to show cost after build. */
-  usage?: { input_tokens: number; output_tokens: number };
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
 }
 
 const MOCK_APP_JS = `import { StatusBar } from "expo-status-bar";

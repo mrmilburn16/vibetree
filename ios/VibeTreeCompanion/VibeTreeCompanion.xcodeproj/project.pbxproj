@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		01FE45E3E3A7CA6E38BB5BD6 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731EE663BC9493CE53320C /* ShareSheet.swift */; };
 		07D286F23F943D7791D694C9 /* CreditsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D387383822D7E75BFAC5E0 /* CreditsView.swift */; };
 		0F726B26A336512F0D06B712 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C6405D7C6E05BEB87C8672 /* Project.swift */; };
 		10898404EA7D4B1A05FC8165 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CD4869FE21CD800B7861AF /* AuthService.swift */; };
@@ -93,6 +94,7 @@
 		6687F22AB0D5F25CE9DE637F /* ProjectListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectListView.swift; sourceTree = "<group>"; };
 		66D6E9396B03B06208CB1D11 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		755DAB791D8480380F840223 /* BuildJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildJob.swift; sourceTree = "<group>"; };
+		77731EE663BC9493CE53320C /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 		87ABF0F270515D3B7C65F15F /* VibeTreeCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeTreeCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		87D36B420412F0C0ED6F5E2B /* VibeTreeCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VibeTreeCompanionApp.swift; sourceTree = "<group>"; };
 		91079938785C568D4D591097 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
@@ -157,6 +159,7 @@
 				B2E58A0D400F27DAB87BD6B7 /* ProjectSettingsSheet.swift */,
 				3FEF5B45B4C2284D0C52A33D /* RootView.swift */,
 				51FF0DD21A113B0673EA1D19 /* SettingsView.swift */,
+				77731EE663BC9493CE53320C /* ShareSheet.swift */,
 				99D21CAE83135F29D3AE6FAA /* SignInView.swift */,
 			);
 			path = Views;
@@ -347,6 +350,7 @@
 				D65D6A7BDB26352546E21C25 /* ProjectSettingsSheet.swift in Sources */,
 				8FEC08BEB7857A84EECF831D /* RootView.swift in Sources */,
 				FE03EB2CB99C71DA2B79786B /* SettingsView.swift in Sources */,
+				01FE45E3E3A7CA6E38BB5BD6 /* ShareSheet.swift in Sources */,
 				D2903033EF6B53F097753375 /* SharedColors.swift in Sources */,
 				1D5BCE24AB9AA58DC149F981 /* SignInView.swift in Sources */,
 				912B6A99EE08CCF089B40119 /* VibeTreeCompanionApp.swift in Sources */,

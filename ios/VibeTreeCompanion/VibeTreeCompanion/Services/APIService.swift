@@ -4,7 +4,7 @@ actor APIService {
     static let shared = APIService()
 
     private var baseURL: String {
-        UserDefaults.standard.string(forKey: "serverURL") ?? "http://localhost:3001"
+        UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
     }
 
     private var apiToken: String {
@@ -125,14 +125,14 @@ actor APIService {
         URL(string: "\(baseURL)/api/projects/\(projectId)/export-xcode")
     }
 
-    func installManifestURL(projectId: String) -> URL? {
-        guard let manifestURL = URL(string: "\(baseURL)/api/projects/\(projectId)/install-manifest") else { return nil }
-        var components = URLComponents(string: "itms-services://")
-        components?.queryItems = [
-            URLQueryItem(name: "action", value: "download-manifest"),
-            URLQueryItem(name: "url", value: manifestURL.absoluteString)
-        ]
-        return components?.url
+    func triggerDeviceInstall(projectId: String) async throws -> String {
+        let payload: [String: Any] = ["projectName": "Untitled app"]
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        let data = try await request("/api/projects/\(projectId)/build-install", method: "POST", body: body)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let job = json?["job"] as? [String: Any]
+        guard let jobId = job?["id"] as? String else { throw APIError.invalidResponse }
+        return jobId
     }
 
     // MARK: - Credits
@@ -161,6 +161,12 @@ enum APIError: LocalizedError {
         case .invalidURL: return "Invalid server URL"
         case .invalidResponse: return "Invalid response from server"
         case .httpError(let code, let body):
+            if let body,
+               let data = body.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let msg = json["error"] as? String {
+                return msg
+            }
             return "HTTP \(code): \(body ?? "Unknown error")"
         }
     }

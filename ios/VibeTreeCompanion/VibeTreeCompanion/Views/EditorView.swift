@@ -24,7 +24,18 @@ struct EditorView: View {
                 portraitLayout
             }
         }
-        .background(Forest.backgroundPrimary)
+        .background(
+            ZStack {
+                Forest.backgroundPrimary
+                RadialGradient(
+                    colors: [Forest.accent.opacity(0.04), Color.clear],
+                    center: .init(x: 0.5, y: 0.45),
+                    startRadius: 0,
+                    endRadius: 400
+                )
+                .ignoresSafeArea()
+            }
+        )
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)

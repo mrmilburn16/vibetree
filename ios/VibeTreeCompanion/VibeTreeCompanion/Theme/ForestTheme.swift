@@ -6,10 +6,10 @@ enum Forest {
     static let backgroundSecondary = Color(hex: "141416")
     static let backgroundTertiary  = Color(hex: "1C1C1E")
 
-    // MARK: - Accent (Emerald)
-    static let accent              = Color(hex: "10B981")
-    static let accentLight         = Color(hex: "34D399")
-    static let accentLightest      = Color(hex: "6EE7B7")
+    // MARK: - Accent (Twilight Violet — matches desktop --button-primary-bg)
+    static let accent              = Color(hex: "6366F1")
+    static let accentLight         = Color(hex: "818CF8")
+    static let accentLightest      = Color(hex: "A5B4FC")
 
     // MARK: - Text
     static let textPrimary         = Color(hex: "FAFAFA")
@@ -27,7 +27,7 @@ enum Forest {
     static let error               = Color(hex: "EF4444")
 
     // MARK: - Buttons
-    static let buttonPrimaryBg     = Color(hex: "10B981")
+    static let buttonPrimaryBg     = Color(hex: "6366F1")
     static let buttonPrimaryText   = Color(hex: "FFFFFF")
     static let buttonSecondaryBg   = Color(hex: "27272A")
     static let buttonSecondaryHover = Color(hex: "3F3F46")
@@ -39,12 +39,12 @@ enum Forest {
     static let inputText           = Color(hex: "FAFAFA")
     static let inputPlaceholder    = Color(hex: "71717A")
 
-    // MARK: - Chat bubbles
-    static let chatBubbleUserBg    = Color(hex: "10B981").opacity(0.14)
+    // MARK: - Chat bubbles (purple tint matching desktop --chat-bubble-user-bg)
+    static let chatBubbleUserBg    = Color(hex: "6366F1").opacity(0.14)
     static let chatBubbleAssistantBg = Color(hex: "141416")
 
     // MARK: - Tab bar
-    static let tabActive           = Color(hex: "10B981")
+    static let tabActive           = Color(hex: "6366F1")
     static let tabInactive         = Color(hex: "71717A")
 
     // MARK: - Progress bar track
@@ -182,6 +182,16 @@ struct ForestUserBubbleModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: Forest.radiusMd)
                     .stroke(Forest.accent.opacity(0.2), lineWidth: 1)
             )
+            .overlay(alignment: .leading) {
+                UnevenRoundedRectangle(
+                    topLeadingRadius: Forest.radiusMd,
+                    bottomLeadingRadius: Forest.radiusMd,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 0
+                )
+                .fill(Forest.accent)
+                .frame(width: 3)
+            }
     }
 }
 
@@ -189,7 +199,20 @@ struct ForestAssistantBubbleModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(Forest.space3)
-            .background(Forest.chatBubbleAssistantBg)
+            .background(
+                ZStack {
+                    Forest.chatBubbleAssistantBg
+                    RadialGradient(
+                        colors: [
+                            Forest.accent.opacity(0.06),
+                            Color.clear
+                        ],
+                        center: .topLeading,
+                        startRadius: 0,
+                        endRadius: 200
+                    )
+                }
+            )
             .cornerRadius(Forest.radiusMd)
             .overlay(
                 RoundedRectangle(cornerRadius: Forest.radiusMd)

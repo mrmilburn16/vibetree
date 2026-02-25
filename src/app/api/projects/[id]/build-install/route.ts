@@ -59,6 +59,16 @@ export async function POST(
     }
   }
 
+  if (files.length === 0) {
+    return Response.json(
+      {
+        error:
+          "No files to build. Send a message first to generate your app, then try Install on Device again.",
+      },
+      { status: 400 }
+    );
+  }
+
   const job = createBuildJob({
     projectId,
     projectName: project.name || providedName || "Untitled app",
@@ -68,7 +78,7 @@ export async function POST(
     attempt: 1,
     maxAttempts: 8,
     outputType: "device",
-    files: files.length > 0 ? files : undefined,
+    files,
   });
 
   return Response.json({ job });

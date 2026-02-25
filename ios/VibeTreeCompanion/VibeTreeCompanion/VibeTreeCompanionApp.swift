@@ -19,6 +19,12 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
 
+        // Migrate stale localhost serverURL to the Mac's local IP
+        let stored = UserDefaults.standard.string(forKey: "serverURL") ?? ""
+        if stored.isEmpty || stored.contains("localhost") {
+            UserDefaults.standard.set("http://192.168.12.40:3001", forKey: "serverURL")
+        }
+
         UIApplication.shared.setMinimumBackgroundFetchInterval(UIApplication.backgroundFetchIntervalMinimum)
 
         Task { @MainActor in

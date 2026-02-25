@@ -49,7 +49,7 @@ final class AuthService: ObservableObject {
     // MARK: - API
 
     private func performSignIn(email: String, password: String) async throws -> String {
-        let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://localhost:3001"
+        let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
         guard let url = URL(string: "\(baseURL)/api/auth/login") else {
             throw APIError.invalidURL
         }

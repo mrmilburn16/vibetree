@@ -230,6 +230,8 @@ export async function POST(
             model: model ?? "sonnet-4.5",
             inputTokens: usage?.input_tokens ?? estimatedInputTokens,
             outputTokens: usage?.output_tokens ?? Math.round(lastReceivedChars / 4),
+            cacheWriteTokens: usage?.cache_creation_input_tokens ?? 0,
+            cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
             estimatedCostUsd: estimatedCostUsd ?? 0,
             durationMs: Date.now() - startedAt,
             projectType,

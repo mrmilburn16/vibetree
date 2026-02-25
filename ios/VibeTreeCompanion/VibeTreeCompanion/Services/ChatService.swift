@@ -1,4 +1,7 @@
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "com.vibetree.companion", category: "ChatService")
 
 @MainActor
 final class ChatService: ObservableObject {
@@ -34,9 +37,16 @@ final class ChatService: ObservableObject {
 
     func sendMessage(_ text: String, model: String, projectType: ProjectType) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.count <= 4000 else { return }
-        guard !isStreaming else { return }
+        guard !trimmed.isEmpty, trimmed.count <= 4000 else {
+            logger.error("sendMessage blocked: empty or too long (\(text.count) chars)")
+            return
+        }
+        guard !isStreaming else {
+            logger.error("sendMessage blocked: already streaming")
+            return
+        }
 
+        logger.info("sendMessage: projectId=\(self.projectId) model=\(model) type=\(projectType.rawValue)")
         messages.append(.userMessage(trimmed))
         isStreaming = true
         buildStatus = .building
@@ -90,12 +100,15 @@ final class ChatService: ObservableObject {
                 projectType: projectType.rawValue
             )
 
+            logger.info("performStream: sending to \(request.url?.absoluteString ?? "nil")")
             let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                logger.error("performStream: HTTP \(code)")
                 throw APIError.httpError(code, "Stream request failed")
             }
+            logger.info("performStream: connected, HTTP \(http.statusCode)")
 
             var fullText = ""
             var editedFiles: [String] = []
@@ -138,6 +151,7 @@ final class ChatService: ObservableObject {
             }
             buildStatus = .failed(error.localizedDescription)
             self.error = error.localizedDescription
+            logger.error("performStream failed: \(error.localizedDescription)")
         }
 
         isStreaming = false

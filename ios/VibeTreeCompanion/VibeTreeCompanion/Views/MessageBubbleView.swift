@@ -2,6 +2,9 @@ import SwiftUI
 
 struct MessageBubbleView: View {
     let message: ChatMessage
+    @State private var visibleWordCount: Int = 0
+    @State private var animationTimer: Timer?
+    @State private var hasAnimated = false
 
     var body: some View {
         switch message.role {
@@ -43,44 +46,15 @@ struct MessageBubbleView: View {
                 }
 
                 if !message.text.isEmpty {
-                    Text(message.text)
-                        .font(.system(size: Forest.textBase))
-                        .foregroundColor(Forest.textPrimary)
-                        .textSelection(.enabled)
+                    streamingText
                 }
 
                 if let files = message.editedFiles, !files.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Edited files")
-                            .font(.system(size: Forest.textXs, weight: .semibold))
-                            .foregroundColor(Forest.textTertiary)
-                            .textCase(.uppercase)
-                            .tracking(0.6)
-
-                        ForEach(files, id: \.self) { file in
-                            HStack(spacing: 4) {
-                                Image(systemName: "doc.fill")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(Forest.accent)
-                                Text(file)
-                                    .font(.system(size: Forest.textXs, design: .monospaced))
-                                    .foregroundColor(Forest.textSecondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-                    .padding(.top, Forest.space1)
+                    filesList(files)
                 }
 
                 if message.isStreaming && message.text.isEmpty {
-                    HStack(spacing: 4) {
-                        ForEach(0..<3) { i in
-                            Circle()
-                                .fill(Forest.accent.opacity(0.5))
-                                .frame(width: 6, height: 6)
-                        }
-                    }
-                    .padding(.vertical, Forest.space1)
+                    typingIndicator
                 }
 
                 if !message.isStreaming {
@@ -91,6 +65,88 @@ struct MessageBubbleView: View {
 
             Spacer(minLength: 40)
         }
+    }
+
+    @ViewBuilder
+    private var streamingText: some View {
+        let words = message.text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        let totalWords = words.count
+
+        if message.isStreaming && !hasAnimated {
+            Text(words.prefix(visibleWordCount).joined(separator: " "))
+                .font(.system(size: Forest.textBase))
+                .foregroundColor(Forest.textPrimary)
+                .textSelection(.enabled)
+                .onAppear { startWordAnimation(totalWords: totalWords) }
+                .onDisappear { animationTimer?.invalidate() }
+                .onChange(of: message.text) { _, _ in
+                    visibleWordCount = totalWords
+                }
+        } else {
+            Text(message.text)
+                .font(.system(size: Forest.textBase))
+                .foregroundColor(Forest.textPrimary)
+                .textSelection(.enabled)
+                .onAppear { hasAnimated = true }
+        }
+    }
+
+    private func startWordAnimation(totalWords: Int) {
+        visibleWordCount = 0
+        animationTimer?.invalidate()
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { timer in
+            if visibleWordCount < totalWords {
+                visibleWordCount += 1
+            } else {
+                timer.invalidate()
+                hasAnimated = true
+            }
+        }
+    }
+
+    private func filesList(_ files: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Edited files")
+                .font(.system(size: Forest.textXs, weight: .semibold))
+                .foregroundColor(Forest.textTertiary)
+                .textCase(.uppercase)
+                .tracking(0.6)
+
+            ForEach(files, id: \.self) { file in
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(Forest.accent)
+                    Text(file)
+                        .font(.system(size: Forest.textXs, design: .monospaced))
+                        .foregroundColor(Forest.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.top, Forest.space1)
+    }
+
+    private var typingIndicator: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3) { i in
+                Circle()
+                    .fill(Forest.accent.opacity(0.5))
+                    .frame(width: 6, height: 6)
+                    .scaleEffect(typingDotScale(index: i))
+                    .animation(
+                        .easeInOut(duration: 0.5)
+                            .repeatForever()
+                            .delay(Double(i) * 0.15),
+                        value: message.isStreaming
+                    )
+            }
+        }
+        .padding(.vertical, Forest.space1)
+    }
+
+    private func typingDotScale(index: Int) -> CGFloat {
+        message.isStreaming ? 1.3 : 0.7
     }
 
     // MARK: - Metadata Footer

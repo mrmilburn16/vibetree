@@ -184,7 +184,7 @@ struct ShareSheet: View {
 
         Task {
             do {
-                let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://localhost:3001"
+                let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
                 guard let url = URL(string: "\(baseURL)/api/projects/\(project.id)/invite-testers") else {
                     inviteStatus = .error("Invalid server URL")
                     return

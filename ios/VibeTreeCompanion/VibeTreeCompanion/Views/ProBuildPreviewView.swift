@@ -1,10 +1,17 @@
 import SwiftUI
+import os.log
+
+private let logger = Logger(subsystem: "com.vibetree.companion", category: "ProBuildPreview")
 
 struct ProBuildPreviewView: View {
     let projectId: String
     @ObservedObject var chatService: ChatService
     @State private var isBuildTriggered = false
     @State private var buildError: String?
+    @State private var installJobId: String?
+    @State private var installStatus: String?
+    @State private var installLogTail: [String] = []
+    @State private var installPolling = false
 
     var body: some View {
         VStack(spacing: Forest.space6) {
@@ -125,14 +132,75 @@ struct ProBuildPreviewView: View {
                     installOnDevice()
                 } label: {
                     HStack(spacing: Forest.space2) {
-                        Image(systemName: "iphone.and.arrow.forward")
-                            .font(.system(size: 16))
-                        Text("Install on Device")
+                        if installPolling {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "iphone.and.arrow.forward")
+                                .font(.system(size: 16))
+                        }
+                        Text(installButtonLabel)
                             .font(.system(size: Forest.textBase, weight: .semibold))
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ForestPrimaryButtonStyle())
+                .disabled(installPolling)
+
+                if let status = installStatus {
+                    VStack(alignment: .leading, spacing: Forest.space2) {
+                        HStack(spacing: Forest.space2) {
+                            if status == "succeeded" {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(Forest.success)
+                                    .font(.system(size: 14))
+                                Text("Installed & launched on your iPhone!")
+                                    .font(.system(size: Forest.textSm, weight: .medium))
+                                    .foregroundColor(Forest.success)
+                            } else if status == "failed" {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: Forest.space2) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(Forest.error)
+                                            .font(.system(size: 14))
+                                        Text("Install failed")
+                                            .font(.system(size: Forest.textSm, weight: .medium))
+                                            .foregroundColor(Forest.error)
+                                    }
+                                    if let err = buildError {
+                                        Text(err)
+                                            .font(.system(size: Forest.textXs))
+                                            .foregroundColor(Forest.textSecondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                            } else {
+                                ProgressView()
+                                    .tint(Forest.accent)
+                                    .scaleEffect(0.6)
+                                Text(status == "queued" ? "Waiting for build runner…" : "Building & installing…")
+                                    .font(.system(size: Forest.textSm))
+                                    .foregroundColor(Forest.textSecondary)
+                            }
+                        }
+
+                        if !installLogTail.isEmpty {
+                            Text(installLogTail.suffix(3).joined(separator: "\n"))
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(Forest.textTertiary)
+                                .lineLimit(3)
+                        }
+                    }
+                    .padding(Forest.space3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Forest.backgroundSecondary)
+                    .cornerRadius(Forest.radiusSm)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Forest.radiusSm)
+                            .stroke(Forest.border, lineWidth: 1)
+                    )
+                }
 
                 Button {
                     triggerBuild()
@@ -162,6 +230,12 @@ struct ProBuildPreviewView: View {
             .buttonStyle(ForestPrimaryButtonStyle())
             .padding(.horizontal, Forest.space8)
         }
+    }
+
+    private var installButtonLabel: String {
+        if installPolling { return "Installing…" }
+        if installStatus == "succeeded" { return "Re-install on Device" }
+        return "Install on Device"
     }
 
     // MARK: - Xcode Export
@@ -200,9 +274,56 @@ struct ProBuildPreviewView: View {
     }
 
     private func installOnDevice() {
+        guard !installPolling else { return }
+        installPolling = true
+        installStatus = "queued"
+        installLogTail = []
+        buildError = nil
+
         Task {
-            if let url = await APIService.shared.installManifestURL(projectId: projectId) {
-                await UIApplication.shared.open(url)
+            do {
+                let jobId = try await APIService.shared.triggerDeviceInstall(projectId: projectId)
+                installJobId = jobId
+                logger.info("Install job created: \(jobId)")
+                await pollInstallJob(jobId: jobId)
+            } catch {
+                logger.error("Install failed: \(error.localizedDescription)")
+                installStatus = "failed"
+                buildError = error.localizedDescription
+                installPolling = false
+            }
+        }
+    }
+
+    private func pollInstallJob(jobId: String) async {
+        var currentJobId = jobId
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            do {
+                let job = try await APIService.shared.fetchBuildJob(id: currentJobId)
+                guard let job else { continue }
+
+                let status = job.status.rawValue
+                let logs = job.logs
+
+                await MainActor.run {
+                    installLogTail = Array(logs.suffix(5))
+                }
+
+                if status == "failed", let next = job.nextJobId {
+                    currentJobId = next
+                    await MainActor.run { installJobId = next }
+                    continue
+                }
+
+                await MainActor.run { installStatus = status }
+
+                if status == "succeeded" || status == "failed" {
+                    await MainActor.run { installPolling = false }
+                    return
+                }
+            } catch {
+                logger.error("Poll error: \(error.localizedDescription)")
             }
         }
     }

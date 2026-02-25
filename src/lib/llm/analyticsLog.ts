@@ -17,6 +17,9 @@ export interface LLMAnalyticsEntry {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  cacheWriteTokens: number;
+  cacheReadTokens: number;
+  cacheHit: boolean;
   estimatedCostUsd: number;
   durationMs: number;
   /** Time in ms since the previous request for this project (null if first). */
@@ -27,7 +30,7 @@ export interface LLMAnalyticsEntry {
 const lastRequestByProject = new Map<string, number>();
 
 export function logLLMAnalytics(
-  entry: Omit<LLMAnalyticsEntry, "id" | "timestamp" | "gapFromPrevMs">
+  entry: Omit<LLMAnalyticsEntry, "id" | "timestamp" | "gapFromPrevMs" | "cacheHit">
 ): void {
   const now = Date.now();
   const prev = lastRequestByProject.get(entry.projectId) ?? null;
@@ -38,6 +41,7 @@ export function logLLMAnalytics(
     id: `llm_${now}_${Math.random().toString(36).slice(2, 6)}`,
     timestamp: new Date(now).toISOString(),
     gapFromPrevMs,
+    cacheHit: (entry.cacheReadTokens ?? 0) > 0,
     ...entry,
   };
 
@@ -88,6 +92,16 @@ export interface CachingROIStats {
   gapDistribution: number[];
   /** Requests in the last 24h, 7d, 30d. */
   recentCounts: { last24h: number; last7d: number; last30d: number };
+  /** Actual cache hit rate (% of requests where cacheReadTokens > 0). */
+  actualCacheHitRate: number;
+  /** Total tokens served from cache. */
+  totalCacheReadTokens: number;
+  /** Total tokens written to cache. */
+  totalCacheWriteTokens: number;
+  /** Actual savings vs full input price ($ saved by cache reads). */
+  actualSavingsUsd: number;
+  /** Number of requests that had any cache activity. */
+  requestsWithCache: number;
 }
 
 export function getCachingROIStats(): CachingROIStats {
@@ -102,10 +116,13 @@ export function getCachingROIStats(): CachingROIStats {
       projectedMonthlyCostNone: 0, projectedMonthlyCost5min: 0,
       projectedMonthlyCost1hr: 0, uniqueProjects: 0, byModel: {},
       gapDistribution: [0, 0, 0, 0, 0], recentCounts: { last24h: 0, last7d: 0, last30d: 0 },
+      actualCacheHitRate: 0, totalCacheReadTokens: 0, totalCacheWriteTokens: 0,
+      actualSavingsUsd: 0, requestsWithCache: 0,
     };
   }
 
   let totalInput = 0, totalOutput = 0, totalCost = 0, totalDuration = 0;
+  let totalCacheRead = 0, totalCacheWrite = 0, cacheHitCount = 0, requestsWithCache = 0;
   const gaps: number[] = [];
   const projects = new Set<string>();
   const byModel: Record<string, { requests: number; inputTokens: number; costUsd: number }> = {};
@@ -120,6 +137,13 @@ export function getCachingROIStats(): CachingROIStats {
     totalCost += e.estimatedCostUsd;
     totalDuration += e.durationMs;
     projects.add(e.projectId);
+
+    const eRead = e.cacheReadTokens ?? 0;
+    const eWrite = e.cacheWriteTokens ?? 0;
+    totalCacheRead += eRead;
+    totalCacheWrite += eWrite;
+    if (eRead > 0) cacheHitCount++;
+    if (eRead > 0 || eWrite > 0) requestsWithCache++;
 
     if (!byModel[e.model]) byModel[e.model] = { requests: 0, inputTokens: 0, costUsd: 0 };
     byModel[e.model].requests++;
@@ -177,6 +201,12 @@ export function getCachingROIStats(): CachingROIStats {
   const savingsRate1h = systemFrac * (hitRate1h * 0.9 - (1 - hitRate1h) * 1.0);
   const proj1h = projNone * (1 - savingsRate1h * (inputCostFraction / Math.max(totalCost, 0.001)));
 
+  // Cache reads saved 90% of what those tokens would have cost at full input price.
+  // Use Sonnet pricing ($3/M input) as default since it's the most common model.
+  const defaultInputPricePerM = 3;
+  const actualSavingsUsd = (totalCacheRead / 1_000_000) * defaultInputPricePerM * 0.9;
+  const actualCacheHitRate = n > 0 ? Math.round((cacheHitCount / n) * 100) : 0;
+
   return {
     totalRequests: n,
     totalInputTokens: totalInput,
@@ -194,5 +224,10 @@ export function getCachingROIStats(): CachingROIStats {
     byModel,
     gapDistribution: gapBuckets,
     recentCounts: { last24h, last7d, last30d },
+    actualCacheHitRate,
+    totalCacheReadTokens: totalCacheRead,
+    totalCacheWriteTokens: totalCacheWrite,
+    actualSavingsUsd: Math.round(actualSavingsUsd * 1000) / 1000,
+    requestsWithCache,
   };
 }

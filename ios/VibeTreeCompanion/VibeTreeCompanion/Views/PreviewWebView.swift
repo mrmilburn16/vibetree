@@ -56,7 +56,7 @@ struct PreviewWebView: View {
 
     private func loadPreviewURL() async {
         do {
-            let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://localhost:3001"
+            let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
             if let url = URL(string: "\(baseURL)/api/projects/\(projectId)/run-on-device") {
                 previewURL = url
             } else {

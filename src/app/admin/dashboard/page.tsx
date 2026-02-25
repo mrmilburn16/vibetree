@@ -867,6 +867,11 @@ interface CachingROI {
   byModel: Record<string, { requests: number; inputTokens: number; costUsd: number }>;
   gapDistribution: number[];
   recentCounts: { last24h: number; last7d: number; last30d: number };
+  actualCacheHitRate: number;
+  totalCacheReadTokens: number;
+  totalCacheWriteTokens: number;
+  actualSavingsUsd: number;
+  requestsWithCache: number;
 }
 
 function CachingROISection() {
@@ -978,9 +983,41 @@ function CachingROISection() {
         />
       </div>
 
+      {/* Actual cache performance */}
+      {data.requestsWithCache > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            title="Actual cache hit rate"
+            value={`${data.actualCacheHitRate}%`}
+            sub={`${data.requestsWithCache} requests with cache activity`}
+            status={data.actualCacheHitRate >= 50 ? "success" : data.actualCacheHitRate >= 20 ? "warning" : "error"}
+          />
+          <KpiCard
+            title="Tokens served from cache"
+            value={`${(data.totalCacheReadTokens / 1000).toFixed(1)}k`}
+            sub={`${(data.totalCacheWriteTokens / 1000).toFixed(1)}k tokens written`}
+          />
+          <KpiCard
+            title="Actual savings"
+            value={`$${data.actualSavingsUsd.toFixed(3)}`}
+            sub="vs full input price"
+            status={data.actualSavingsUsd > 0 ? "success" : "info"}
+          />
+          <KpiCard
+            title="Effective input price"
+            value={data.totalInputTokens + data.totalCacheReadTokens > 0
+              ? `$${(((data.totalCostUsd - (data.totalOutputTokens / 1e6) * 15) / ((data.totalInputTokens + data.totalCacheReadTokens + data.totalCacheWriteTokens) / 1e6)) || 0).toFixed(2)}/M`
+              : "—"}
+            sub="Blended input token cost"
+          />
+        </div>
+      )}
+
       {/* Cost comparison table */}
       <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-5">
-        <p className="mb-3 text-sm font-medium text-[var(--text-secondary)]">Projected monthly cost comparison</p>
+        <p className="mb-3 text-sm font-medium text-[var(--text-secondary)]">
+          {data.requestsWithCache > 0 ? "Monthly cost: projected vs actual" : "Projected monthly cost comparison"}
+        </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

@@ -6,6 +6,7 @@ struct ProjectListView: View {
     @State private var promptText = ""
     @State private var navigateToProject: Project?
     @State private var pendingPrompt: String?
+    @State private var heroAppeared = false
     @FocusState private var isPromptFocused: Bool
 
     private let suggestionChips = [
@@ -33,7 +34,21 @@ struct ProjectListView: View {
                 }
                 .padding(.bottom, Forest.space10)
             }
-            .background(Forest.backgroundPrimary)
+            .background(
+                ZStack {
+                    Forest.backgroundPrimary
+                    RadialGradient(
+                        colors: [
+                            Forest.accent.opacity(0.06),
+                            Color.clear
+                        ],
+                        center: .init(x: 0.5, y: 0.25),
+                        startRadius: 0,
+                        endRadius: UIScreen.main.bounds.height * 0.5
+                    )
+                    .ignoresSafeArea()
+                }
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
@@ -75,14 +90,25 @@ struct ProjectListView: View {
                     .font(.system(size: Forest.textSm))
                     .foregroundColor(Forest.textTertiary)
             }
+            .opacity(heroAppeared ? 1 : 0)
+            .offset(y: heroAppeared ? 0 : 12)
 
             promptInput
+                .opacity(heroAppeared ? 1 : 0)
+                .offset(y: heroAppeared ? 0 : 8)
 
             chipRow
+                .opacity(heroAppeared ? 1 : 0)
+                .offset(y: heroAppeared ? 0 : 8)
 
             Spacer().frame(height: Forest.space2)
         }
         .padding(.horizontal, Forest.space4)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.5)) {
+                heroAppeared = true
+            }
+        }
     }
 
     private var promptInput: some View {
@@ -215,9 +241,15 @@ struct ProjectListView: View {
                 .padding(.horizontal, Forest.space4)
 
                 LazyVStack(spacing: 0) {
-                    ForEach(service.projects) { project in
+                    ForEach(Array(service.projects.enumerated()), id: \.element.id) { index, project in
                         NavigationLink(destination: EditorView(project: project)) {
                             projectRow(project)
+                                .opacity(heroAppeared ? 1 : 0)
+                                .offset(y: heroAppeared ? 0 : 10)
+                                .animation(
+                                    .easeOut(duration: 0.35).delay(0.1 + Double(index) * 0.05),
+                                    value: heroAppeared
+                                )
                         }
                         .buttonStyle(.plain)
                         .contextMenu {

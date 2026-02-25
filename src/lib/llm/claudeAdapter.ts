@@ -25,6 +25,13 @@ const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 // 32K handles complex multi-file apps (13+ files) without truncation.
 const MAX_TOKENS = 32000;
 
+const CACHE_CONTROL: { type: "ephemeral"; ttl?: "1h" } | undefined =
+  process.env.CACHE_TTL === "off"
+    ? undefined
+    : process.env.CACHE_TTL === "5m"
+      ? { type: "ephemeral" }
+      : { type: "ephemeral", ttl: "1h" };
+
 const SYSTEM_PROMPT_STANDARD = `You are an expert React Native / Expo developer. You build and modify Expo apps that run in Expo Go. Reply message-by-message: if the user sends a follow-up (e.g. "change the button color to blue"), you will receive the current project files and their request; apply the change and output the full updated JSON. If there are no current files, create a new app from scratch.
 
 Output format: Respond with a single JSON object only. No other text before or after.
@@ -223,6 +230,7 @@ export async function getClaudeResponse(
     model,
     max_tokens: MAX_TOKENS,
     system: systemPrompt,
+    ...(CACHE_CONTROL && { cache_control: CACHE_CONTROL }),
     output_config: { format: jsonSchemaOutputFormat(STRUCTURED_OUTPUT_SCHEMA) },
     messages: [{ role: "user", content: userContent }],
   });
@@ -234,13 +242,16 @@ export async function getClaudeResponse(
       : parseStructuredResponse(
           extractTextFromContent((response as any).content)
         );
+    const rawUsage = response.usage as unknown as Record<string, number> | undefined;
     const usage =
-      response.usage &&
-      typeof response.usage.input_tokens === "number" &&
-      typeof response.usage.output_tokens === "number"
+      rawUsage &&
+      typeof rawUsage.input_tokens === "number" &&
+      typeof rawUsage.output_tokens === "number"
         ? {
-            input_tokens: response.usage.input_tokens,
-            output_tokens: response.usage.output_tokens,
+            input_tokens: rawUsage.input_tokens,
+            output_tokens: rawUsage.output_tokens,
+            cache_creation_input_tokens: rawUsage.cache_creation_input_tokens ?? 0,
+            cache_read_input_tokens: rawUsage.cache_read_input_tokens ?? 0,
           }
         : undefined;
     return {
@@ -328,6 +339,7 @@ async function getClaudeResponseStream(
       model,
       max_tokens: MAX_TOKENS,
       system: systemPrompt,
+      ...(CACHE_CONTROL && { cache_control: CACHE_CONTROL }),
       output_config: { format: jsonSchemaOutputFormat(STRUCTURED_OUTPUT_SCHEMA) },
       messages: [{ role: "user", content: userContent }],
     })
@@ -354,13 +366,16 @@ async function getClaudeResponseStream(
             Array.isArray((finalMessage as any).content) ? (finalMessage as any).content : []
           )
         );
+    const rawUsage = finalMessage.usage as unknown as Record<string, number> | undefined;
     const usage =
-      finalMessage.usage &&
-      typeof finalMessage.usage.input_tokens === "number" &&
-      typeof finalMessage.usage.output_tokens === "number"
+      rawUsage &&
+      typeof rawUsage.input_tokens === "number" &&
+      typeof rawUsage.output_tokens === "number"
         ? {
-            input_tokens: finalMessage.usage.input_tokens,
-            output_tokens: finalMessage.usage.output_tokens,
+            input_tokens: rawUsage.input_tokens,
+            output_tokens: rawUsage.output_tokens,
+            cache_creation_input_tokens: rawUsage.cache_creation_input_tokens ?? 0,
+            cache_read_input_tokens: rawUsage.cache_read_input_tokens ?? 0,
           }
         : undefined;
     return {

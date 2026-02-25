@@ -43,16 +43,31 @@ struct ChatPanelView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: Forest.space3) {
-                    ForEach(chatService.messages) { message in
+                    ForEach(Array(chatService.messages.enumerated()), id: \.element.id) { index, message in
                         MessageBubbleView(message: message)
                             .id(message.id)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .bottom).combined(with: .opacity),
+                                removal: .opacity
+                            ))
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(Forest.space4)
             }
+            .background(
+                RadialGradient(
+                    colors: [
+                        Forest.accent.opacity(0.04),
+                        Color.clear
+                    ],
+                    center: .init(x: 0.5, y: 0.45),
+                    startRadius: 0,
+                    endRadius: 400
+                )
+            )
             .onChange(of: chatService.messages.count) { _, _ in
-                withAnimation(.easeOut(duration: 0.2)) {
+                withAnimation(.easeOut(duration: 0.3)) {
                     proxy.scrollTo("bottom", anchor: .bottom)
                 }
             }
@@ -201,15 +216,33 @@ struct ChatPanelView: View {
         )
     }
 
+    @State private var buildDotPulse = false
+
     private var buildStatusBadge: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 6, height: 6)
+        HStack(spacing: 6) {
+            ZStack {
+                if chatService.buildStatus == .building {
+                    Circle()
+                        .fill(statusColor.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .scaleEffect(buildDotPulse ? 1.6 : 1.0)
+                        .opacity(buildDotPulse ? 0 : 0.6)
+                        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: false), value: buildDotPulse)
+                        .onAppear { buildDotPulse = true }
+                        .onDisappear { buildDotPulse = false }
+                }
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 6, height: 6)
+            }
             Text(chatService.buildStatus.label)
                 .font(.system(size: Forest.textXs, weight: .medium))
-                .foregroundColor(Forest.textTertiary)
+                .foregroundColor(statusColor)
         }
+        .padding(.horizontal, Forest.space2)
+        .padding(.vertical, 4)
+        .background(statusColor.opacity(0.1))
+        .cornerRadius(Forest.radiusXl)
     }
 
     private var statusColor: Color {
@@ -223,6 +256,8 @@ struct ChatPanelView: View {
 
     // MARK: - Input Bar
 
+    @FocusState private var isInputFocused: Bool
+
     private var inputBar: some View {
         HStack(alignment: .center, spacing: Forest.space2) {
             TextField("Describe your app…", text: $inputText, axis: .vertical)
@@ -230,6 +265,7 @@ struct ChatPanelView: View {
                 .foregroundColor(Forest.inputText)
                 .lineLimit(1...5)
                 .textFieldStyle(.plain)
+                .focused($isInputFocused)
                 .onSubmit { sendIfPossible() }
 
             sendButton
@@ -240,8 +276,13 @@ struct ChatPanelView: View {
         .cornerRadius(26)
         .overlay(
             RoundedRectangle(cornerRadius: 26)
-                .stroke(Forest.inputBorder, lineWidth: 2)
+                .stroke(
+                    isInputFocused ? Forest.accent.opacity(0.5) : Forest.inputBorder,
+                    lineWidth: isInputFocused ? 2 : 1
+                )
         )
+        .shadow(color: isInputFocused ? Forest.accent.opacity(0.15) : .clear, radius: 12, y: 0)
+        .animation(.easeOut(duration: 0.2), value: isInputFocused)
         .padding(.horizontal, Forest.space4)
         .padding(.bottom, Forest.space3)
         .background(Forest.backgroundPrimary)
@@ -257,6 +298,7 @@ struct ChatPanelView: View {
                 Circle()
                     .fill(canSend ? Forest.accent : Forest.buttonSecondaryBg)
                     .frame(width: 40, height: 40)
+                    .shadow(color: canSend ? Forest.accent.opacity(0.3) : .clear, radius: 8, y: 2)
                 if canSend {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 18, weight: .semibold))
@@ -270,8 +312,8 @@ struct ChatPanelView: View {
         }
         .disabled(!canSend)
         .keyboardShortcut(.return, modifiers: .command)
-        .scaleEffect(justSent ? 0.92 : 1.0)
-        .animation(.easeOut(duration: 0.1), value: justSent)
+        .scaleEffect(justSent ? 0.88 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.5), value: justSent)
     }
 
     @ViewBuilder

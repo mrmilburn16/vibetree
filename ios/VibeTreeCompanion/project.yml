@@ -26,6 +26,8 @@ targets:
         CFBundleDisplayName: VibeTree
         CFBundleShortVersionString: "1.0"
         CFBundleVersion: "1"
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
