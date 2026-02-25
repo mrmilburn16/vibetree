@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { sendWaitlistWelcome } from "@/lib/email";
 import { randomUUID } from "crypto";
 
 const POINTS_SIGNUP = 100;
@@ -74,6 +75,11 @@ export async function POST(request: NextRequest) {
         });
       }
     }
+
+    // Send welcome email (non-blocking)
+    sendWaitlistWelcome({ email, name, position, referralCode }).catch((err) =>
+      console.error("[waitlist/join] Welcome email failed:", err)
+    );
 
     return NextResponse.json({
       token,

@@ -85,7 +85,21 @@ export default function ContactPage() {
     }
     setLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 800));
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          email: email.trim(),
+          subject: subject || "General inquiry",
+          message: trimmedMessage,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong. Please try again.");
+        return;
+      }
       setSubmitted(true);
     } catch {
       setError("Something went wrong. Please try again.");
