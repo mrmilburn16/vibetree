@@ -474,14 +474,12 @@ export function useChat(
     let lastCostUsd: number | undefined;
     let lastProgressElapsedMs: number | undefined;
     let discoveredFilesCount = 0;
-    const emittedPhases = new Set<string>();
-
     setMessages((prev) => [
       ...prev,
       {
         id: progressMessageId,
         role: "assistant",
-        content: "Connecting…",
+        content: "Building…",
       },
     ]);
 
@@ -513,8 +511,8 @@ export function useChat(
       const showThinking =
         currentPhaseLabel === "Receiving output" && idleSecs >= 7;
       const label = showThinking
-        ? `Thinking… (no new tokens for ${idleSecs}s)`
-        : currentPhaseLabel;
+        ? `Building… (thinking)`
+        : "Building…";
 
       return `${label}${filesStr}${tokenStr}${elapsedStr}${costStr}`;
     };
@@ -527,7 +525,7 @@ export function useChat(
           if (m.id !== progressMessageId) return m;
           if (!sawServerProgress) {
             const elapsedStr = ` · ${formatDurationShort(Math.max(1, Math.floor(elapsedMs / 1000)))}`;
-            return { ...m, content: `Connecting…${elapsedStr}` };
+            return { ...m, content: `Building…${elapsedStr}` };
           }
           // Keep the UI moving even if stream chunks are buffered.
           return { ...m, content: renderProgressLine() };
@@ -659,39 +657,10 @@ export function useChat(
                   retrying_request: "Retrying request",
                 };
                 currentPhaseLabel = phaseMap[event.phase] ?? "Working";
-                if (!emittedPhases.has(event.phase)) {
-                  emittedPhases.add(event.phase);
-                  const phaseMsg: ChatMessage = {
-                    id: `stream-phase-${streamRunId}-${event.phase}`,
-                    role: "assistant",
-                    content: `${currentPhaseLabel} · ${formatDurationShort(
-                      Math.max(1, Math.floor((Date.now() - localStartedAt) / 1000))
-                    )}`,
-                  };
-                  setMessages((prev) => {
-                    const idx = prev.findIndex((m) => m.id === progressMessageId);
-                    if (idx === -1) return [...prev, phaseMsg];
-                    const next = prev.slice();
-                    next.splice(idx, 0, phaseMsg);
-                    return next;
-                  });
-                }
               }
               if (event.type === "file" && typeof event.path === "string") {
                 sawServerProgress = true;
                 if (typeof event.count === "number") discoveredFilesCount = event.count;
-                const fileMsg: ChatMessage = {
-                  id: `stream-file-${streamRunId}-${typeof event.count === "number" ? event.count : Date.now()}`,
-                  role: "assistant",
-                  content: `Generating ${event.path.split("/").pop() ?? event.path}${typeof event.count === "number" ? ` (file ${event.count})` : ""} · ${event.path}`,
-                };
-                setMessages((prev) => {
-                  const idx = prev.findIndex((m) => m.id === progressMessageId);
-                  if (idx === -1) return [...prev, fileMsg];
-                  const next = prev.slice();
-                  next.splice(idx, 0, fileMsg);
-                  return next;
-                });
               }
               if (event.type === "progress" && typeof event.receivedChars === "number") {
                 sawServerProgress = true;

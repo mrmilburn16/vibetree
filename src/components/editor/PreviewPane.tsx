@@ -109,7 +109,7 @@ export function PreviewPane({
                   className="shrink-0 rounded border border-[var(--border-default)] bg-white p-1.5"
                 />
                 <p className="text-body-muted text-center text-xs leading-snug">
-                  Scan this QR in Expo Go to preview on your iPhone
+                  Scan to run on your iPhone
                 </p>
               </div>
             </>
@@ -117,7 +117,7 @@ export function PreviewPane({
             <div className="flex flex-col items-center gap-2 text-center">
               <p className="text-body-muted text-xs">
                 {buildStatus === "live"
-                  ? "Click Run on device above to start the preview server and show the QR code."
+                  ? "Starting preview server… QR will appear shortly."
                   : "Build your app to see the preview QR"}
               </p>
               {buildStatus === "live" && onOpenRunOnDevice && (

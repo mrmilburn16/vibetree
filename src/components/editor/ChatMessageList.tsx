@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
+import { ThumbsUp, ThumbsDown } from "lucide-react";
 import type { ChatMessage } from "./useChat";
 
 const STREAM_WORD_DELAY_MS = 45;
@@ -11,8 +11,9 @@ function getStreamTokens(text: string): string[] {
   return text.split(/(\s+)/).filter(Boolean);
 }
 
-/** Short status phrases from useChat step messages — rendered muted (same as "Generating...", "Validating structured output") */
+/** Short status phrases from useChat — rendered muted */
 const REASONING_PHRASES = new Set([
+  "Building…",
   "Reading files.",
   "Explored.",
   "Grepped.",
@@ -27,7 +28,8 @@ function isReasoningMessage(msg: { id?: string; role: string; content: string; e
   // Status/progress messages should render immediately and update live (muted styling).
   if (typeof msg.id === "string" && msg.id.startsWith("stream-")) return true;
   if (msg.content.startsWith("Validating build on Mac…")) return true;
-  return msg.content.length < 50 || REASONING_PHRASES.has(msg.content.trim());
+  const trimmed = msg.content.trim();
+  return msg.content.length < 50 || REASONING_PHRASES.has(trimmed) || trimmed.startsWith("Building…");
 }
 
 function BuildFeedback({ projectId }: { projectId?: string }) {
@@ -240,16 +242,6 @@ export function ChatMessageList({
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
               Describe your app in plain language—AI writes Swift and you preview live.
             </p>
-            {onEnterGuidedMode && (
-              <button
-                type="button"
-                onClick={onEnterGuidedMode}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[var(--button-primary-bg)]/30 bg-[var(--button-primary-bg)]/10 px-4 py-2 text-xs font-medium text-[var(--button-primary-bg)] hover:bg-[var(--button-primary-bg)]/20 transition-colors"
-              >
-                <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                Try Guided Mode
-              </button>
-            )}
           </div>
         )}
         <div className="space-y-1">

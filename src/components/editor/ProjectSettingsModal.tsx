@@ -8,10 +8,19 @@ import {
   Layers,
   Info,
   RotateCcw,
+  Sparkles,
 } from "lucide-react";
 import { Modal, Button, Input, DropdownSelect } from "@/components/ui";
 import { updateProject, type Project } from "@/lib/projects";
 import type { SelectOption } from "@/components/ui";
+import { LLM_OPTIONS, DEFAULT_LLM } from "@/lib/llm-options";
+import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
+
+const LLM_STORAGE_KEY = "vibetree-llm";
+const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
+  ...opt,
+  icon: opt.value.startsWith("gpt") ? <OpenAILogo /> : <AnthropicLogo />,
+}));
 
 const XCODE_TEAM_ID_PREFIX = "vibetree-xcode-team-id:";
 const XCODE_BUNDLE_ID_OVERRIDE_PREFIX = "vibetree-xcode-bundle-id:";
@@ -238,6 +247,12 @@ export function ProjectSettingsModal({
   const [settings, setSettings] = useState<ProjectSettings>(() => loadSettings(project.id, universalDefaults));
   const [runnerDevices, setRunnerDevices] = useState<RunnerDevicesResponse | null>(null);
   const [devicesLoading, setDevicesLoading] = useState(false);
+  const [llm, setLlm] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_LLM;
+    const stored = localStorage.getItem(LLM_STORAGE_KEY);
+    const opt = LLM_OPTIONS.find((o) => o.value === stored);
+    return opt && !opt.disabled && stored ? stored : DEFAULT_LLM;
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -248,6 +263,9 @@ export function ProjectSettingsModal({
       const ud = loadUniversalDefaults();
       setUniversalDefaults(ud);
       setSettings(loadSettings(project.id, ud));
+      const stored = localStorage.getItem(LLM_STORAGE_KEY);
+      const opt = LLM_OPTIONS.find((o) => o.value === stored);
+      setLlm(opt && !opt.disabled && stored ? stored : DEFAULT_LLM);
     }
   }, [isOpen, project.name, project.bundleId, project.id]);
 
@@ -435,6 +453,29 @@ export function ProjectSettingsModal({
 
         <div className="border-t border-[var(--border-default)]" />
 
+        {/* ── AI Model ── */}
+        <section>
+          <SectionHeader
+            icon={Sparkles}
+            title="AI model"
+            description="Which model generates your app code"
+          />
+          <div className="pl-11">
+            <DropdownSelect
+              options={LLM_OPTIONS_WITH_ICONS}
+              value={llm}
+              onChange={(value) => {
+                setLlm(value);
+                localStorage.setItem(LLM_STORAGE_KEY, value);
+                window.dispatchEvent(new CustomEvent("vibetree-llm-changed", { detail: value }));
+              }}
+              aria-label="Select AI model"
+            />
+          </div>
+        </section>
+
+        <div className="border-t border-[var(--border-default)]" />
+
         {/* ── Signing (universal, overridable) ── */}
         <section>
           <SectionHeader
@@ -442,6 +483,13 @@ export function ProjectSettingsModal({
             title="Signing"
             description="Apple Developer team for code signing"
           />
+          {!universalDefaults.teamId && (
+            <div className="mb-3 rounded border border-[var(--button-primary-bg)]/30 bg-[var(--button-primary-bg)]/10 px-3 py-2 pl-11">
+              <p className="text-xs font-medium text-[var(--button-primary-bg)]">
+                First time? Set your Team ID below once — it applies to all Pro projects.
+              </p>
+            </div>
+          )}
           <div className="space-y-3 pl-11">
             <div>
               <div className="mb-1.5 flex items-center justify-between gap-2">

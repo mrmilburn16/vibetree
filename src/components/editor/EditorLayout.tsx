@@ -81,6 +81,50 @@ export function EditorLayout({ project }: { project: Project }) {
       .catch(() => {});
   }, [project.id]);
 
+  // Auto-start Expo when build goes live (Standard): QR appears without user clicking "Run on device"
+  const prevBuildStatusRef = useRef<"idle" | "building" | "live" | "failed">("idle");
+  useEffect(() => {
+    if (buildStatus !== "live" || prevBuildStatusRef.current === "live") {
+      prevBuildStatusRef.current = buildStatus;
+      return;
+    }
+    prevBuildStatusRef.current = buildStatus;
+    const isPro =
+      typeof window !== "undefined" && localStorage.getItem("vibetree-project-type") === "pro";
+    if (isPro || !project.id || expoUrl) return;
+    (async () => {
+      try {
+        let res = await fetch(`/api/projects/${project.id}/run-on-device?projectType=standard`);
+        let data = await res.json().catch(() => ({}));
+        if (data.expoUrl) {
+          setExpoUrl(data.expoUrl);
+          return;
+        }
+        const noFiles = res.status === 400 && (data.code === "NO_FILES" || data.code === "NO_APP");
+        if (noFiles && typeof window !== "undefined") {
+          try {
+            const raw = localStorage.getItem(`${PROJECT_FILES_PREFIX}${project.id}`);
+            const parsed = raw ? JSON.parse(raw) : null;
+            const files = Array.isArray(parsed?.files) ? parsed.files : [];
+            if (files.length > 0) {
+              res = await fetch(`/api/projects/${project.id}/run-on-device?projectType=standard`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ files }),
+              });
+              data = await res.json().catch(() => ({}));
+              if (data.expoUrl) setExpoUrl(data.expoUrl);
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [buildStatus, project.id, expoUrl]);
+
   const latestWidthRef = useRef(chatWidth);
   latestWidthRef.current = chatWidth;
 

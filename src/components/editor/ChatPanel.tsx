@@ -5,12 +5,10 @@ import Link from "next/link";
 import { Button, Textarea, DropdownSelect } from "@/components/ui";
 import { Send, Sparkles, Square } from "lucide-react";
 import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
-import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { BuildingIndicator } from "./BuildingIndicator";
 import { ReadyIndicator } from "./ReadyIndicator";
 import { FailedIndicator } from "./FailedIndicator";
 import { ChatMessageList } from "./ChatMessageList";
-import { GuidedModeWizard } from "./GuidedModeWizard";
 import { useChat } from "./useChat";
 import { useCredits } from "@/contexts/CreditsContext";
 import { featureFlags } from "@/lib/featureFlags";
@@ -18,7 +16,6 @@ import { LLM_OPTIONS, DEFAULT_LLM } from "@/lib/llm-options";
 
 const LLM_STORAGE_KEY = "vibetree-llm";
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
-const GUIDED_MODE_STORAGE_KEY = "vibetree-guided-mode";
 
 const PROJECT_TYPE_OPTIONS = [
   { value: "standard", label: "Standard (Expo)" },
@@ -26,16 +23,11 @@ const PROJECT_TYPE_OPTIONS = [
 ] as const;
 
 const CHAT_PLACEHOLDERS = [
-  "e.g. A fitness tracker with activity rings",
-  "e.g. A todo list with due dates",
-  "e.g. A habit tracker with streaks",
-  "e.g. A recipe app with ingredients list",
+  "Describe your app. Example: A dark-themed todo app with 3 screens, camera access, and local storage",
+  "Describe your app. Example: Build a habit tracker with streaks and run it on my phone",
+  "Describe your app. Example: A fitness tracker with activity rings and weekly stats",
+  "Describe your app. Example: A recipe app with ingredients list and save to device",
 ];
-
-const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
-  ...opt,
-  icon: opt.value.startsWith("gpt") ? <OpenAILogo /> : <AnthropicLogo />,
-}));
 
 export function ChatPanel({
   projectId,
@@ -63,7 +55,6 @@ export function ChatPanel({
 }) {
   const [llm, setLlm] = useState(DEFAULT_LLM);
   const [projectType, setProjectType] = useState<"standard" | "pro">("standard");
-  const [guidedMode, setGuidedMode] = useState(true);
   const { hasCreditsForMessage, deduct } = useCredits();
 
   useEffect(() => {
@@ -82,27 +73,18 @@ export function ChatPanel({
   }, []);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(GUIDED_MODE_STORAGE_KEY);
-      if (stored === "false") setGuidedMode(false);
-      else if (stored === "true") setGuidedMode(true);
-    }
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (typeof detail === "string") setLlm(detail);
+    };
+    window.addEventListener("vibetree-llm-changed", handler);
+    return () => window.removeEventListener("vibetree-llm-changed", handler);
   }, []);
-
-  const handleLlmChange = (value: string) => {
-    setLlm(value);
-    if (typeof window !== "undefined") localStorage.setItem(LLM_STORAGE_KEY, value);
-  };
 
   const handleProjectTypeChange = (value: string) => {
     const next = value === "pro" ? "pro" : "standard";
     setProjectType(next);
     if (typeof window !== "undefined") localStorage.setItem(PROJECT_TYPE_STORAGE_KEY, next);
-  };
-
-  const handleGuidedModeToggle = (on: boolean) => {
-    setGuidedMode(on);
-    if (typeof window !== "undefined") localStorage.setItem(GUIDED_MODE_STORAGE_KEY, String(on));
   };
 
   const {
@@ -152,23 +134,6 @@ export function ChatPanel({
     [input, canSend, sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
   );
 
-  const handleGuidedComplete = useCallback(
-    (enrichedPrompt: string) => {
-      if (!hasCreditsForMessage) {
-        onOutOfCredits?.();
-        return;
-      }
-      if (!featureFlags.useRealLLM && !deduct(1)) {
-        onOutOfCredits?.();
-        return;
-      }
-      sendMessage(enrichedPrompt, llm, projectType);
-    },
-    [sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
-  );
-
-  const showGuidedWizard = guidedMode && messages.length === 0 && !isTyping;
-
   const canSendWithCredits = canSend && hasCreditsForMessage;
   const showCharCount = input.length > 0 && input.length >= 0.8 * maxMessageLength;
   const placeholderIndex = messages.length % CHAT_PLACEHOLDERS.length;
@@ -207,34 +172,15 @@ export function ChatPanel({
             onChange={handleProjectTypeChange}
             aria-label="Build with Standard (Expo) or Pro (Swift)"
           />
-          <DropdownSelect
-            options={LLM_OPTIONS_WITH_ICONS}
-            value={llm}
-            onChange={handleLlmChange}
-            aria-label="Select LLM for app design"
-          />
         </div>
       </div>
 
-      {showGuidedWizard ? (
-        <GuidedModeWizard
-          projectType={projectType}
-          onComplete={handleGuidedComplete}
-          onSkip={() => handleGuidedModeToggle(false)}
-        />
-      ) : (
-        <ChatMessageList
-          messages={messages}
-          isTyping={isTyping}
-          buildStatus={buildStatus}
-          projectId={projectId}
-          onEnterGuidedMode={
-            messages.length === 0 && !guidedMode
-              ? () => handleGuidedModeToggle(true)
-              : undefined
-          }
-        />
-      )}
+      <ChatMessageList
+        messages={messages}
+        isTyping={isTyping}
+        buildStatus={buildStatus}
+        projectId={projectId}
+      />
 
       <form onSubmit={handleSubmit} className="shrink-0 border-t border-[var(--border-default)] p-4 pt-4" style={{ background: "var(--chat-form-bg)" }}>
         <label htmlFor="chat-input" className="sr-only">
