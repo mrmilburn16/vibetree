@@ -1,4 +1,5 @@
 import { getProject, ensureProject } from "@/lib/projectStore";
+import { getProjectFiles, getProjectFilePaths } from "@/lib/projectFileStore";
 import { createBuildJob } from "@/lib/buildJobs";
 
 function isValidBundleId(value: string): boolean {
@@ -7,8 +8,7 @@ function isValidBundleId(value: string): boolean {
 
 /**
  * POST /api/projects/[id]/build-install
- * Creates a build job with outputType: "ipa" for on-device installation.
- * The mac-runner will archive, export a signed IPA, and upload it.
+ * Builds for real device with code signing, then installs via devicectl.
  */
 export async function POST(
   request: Request,
@@ -25,7 +25,17 @@ export async function POST(
   const providedBundleId =
     typeof body?.bundleId === "string" ? body.bundleId : "";
   const providedTeam =
-    typeof body?.developmentTeam === "string" ? body.developmentTeam : "";
+    typeof body?.developmentTeam === "string"
+      ? body.developmentTeam.trim()
+      : "";
+  const developmentTeam =
+    providedTeam || process.env.DEFAULT_DEVELOPMENT_TEAM || "";
+
+  const clientFiles = Array.isArray(body?.files)
+    ? (body.files as { path: string; content: string }[]).filter(
+        (f) => typeof f.path === "string" && typeof f.content === "string"
+      )
+    : [];
 
   const project =
     getProject(projectId) ??
@@ -40,15 +50,25 @@ export async function POST(
     ? candidateBundleId
     : "com.vibetree.app";
 
+  let files = clientFiles;
+  if (files.length === 0) {
+    const paths = getProjectFilePaths(projectId);
+    const store = getProjectFiles(projectId);
+    if (paths.length > 0 && store) {
+      files = paths.map((p) => ({ path: p, content: store[p] ?? "" }));
+    }
+  }
+
   const job = createBuildJob({
     projectId,
     projectName: project.name || providedName || "Untitled app",
     bundleId,
-    ...(providedTeam ? { developmentTeam: providedTeam } : {}),
+    developmentTeam,
     autoFix: body?.autoFix !== false,
     attempt: 1,
     maxAttempts: 8,
-    outputType: "ipa",
+    outputType: "device",
+    files: files.length > 0 ? files : undefined,
   });
 
   return Response.json({ job });

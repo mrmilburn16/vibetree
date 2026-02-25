@@ -49,6 +49,10 @@ export function RunOnDeviceModal({
   const [errorCopyFeedback, setErrorCopyFeedback] = useState(false);
   const [simulateLoading, setSimulateLoading] = useState(false);
   const [validateIsSimulated, setValidateIsSimulated] = useState(false);
+  const [installLoading, setInstallLoading] = useState(false);
+  const [installJobId, setInstallJobId] = useState<string | null>(null);
+  const [installStatus, setInstallStatus] = useState<string | null>(null);
+  const [installLogTail, setInstallLogTail] = useState<string[]>([]);
 
   const projectType =
     projectTypeProp ??
@@ -209,6 +213,99 @@ export function RunOnDeviceModal({
     }, 1000);
     return () => clearInterval(iv);
   }, [validateStartedAt, validateStatus, validateFixing]);
+
+  useEffect(() => {
+    if (!isOpen || !installJobId) return;
+    let cancelled = false;
+    let currentJobId = installJobId;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/build-jobs/${currentJobId}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json().catch(() => ({}));
+        const job = data?.job;
+        if (!job || cancelled) return;
+
+        const status = typeof job.status === "string" ? job.status : null;
+        const nextJobId = typeof job.nextJobId === "string" ? job.nextJobId : null;
+        const logs = Array.isArray(job.logs) ? job.logs.filter((x: unknown) => typeof x === "string") : [];
+        setInstallLogTail(logs.slice(-10));
+
+        if (status === "failed" && nextJobId) {
+          currentJobId = nextJobId;
+          setInstallJobId(nextJobId);
+          setTimeout(poll, 2000);
+          return;
+        }
+
+        setInstallStatus(status);
+        if (status === "succeeded" || status === "failed") return;
+        setTimeout(poll, 2000);
+      } catch {
+        // ignore
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [isOpen, installJobId]);
+
+  async function handleInstallOnDevice() {
+    setInstallLoading(true);
+    setError(null);
+    setInstallStatus("queued");
+    setInstallLogTail([]);
+    try {
+      let files: { path: string; content: string }[] = [];
+      if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem(`${PROJECT_FILES_STORAGE_PREFIX}${projectId}`);
+          const parsed = raw ? JSON.parse(raw) : null;
+          files = Array.isArray(parsed?.files) ? parsed.files : [];
+        } catch {}
+      }
+
+      let projectName = "Untitled app";
+      let bundleId = "";
+      if (typeof window !== "undefined") {
+        try {
+          const projectsRaw = localStorage.getItem("vibetree-projects");
+          const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
+          const p = Array.isArray(projects) ? projects.find((x: { id?: string }) => x?.id === projectId) : null;
+          if (p?.name) projectName = String(p.name);
+          if (p?.bundleId) bundleId = String(p.bundleId);
+        } catch {}
+      }
+
+      const finalBundleId = bundleIdOverride.trim() || bundleId;
+      const finalTeamId = teamId.trim();
+
+      const res = await fetch(`/api/projects/${projectId}/build-install`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          files: files.length > 0 ? files : undefined,
+          projectName,
+          bundleId: finalBundleId,
+          developmentTeam: finalTeamId,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? "Install request failed");
+      }
+      const data = await res.json().catch(() => ({}));
+      const jobId = typeof data?.job?.id === "string" ? data.job.id : null;
+      if (!jobId) throw new Error("No job id returned");
+      setInstallJobId(jobId);
+      setInstallStatus("queued");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Install failed. Try again.");
+      setInstallStatus("failed");
+    } finally {
+      setInstallLoading(false);
+    }
+  }
 
   async function handleDownloadForXcode() {
     setDownloadLoading(true);
@@ -465,6 +562,50 @@ export function RunOnDeviceModal({
             )}
             <Button
               type="button"
+              onClick={handleInstallOnDevice}
+              disabled={installLoading || installStatus === "queued" || installStatus === "running"}
+              className="w-full"
+            >
+              {installLoading
+                ? "Starting…"
+                : installStatus === "queued" || installStatus === "running"
+                ? "Building & installing…"
+                : installStatus === "succeeded"
+                ? "Re-install on iPhone"
+                : "Install on iPhone"}
+            </Button>
+            {installStatus && (
+              <div className="rounded border border-[var(--border-default)] bg-[var(--background-default)] p-3">
+                <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+                  {(installStatus === "queued" || installStatus === "running") && (
+                    <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--primary-default)]" />
+                  )}
+                  {installStatus === "succeeded" && (
+                    <span className="text-green-400">&#10003;</span>
+                  )}
+                  {installStatus === "failed" && (
+                    <span className="text-red-400">&#10007;</span>
+                  )}
+                  <span>
+                    {installStatus === "queued" && "Waiting for runner to start device build…"}
+                    {installStatus === "running" && "Building for device & installing…"}
+                    {installStatus === "succeeded" && "App installed & launched on your iPhone! Check your phone."}
+                    {installStatus === "failed" && "Install failed — try Download for Xcode instead"}
+                  </span>
+                </div>
+                {installLogTail.length > 0 && (
+                  <pre className="mt-2 max-h-[120px] overflow-auto rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                    {installLogTail.join("\n")}
+                  </pre>
+                )}
+              </div>
+            )}
+            <div className="border-t border-[var(--border-default)] pt-3">
+              <p className="mb-2 text-xs text-[var(--text-tertiary)]">Or download and open in Xcode manually:</p>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
               onClick={handleDownloadForXcode}
               disabled={downloadLoading}
               className="w-full"

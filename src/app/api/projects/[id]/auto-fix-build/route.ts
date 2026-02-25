@@ -366,6 +366,7 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       maxAttempts,
       parentJobId: failedJobId,
       userPrompt: failedJob.request.userPrompt,
+      outputType: failedJob.request.outputType,
     });
 
     setBuildJobNextJob(failedJobId, retryJob.id);

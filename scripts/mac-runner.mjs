@@ -35,6 +35,15 @@ function loadEnvLocal() {
 
 loadEnvLocal();
 
+/** Resolve a sibling Xcode tool (devicectl, etc.) from the same Developer/usr/bin as xcodebuild. */
+function getXcodeToolPath(tool) {
+  const xcode = getXcodebuildPath();
+  const dir = xcode.path.replace(/\/xcodebuild$/, "");
+  const p = join(dir, tool);
+  if (existsSync(p)) return p;
+  return tool;
+}
+
 /** Resolve xcodebuild path so it works when PATH doesn't include Xcode (e.g. non-interactive shell). Returns { path, tried } for logging. */
 function getXcodebuildPath() {
   const tried = [];
@@ -333,6 +342,109 @@ async function archiveAndExportIPA(xcodebuildPath, xcodeproj, projectName, unzip
 }
 
 /**
+ * Find the first connected physical iOS device via devicectl.
+ * Returns { identifier, name } or null.
+ */
+function findConnectedDevice() {
+  const devicectl = getXcodeToolPath("devicectl");
+  try {
+    const raw = execSync(
+      `"${devicectl}" list devices --json-output /dev/stdout 2>/dev/null`,
+      { encoding: "utf8", shell: true, timeout: 10000 }
+    );
+    // devicectl appends a human-readable table after the JSON — extract just the JSON object.
+    const jsonEnd = raw.lastIndexOf("}");
+    const jsonStr = jsonEnd >= 0 ? raw.slice(0, jsonEnd + 1) : raw;
+    const data = JSON.parse(jsonStr);
+    const devices = data?.result?.devices ?? [];
+    // Filter to iPhones/iPads only (exclude Apple Watch, Apple TV, etc.)
+    const iosDevices = devices.filter((d) => {
+      const model = d?.hardwareProperties?.deviceType ?? d?.hardwareProperties?.productType ?? "";
+      const platform = d?.hardwareProperties?.platform ?? "";
+      return (
+        model.includes("iPhone") ||
+        model.includes("iPad") ||
+        platform === "iOS" ||
+        platform.includes("iphone")
+      );
+    });
+    // Prefer wired, then tunneled, then localNetwork
+    const connected =
+      iosDevices.find((d) => d?.connectionProperties?.transportType === "wired") ||
+      iosDevices.find((d) => d?.connectionProperties?.tunnelState === "connected") ||
+      iosDevices.find((d) => d?.connectionProperties?.transportType === "localNetwork");
+    if (connected) {
+      return {
+        identifier: connected.identifier ?? connected.hardwareProperties?.udid,
+        name: connected.deviceProperties?.name ?? "Unknown",
+      };
+    }
+  } catch (_) {}
+  return null;
+}
+
+/**
+ * Install a .app bundle on a connected iOS device via devicectl.
+ * Returns true on success, false on failure.
+ */
+async function installAppOnDevice(appPath, deviceId, bundleId, logs, flush) {
+  const devicectl = getXcodeToolPath("devicectl");
+  logs.push(`[install] Installing on device ${deviceId}…`);
+  await flush(true);
+
+  const result = await run(
+    "/bin/sh",
+    ["-c", `exec "${devicectl}" device install app --device "${deviceId}" "${appPath}"`],
+    {
+      cwd: "/tmp",
+      onLine: (line) => {
+        logs.push(line);
+        flush(false).catch(() => {});
+      },
+    }
+  );
+
+  if (result.code !== 0) {
+    logs.push(`[install] ❌ Install failed (exit ${result.code})`);
+    await flush(true);
+    return false;
+  }
+
+  logs.push("[install] ✅ App installed on device");
+  await flush(true);
+
+  // Auto-launch the app so the user sees it immediately
+  if (bundleId) {
+    logs.push(`[install] Launching ${bundleId}…`);
+    await flush(true);
+    try {
+      const launchResult = await run(
+        "/bin/sh",
+        ["-c", `exec "${devicectl}" device process launch --device "${deviceId}" "${bundleId}"`],
+        {
+          cwd: "/tmp",
+          onLine: (line) => {
+            logs.push(line);
+            flush(false).catch(() => {});
+          },
+        }
+      );
+      if (launchResult.code === 0) {
+        logs.push("[install] ✅ App launched on device");
+      } else {
+        logs.push("[install] ⚠️ App installed but could not auto-launch — open it from your home screen");
+      }
+      await flush(true);
+    } catch (_) {
+      logs.push("[install] ⚠️ App installed but auto-launch failed — open it from your home screen");
+      await flush(true);
+    }
+  }
+
+  return true;
+}
+
+/**
  * Get or create a cached DerivedData directory for a project.
  */
 function getCachedDerivedDataPath(projectId) {
@@ -395,23 +507,36 @@ async function validateJob(job) {
     };
 
     const wantIPA = job.request.outputType === "ipa";
+    const wantDevice = job.request.outputType === "device";
+    const teamId = job.request.developmentTeam || process.env.DEFAULT_DEVELOPMENT_TEAM || "";
     const cachedDD = getCachedDerivedDataPath(job.request.projectId);
     const derivedDataPath = cachedDD || join(tmp, "DerivedData");
-    const baseArgs = [
-      "-project",
-      xcodeproj,
-      "-scheme",
-      projectName,
-      "-destination",
-      "generic/platform=iOS Simulator",
-      "-derivedDataPath",
-      derivedDataPath,
-      "build",
-      // Don't require signing for simulator builds.
-      "CODE_SIGNING_ALLOWED=NO",
-      "CODE_SIGNING_REQUIRED=NO",
-      'CODE_SIGN_IDENTITY=""',
-    ];
+
+    let baseArgs;
+    if (wantDevice || wantIPA) {
+      baseArgs = [
+        "-project", xcodeproj,
+        "-scheme", projectName,
+        "-destination", "generic/platform=iOS",
+        "-derivedDataPath", derivedDataPath,
+        "build",
+        "-allowProvisioningUpdates",
+      ];
+      if (teamId) {
+        baseArgs.push(`DEVELOPMENT_TEAM=${teamId}`);
+      }
+    } else {
+      baseArgs = [
+        "-project", xcodeproj,
+        "-scheme", projectName,
+        "-destination", "generic/platform=iOS Simulator",
+        "-derivedDataPath", derivedDataPath,
+        "build",
+        "CODE_SIGNING_ALLOWED=NO",
+        "CODE_SIGNING_REQUIRED=NO",
+        'CODE_SIGN_IDENTITY=""',
+      ];
+    }
 
     const { path: xcodebuildPath, tried } = getXcodebuildPath();
     logs.push(xcodebuildPath === "xcodebuild" ? `xcodebuild not found. Tried: ${tried.join(", ")}` : `Using: ${xcodebuildPath}`);
@@ -446,8 +571,34 @@ async function validateJob(job) {
     await flush(true);
 
     if (result.code === 0) {
-      if (wantIPA) {
-        const teamId = job.request.developmentTeam || "";
+      if (wantDevice) {
+        const appPath = join(
+          derivedDataPath, "Build", "Products", "Debug-iphoneos", `${projectName}.app`
+        );
+        const device = findConnectedDevice();
+        if (!device) {
+          logs.push("[install] ⚠️ No connected iOS device found — build succeeded but could not install.");
+          logs.push("[install] Connect your iPhone via USB or ensure it's on the same network, then try again.");
+          await flush(true);
+          await updateJob(job.id, {
+            status: "succeeded",
+            exitCode: 0,
+            logs: ["✅ Build succeeded", "⚠️ No connected device found for auto-install"],
+          });
+        } else {
+          logs.push(`[install] Found device: ${device.name} (${device.identifier})`);
+          await flush(true);
+          const bundleId = job.request.bundleId || "com.vibetree.app";
+          const installed = await installAppOnDevice(appPath, device.identifier, bundleId, logs, flush);
+          await updateJob(job.id, {
+            status: "succeeded",
+            exitCode: 0,
+            logs: installed
+              ? ["✅ Build succeeded", `✅ Installed on ${device.name}`]
+              : ["✅ Build succeeded", `⚠️ Install failed on ${device.name} — download the zip and run from Xcode instead`],
+          });
+        }
+      } else if (wantIPA) {
         const ipaPath = await archiveAndExportIPA(
           xcodebuildPath, xcodeproj, projectName, unzipDir, derivedDataPath, teamId, logs, flush
         );
@@ -470,11 +621,7 @@ async function validateJob(job) {
       } else {
         await updateJob(job.id, { status: "succeeded", exitCode: 0, logs: ["✅ Build succeeded"] });
         const appPath = join(
-          derivedDataPath,
-          "Build",
-          "Products",
-          "Debug-iphonesimulator",
-          `${projectName}.app`
+          derivedDataPath, "Build", "Products", "Debug-iphonesimulator", `${projectName}.app`
         );
         const bundleId = job.request.bundleId || "com.vibetree.app";
         const projectId = job.request.projectId;
