@@ -18,6 +18,7 @@
 		2BF347C9167B61A1D64A74AE /* BuildActivityLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A94C98DB0ED32D8F97A47C7 /* BuildActivityLiveActivity.swift */; };
 		2E9316E1D49B916CE5670710 /* DeviceRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D0504AF9B88680980739A32 /* DeviceRegistration.swift */; };
 		363A621ACFED275B23283E49 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66D6E9396B03B06208CB1D11 /* EditorView.swift */; };
+		A1B2C3D4E5F60718293A4B5C6D /* InstallOnDeviceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C7E /* InstallOnDeviceSheet.swift */; };
 		3D14218531098A075A5A96D9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A99B1B411A1D0711F3346E7A /* ContentView.swift */; };
 		56B7DC40A06E4FA654823EED /* ProjectListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6687F22AB0D5F25CE9DE637F /* ProjectListView.swift */; };
 		59427000B65A8CE0250F6DF5 /* SharedColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF487C87149418845C46BCB /* SharedColors.swift */; };
@@ -93,6 +94,7 @@
 		65F466220D236593D2C720CB /* BuildMonitorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildMonitorService.swift; sourceTree = "<group>"; };
 		6687F22AB0D5F25CE9DE637F /* ProjectListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectListView.swift; sourceTree = "<group>"; };
 		66D6E9396B03B06208CB1D11 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B5C7E /* InstallOnDeviceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallOnDeviceSheet.swift; sourceTree = "<group>"; };
 		755DAB791D8480380F840223 /* BuildJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildJob.swift; sourceTree = "<group>"; };
 		77731EE663BC9493CE53320C /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 		87ABF0F270515D3B7C65F15F /* VibeTreeCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeTreeCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -149,6 +151,7 @@
 				F0D387383822D7E75BFAC5E0 /* CreditsView.swift */,
 				481429A5C8D3D216F2FAF35B /* DeviceFrameView.swift */,
 				66D6E9396B03B06208CB1D11 /* EditorView.swift */,
+				A1B2C3D4E5F60718293A4B5C7E /* InstallOnDeviceSheet.swift */,
 				C4B03B79AC3DA6DA48573DC9 /* GuidedModeView.swift */,
 				91079938785C568D4D591097 /* MainTabView.swift */,
 				5DE76CBEEC68DB33BFC80ABC /* MessageBubbleView.swift */,
@@ -336,6 +339,7 @@
 				D4C343677B017978F44DBE9F /* DeviceFrameView.swift in Sources */,
 				2E9316E1D49B916CE5670710 /* DeviceRegistration.swift in Sources */,
 				363A621ACFED275B23283E49 /* EditorView.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C6D /* InstallOnDeviceSheet.swift in Sources */,
 				7BB8DE76A8593B087DEAAE51 /* ForestTheme.swift in Sources */,
 				EF90C9703AA810674D6004BD /* GuidedModeView.swift in Sources */,
 				710C8A00190400EE7719B64E /* MainTabView.swift in Sources */,

@@ -8,12 +8,18 @@ struct EditorView: View {
     @State private var showPreview = false
     @State private var showShare = false
     @State private var showKeyboardHelp = false
+    @State private var showInstallSheet = false
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     init(project: Project, pendingPrompt: String? = nil) {
         self.project = project
         self.pendingPrompt = pendingPrompt
         _chatService = StateObject(wrappedValue: ChatService(projectId: project.id))
+    }
+
+    private var canInstall: Bool {
+        if case .ready = chatService.buildStatus { return true }
+        return false
     }
 
     var body: some View {
@@ -41,6 +47,21 @@ struct EditorView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                if project.projectType == .pro {
+                    Button {
+                        showInstallSheet = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "iphone.and.arrow.forward")
+                                .font(.system(size: 14))
+                            Text("Install")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundColor(canInstall ? Forest.accent : Forest.textTertiary)
+                    }
+                    .disabled(!canInstall)
+                }
+
                 Button { showShare = true } label: {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 14))
@@ -76,6 +97,9 @@ struct EditorView: View {
         }
         .sheet(isPresented: $showShare) {
             ShareSheet(project: project)
+        }
+        .sheet(isPresented: $showInstallSheet) {
+            InstallOnDeviceSheet(projectId: project.id, projectName: project.name)
         }
     }
 

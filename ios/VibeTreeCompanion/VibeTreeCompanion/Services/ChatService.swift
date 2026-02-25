@@ -110,9 +110,11 @@ final class ChatService: ObservableObject {
             }
             logger.info("performStream: connected, HTTP \(http.statusCode)")
 
-            var fullText = ""
             var editedFiles: [String] = []
             var discoveredFiles: [String] = []
+            var buildLog: [String] = []
+            var doneContent: String?
+            var doneEditedFiles: [String]?
 
             for try await line in bytes.lines {
                 if Task.isCancelled { break }
@@ -123,9 +125,11 @@ final class ChatService: ObservableObject {
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     await processStreamChunk(
                         json,
-                        fullText: &fullText,
+                        buildLog: &buildLog,
                         editedFiles: &editedFiles,
                         discoveredFiles: &discoveredFiles,
+                        doneContent: &doneContent,
+                        doneEditedFiles: &doneEditedFiles,
                         assistantMessageId: assistantMessageId
                     )
                 }
@@ -134,8 +138,9 @@ final class ChatService: ObservableObject {
             let elapsed = Date().timeIntervalSince(streamStart) * 1000
 
             if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
-                messages[idx].text = fullText.isEmpty ? "Build complete." : fullText
-                messages[idx].editedFiles = editedFiles.isEmpty ? nil : editedFiles
+                let finalText = doneContent ?? (buildLog.isEmpty ? "Build complete." : buildLog.joined(separator: "\n"))
+                messages[idx].text = finalText.isEmpty ? "Build complete." : finalText
+                messages[idx].editedFiles = (doneEditedFiles ?? editedFiles).isEmpty ? nil : (doneEditedFiles ?? editedFiles)
                 messages[idx].discoveredFiles = discoveredFiles.isEmpty ? nil : discoveredFiles
                 messages[idx].isStreaming = false
                 messages[idx].elapsedMs = elapsed
@@ -159,45 +164,69 @@ final class ChatService: ObservableObject {
         recentFiles = []
     }
 
+    private static func phaseLabel(_ phase: String) -> String {
+        switch phase {
+        case "starting_request": return "Starting…"
+        case "waiting_for_first_tokens": return "Waiting for first tokens…"
+        case "receiving_output": return "Receiving code…"
+        case "validating_structured_output": return "Validating output…"
+        case "saving_files": return "Saving files…"
+        case "done_preview_updating": return "Done."
+        case "retrying_request": return "Retrying…"
+        default: return phase.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
     private func processStreamChunk(
         _ json: [String: Any],
-        fullText: inout String,
+        buildLog: inout [String],
         editedFiles: inout [String],
         discoveredFiles: inout [String],
+        doneContent: inout String?,
+        doneEditedFiles: inout [String]?,
         assistantMessageId: String
     ) async {
-        if let phase = json["phase"] as? String {
-            if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
-                messages[idx].phase = phase
+        let eventType = json["type"] as? String
+
+        if eventType == "phase", let phase = json["phase"] as? String {
+            let label = Self.phaseLabel(phase)
+            if buildLog.last != label {
+                buildLog.append(label)
+                if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
+                    messages[idx].phase = phase
+                    messages[idx].text = buildLog.joined(separator: "\n")
+                }
             }
         }
 
-        if let chunk = json["chunk"] as? String {
-            fullText += chunk
-            if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
-                messages[idx].text = fullText
-            }
-        }
-
-        if let summary = json["summary"] as? String {
-            fullText = summary
-            if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
-                messages[idx].text = summary
-            }
-        }
-
-        if let files = json["editedFiles"] as? [String] {
-            editedFiles = files
-        }
-
-        if let filePath = json["discoveredFile"] as? String {
-            if !discoveredFiles.contains(filePath) {
-                discoveredFiles.append(filePath)
+        if eventType == "file", let path = json["path"] as? String {
+            let count = (json["count"] as? NSNumber)?.intValue ?? (discoveredFiles.count + 1)
+            let fileName = (path as NSString).lastPathComponent
+            let line = "Generating \(fileName) (file \(count))"
+            if !discoveredFiles.contains(path) {
+                discoveredFiles.append(path)
                 streamingFileCount = discoveredFiles.count
                 recentFiles = Array(discoveredFiles.suffix(5))
             }
-            if !editedFiles.contains(filePath) {
-                editedFiles.append(filePath)
+            if !editedFiles.contains(path) {
+                editedFiles.append(path)
+            }
+            buildLog.append(line)
+            if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
+                messages[idx].text = buildLog.joined(separator: "\n")
+            }
+        }
+
+        if eventType == "done", let assistant = json["assistantMessage"] as? [String: Any] {
+            doneContent = assistant["content"] as? String
+            if let files = assistant["editedFiles"] as? [String] {
+                doneEditedFiles = files
+            }
+        }
+
+        if eventType == "error", let err = json["error"] as? String {
+            if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
+                messages[idx].text = "Error: \(err)"
             }
         }
     }

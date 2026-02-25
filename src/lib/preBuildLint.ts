@@ -107,5 +107,28 @@ export function preBuildLint(files: SwiftFile[]): LintResult {
     }
   }
 
+  // Force unwrap in view body causes EXC_BREAKPOINT / KeyPath assertion at launch (common crash on device).
+  for (const f of result) {
+    if (!f.path.endsWith(".swift")) continue;
+    if (!/var\s+body\s*:\s*some\s+View/.test(f.content)) continue;
+    // Match identifier! (force unwrap) but not != or !==
+    const forceUnwrapRe = /[a-zA-Z_][a-zA-Z0-9_]*!(?!=)/g;
+    const idx = f.content.indexOf("var body");
+    if (idx === -1) continue;
+    let m;
+    while ((m = forceUnwrapRe.exec(f.content)) !== null) {
+      if (m.index < idx) continue; // before body
+      const lineNum = f.content.substring(0, m.index).split("\n").length;
+      warnings.push({
+        file: f.path,
+        line: lineNum,
+        message: `Force unwrap (!) in view body can cause immediate crash on launch — use optional binding (if let) or nil-coalescing (??) instead`,
+        severity: "error",
+        autoFixed: false,
+      });
+      break; // one warning per file
+    }
+  }
+
   return { files: result, warnings, autoFixCount };
 }

@@ -391,6 +391,7 @@ export function EditorLayout({ project }: { project: Project }) {
         isOpen={runOnDeviceOpen}
         onClose={() => setRunOnDeviceOpen(false)}
         projectId={project.id}
+        buildStatus={buildStatus}
         expoUrl={expoUrl}
         onExpoUrl={setExpoUrl}
       />

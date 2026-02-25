@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Modal, Button, QRCode, Input } from "@/components/ui";
 
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
@@ -19,7 +19,8 @@ type PreflightResult = {
 function usePreflightChecks(
   projectId: string,
   teamId: string,
-  isOpen: boolean
+  isOpen: boolean,
+  buildStatus?: "idle" | "building" | "live" | "failed"
 ) {
   const [checks, setChecks] = useState<PreflightResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -43,9 +44,18 @@ function usePreflightChecks(
     }
   }, [projectId, teamId]);
 
+  const prevBuildStatus = useRef<typeof buildStatus>(undefined);
   useEffect(() => {
     if (isOpen) run();
   }, [isOpen, run]);
+
+  // Re-run preflight when build just became "live" so Project files check updates
+  useEffect(() => {
+    const justBecameLive =
+      buildStatus === "live" && prevBuildStatus.current !== "live";
+    prevBuildStatus.current = buildStatus;
+    if (isOpen && justBecameLive) run();
+  }, [buildStatus, isOpen, run]);
 
   const allPassed =
     checks != null &&
@@ -61,6 +71,7 @@ export function RunOnDeviceModal({
   isOpen,
   onClose,
   projectId,
+  buildStatus,
   expoUrl: expoUrlProp,
   onExpoUrl,
   projectType: projectTypeProp,
@@ -68,6 +79,8 @@ export function RunOnDeviceModal({
   isOpen: boolean;
   onClose: () => void;
   projectId: string;
+  /** When this becomes "live", preflight re-runs so Project files check updates. */
+  buildStatus?: "idle" | "building" | "live" | "failed";
   expoUrl?: string | null;
   onExpoUrl?: (url: string) => void;
   projectType?: "standard" | "pro";
@@ -100,7 +113,7 @@ export function RunOnDeviceModal({
   const expoUrl = expoUrlProp ?? expoUrlLocal;
 
   const { checks, allPassed, loading: preflightLoading, recheck } =
-    usePreflightChecks(projectId, teamId, isOpen && projectType === "pro");
+    usePreflightChecks(projectId, teamId, isOpen && projectType === "pro", buildStatus);
 
   // Load saved settings from localStorage on open
   useEffect(() => {
@@ -577,6 +590,11 @@ export function RunOnDeviceModal({
               }
             />
           </div>
+          {checks && !checks.files.ok && (
+            <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+              Each prompt creates a new project. Make sure you’re in the project you just built, then click Re-check above.
+            </p>
+          )}
 
           {/* ── Install button ── */}
           <Button

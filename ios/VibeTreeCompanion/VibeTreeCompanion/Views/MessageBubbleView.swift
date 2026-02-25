@@ -2,34 +2,71 @@ import SwiftUI
 
 struct MessageBubbleView: View {
     let message: ChatMessage
+    var isLast: Bool = false
+
     @State private var visibleWordCount: Int = 0
     @State private var animationTimer: Timer?
     @State private var hasAnimated = false
+
+    private var isReasoning: Bool {
+        guard message.role == .assistant else { return false }
+        if message.editedFiles?.isEmpty == false { return false }
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.count < 50 { return true }
+        let phrases: Set<String> = [
+            "Reading files.", "Explored.", "Grepped.", "Analyzed.",
+            "Planning next moves…", "Writing code…", "Validating build on Mac…",
+        ]
+        return phrases.contains(text)
+    }
 
     var body: some View {
         switch message.role {
         case .user:
             userBubble
         case .assistant:
-            assistantBubble
+            if isReasoning {
+                reasoningBubble
+            } else {
+                assistantBubble
+            }
         case .system:
             systemBubble
         }
     }
 
-    // MARK: - User
+    // MARK: - User (right-aligned pill with left accent border)
 
     private var userBubble: some View {
         HStack {
-            Spacer(minLength: 60)
+            Spacer(minLength: 44)
             Text(message.text)
-                .font(.system(size: Forest.textBase))
+                .font(.system(size: Forest.textSm, weight: .medium))
                 .foregroundColor(Forest.textPrimary)
-                .modifier(ForestUserBubbleModifier())
+                .lineSpacing(3)
+                .multilineTextAlignment(.trailing)
+                .padding(.horizontal, Forest.space4)
+                .padding(.vertical, Forest.space3)
+                .background(Forest.chatBubbleUserBg)
+                .cornerRadius(Forest.radiusLg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Forest.radiusLg)
+                        .stroke(Forest.border, lineWidth: 1)
+                )
+                .overlay(alignment: .leading) {
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: Forest.radiusLg,
+                        bottomLeadingRadius: Forest.radiusLg,
+                        bottomTrailingRadius: 0,
+                        topTrailingRadius: 0
+                    )
+                    .fill(Forest.accent.opacity(0.5))
+                    .frame(width: 3)
+                }
         }
     }
 
-    // MARK: - Assistant
+    // MARK: - Assistant (full-box fog, no card border)
 
     private var assistantBubble: some View {
         HStack {
@@ -38,7 +75,7 @@ struct MessageBubbleView: View {
                     HStack(spacing: Forest.space2) {
                         ProgressView()
                             .tint(Forest.accent)
-                            .scaleEffect(0.7)
+                            .scaleEffect(0.65)
                         Text(phaseLabel(phase))
                             .font(.system(size: Forest.textXs, weight: .medium))
                             .foregroundColor(Forest.textTertiary)
@@ -50,51 +87,86 @@ struct MessageBubbleView: View {
                 }
 
                 if let files = message.editedFiles, !files.isEmpty {
-                    filesList(files)
+                    fileList(files)
                 }
 
                 if message.isStreaming && message.text.isEmpty {
-                    typingIndicator
+                    typingDots
                 }
 
                 if !message.isStreaming {
-                    metadataFooter
+                    metadataRow
                 }
             }
-            .modifier(ForestAssistantBubbleModifier())
+            .padding(.horizontal, Forest.space2)
+            .padding(.vertical, 2)
+            .background(
+                RadialGradient(
+                    colors: [
+                        Forest.accent.opacity(0.08),
+                        Color.clear
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 180
+                )
+            )
 
-            Spacer(minLength: 40)
+            Spacer(minLength: 44)
         }
+    }
+
+    // MARK: - Reasoning (small muted inline text, no bubble)
+
+    private var reasoningBubble: some View {
+        HStack {
+            Text(message.text)
+                .font(.system(size: Forest.textXs))
+                .foregroundColor(Forest.textTertiary)
+                .lineSpacing(2)
+                .padding(.vertical, 1)
+
+            Spacer()
+        }
+    }
+
+    // MARK: - Streaming text (word-by-word)
+
+    /// Build log (phases + "Generating X") should show in full as it updates; no word-by-word.
+    private var isBuildLog: Bool {
+        message.isStreaming && (message.text.contains("\n") || message.text.contains("Generating "))
     }
 
     @ViewBuilder
     private var streamingText: some View {
         let words = message.text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
-        let totalWords = words.count
+        let total = words.count
 
-        if message.isStreaming && !hasAnimated {
+        if message.isStreaming && !hasAnimated && !isBuildLog {
             Text(words.prefix(visibleWordCount).joined(separator: " "))
-                .font(.system(size: Forest.textBase))
+                .font(.system(size: Forest.textSm))
                 .foregroundColor(Forest.textPrimary)
+                .lineSpacing(3)
                 .textSelection(.enabled)
-                .onAppear { startWordAnimation(totalWords: totalWords) }
+                .onAppear { startWordAnimation(totalWords: total) }
                 .onDisappear { animationTimer?.invalidate() }
                 .onChange(of: message.text) { _, _ in
-                    visibleWordCount = totalWords
+                    visibleWordCount = total
                 }
         } else {
             Text(message.text)
-                .font(.system(size: Forest.textBase))
+                .font(.system(size: Forest.textSm))
                 .foregroundColor(Forest.textPrimary)
+                .lineSpacing(3)
                 .textSelection(.enabled)
-                .onAppear { hasAnimated = true }
+                .onAppear { if !isBuildLog { hasAnimated = true } }
         }
     }
 
     private func startWordAnimation(totalWords: Int) {
         visibleWordCount = 0
         animationTimer?.invalidate()
-        animationTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { timer in
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 0.045, repeats: true) { timer in
             if visibleWordCount < totalWords {
                 visibleWordCount += 1
             } else {
@@ -104,83 +176,41 @@ struct MessageBubbleView: View {
         }
     }
 
-    private func filesList(_ files: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Edited files")
-                .font(.system(size: Forest.textXs, weight: .semibold))
-                .foregroundColor(Forest.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.6)
+    // MARK: - File list (inline comma-separated monospace, like desktop)
 
-            ForEach(files, id: \.self) { file in
-                HStack(spacing: 4) {
-                    Image(systemName: "doc.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(Forest.accent)
-                    Text(file)
-                        .font(.system(size: Forest.textXs, design: .monospaced))
-                        .foregroundColor(Forest.textSecondary)
-                        .lineLimit(1)
-                }
-            }
-        }
-        .padding(.top, Forest.space1)
+    private func fileList(_ files: [String]) -> some View {
+        Text(files.joined(separator: ", "))
+            .font(.system(size: Forest.textXs, design: .monospaced))
+            .foregroundColor(Forest.textSecondary)
+            .lineLimit(3)
+            .padding(.top, message.text.isEmpty ? 0 : Forest.space2)
     }
 
-    private var typingIndicator: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<3) { i in
-                Circle()
-                    .fill(Forest.accent.opacity(0.5))
-                    .frame(width: 6, height: 6)
-                    .scaleEffect(typingDotScale(index: i))
-                    .animation(
-                        .easeInOut(duration: 0.5)
-                            .repeatForever()
-                            .delay(Double(i) * 0.15),
-                        value: message.isStreaming
-                    )
-            }
-        }
-        .padding(.vertical, Forest.space1)
-    }
-
-    private func typingDotScale(index: Int) -> CGFloat {
-        message.isStreaming ? 1.3 : 0.7
-    }
-
-    // MARK: - Metadata Footer
+    // MARK: - Metadata (dot-separated, like desktop)
 
     @ViewBuilder
-    private var metadataFooter: some View {
+    private var metadataRow: some View {
         let parts = metadataParts
         if !parts.isEmpty {
-            HStack(spacing: Forest.space2) {
-                ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
-                    Text(part)
-                        .font(.system(size: 10))
-                        .foregroundColor(Forest.textTertiary)
-                }
-            }
-            .padding(.top, 2)
+            Text(parts.joined(separator: " · "))
+                .font(.system(size: Forest.textXs))
+                .foregroundColor(Forest.textTertiary)
+                .padding(.top, 2)
         }
     }
 
     private var metadataParts: [String] {
         var parts: [String] = []
-
         if let elapsed = message.elapsedMs {
             let seconds = Int(elapsed / 1000)
             if seconds > 0 {
                 parts.append("Generated in \(seconds)s")
             }
         }
-
         let age = Date().timeIntervalSince(message.createdAt)
         if age > 60 {
             parts.append("Built \(formatTimeAgo(age))")
         }
-
         return parts
     }
 
@@ -193,6 +223,26 @@ struct MessageBubbleView: View {
         return "\(days)d ago"
     }
 
+    // MARK: - Typing dots
+
+    private var typingDots: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3) { i in
+                Circle()
+                    .fill(Forest.accent.opacity(0.4))
+                    .frame(width: 5, height: 5)
+                    .scaleEffect(message.isStreaming ? 1.2 : 0.8)
+                    .animation(
+                        .easeInOut(duration: 0.5)
+                            .repeatForever()
+                            .delay(Double(i) * 0.15),
+                        value: message.isStreaming
+                    )
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
     // MARK: - System
 
     private var systemBubble: some View {
@@ -201,7 +251,7 @@ struct MessageBubbleView: View {
             Text(message.text)
                 .font(.system(size: Forest.textXs, weight: .medium))
                 .foregroundColor(Forest.textTertiary)
-                .padding(.vertical, Forest.space1)
+                .padding(.vertical, 2)
             Spacer()
         }
     }
