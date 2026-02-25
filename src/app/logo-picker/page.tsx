@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 
 /**
- * Forest theme colors from THEME.plan.md / themes.css (emerald = Forest).
+ * Forest theme colors from docs/plans/THEME.plan.md / themes.css (emerald = Forest).
  * See themes.css [data-theme="emerald"] and tokens.css for background.
  */
 const FOREST = {

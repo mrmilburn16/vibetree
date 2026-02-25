@@ -19,7 +19,7 @@ The LLM **does not learn** between generations. Each build is independent. Progr
 
 **Status: Infrastructure built (Build Results Tracker)**
 
-- Dashboard: http://localhost:3001/admin/builds
+- Dashboard: `/admin/builds`
 - CLI stats: `node scripts/analyze-builds.mjs`
 - Build results log: `data/build-results.jsonl`
 
@@ -230,7 +230,7 @@ The practical approach: **iterate on the system prompt and validation pipeline.*
 
 ## Tools Available
 
-- **Build Results Dashboard:** http://localhost:3001/admin/builds
+- **Build Results Dashboard:** `/admin/builds`
 - **CLI Analysis:** `node scripts/analyze-builds.mjs`
 - **Build Results Log:** `data/build-results.jsonl`
 - **App Ideas (Easy):** `APP_IDEAS_100/` — 100 simple 1-screen apps
