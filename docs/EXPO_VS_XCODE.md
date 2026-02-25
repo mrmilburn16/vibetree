@@ -64,7 +64,7 @@ flowchart LR
 
 - **Native iOS app:** Real Swift/SwiftUI; best performance and access to full iOS APIs, system look and feel, and platform conventions.
 - **Path to App Store:** The exported project can be archived and submitted. User owns the source and the Xcode project.
-- **Build validation:** Optional "Validate build on Mac" runs xcodebuild and an auto-fix loop, so many compile errors are fixed before the user downloads. Build results are logged for improvement (see `plans/QUALITY_IMPROVEMENT_PLAN.md`).
+- **Build validation:** Optional "Validate build on Mac" runs xcodebuild and an auto-fix loop, so many compile errors are fixed before the user downloads. Build results are logged for improvement (see `plans/implementation.md`).
 - **No tunnel:** User downloads a zip and runs locally in Xcode. No dependency on Vibetree server for actually running the app after download.
 - **Offline after download:** Once the user has the zip, they can build and run on device/simulator without the editor.
 - **Best for "real" apps:** Polished, native UX; suitable for portfolio pieces, prototypes for stakeholders, or apps you intend to ship.
