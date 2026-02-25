@@ -302,10 +302,16 @@ ${entries.join("\n")}
  * Build project.pbxproj content for the given Swift file paths.
  * Paths are relative (e.g. "App.swift", "ContentView.swift", "Models/Item.swift").
  */
+export interface BuildPbxprojResult {
+  pbxproj: string;
+  scheme: string;
+  projectName: string;
+}
+
 export function buildPbxproj(
   paths: string[],
   options?: Partial<BuildPbxprojOptions>
-): string {
+): BuildPbxprojResult {
   const projectName = options?.projectName ?? "VibetreeApp";
   const bundleId = options?.bundleId ?? "com.vibetree.app";
   const deploymentTarget = options?.deploymentTarget ?? "17.0";
@@ -555,7 +561,7 @@ export function buildPbxproj(
     ? `\t\t${configListWidgetTargetId} /* Build configuration list for PBXNativeTarget "${widgetName}" */ = {\n\t\t\tisa = XCConfigurationList;\n\t\t\tbuildConfigurations = (\n\t\t\t\t${debugConfigWidgetTargetId} /* Debug */,\n\t\t\t\t${releaseConfigWidgetTargetId} /* Release */,\n\t\t\t);\n\t\t\tdefaultConfigurationIsVisible = 0;\n\t\t\tdefaultConfigurationName = Release;\n\t\t};`
     : "";
 
-  return `// !$*UTF8*$!
+  const pbxproj = `// !$*UTF8*$!
 {
 \tarchiveVersion = 1;
 \tclasses = {
@@ -811,5 +817,91 @@ ${widgetConfigListBlock}
 \t};
 \trootObject = ${projectObjectId} /* Project object */;
 }
+`;
+
+  const scheme = buildXcscheme(projectName, appTargetId);
+
+  return { pbxproj, projectName, scheme };
+}
+
+function buildXcscheme(projectName: string, appTargetId: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Scheme
+   LastUpgradeVersion = "1600"
+   version = "1.7">
+   <BuildAction
+      parallelizeBuildables = "YES"
+      buildImplicitDependencies = "YES"
+      buildArchitectures = "Automatic">
+      <BuildActionEntries>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "${appTargetId}"
+               BuildableName = "${projectName}.app"
+               BlueprintName = "${projectName}"
+               ReferencedContainer = "container:${projectName}.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      shouldAutocreateTestPlan = "YES">
+   </TestAction>
+   <LaunchAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      launchStyle = "0"
+      useCustomWorkingDirectory = "NO"
+      ignoresPersistentStateOnLaunch = "NO"
+      debugDocumentVersioning = "YES"
+      debugServiceExtension = "internal"
+      allowLocationSimulation = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "${appTargetId}"
+            BuildableName = "${projectName}.app"
+            BlueprintName = "${projectName}"
+            ReferencedContainer = "container:${projectName}.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </LaunchAction>
+   <ProfileAction
+      buildConfiguration = "Release"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      savedToolIdentifier = ""
+      useCustomWorkingDirectory = "NO"
+      debugDocumentVersioning = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "${appTargetId}"
+            BuildableName = "${projectName}.app"
+            BlueprintName = "${projectName}"
+            ReferencedContainer = "container:${projectName}.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </ProfileAction>
+   <AnalyzeAction
+      buildConfiguration = "Debug">
+   </AnalyzeAction>
+   <ArchiveAction
+      buildConfiguration = "Release"
+      revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>
 `;
 }
