@@ -64,7 +64,9 @@ export async function POST(
   const body = await request.json().catch(() => ({}));
   const providedName = typeof body?.projectName === "string" ? body.projectName : "";
   const providedBundleId = typeof body?.bundleId === "string" ? body.bundleId : "";
-  const providedTeam = typeof body?.developmentTeam === "string" ? body.developmentTeam : "";
+  const providedTeam = typeof body?.developmentTeam === "string" && body.developmentTeam.trim()
+    ? body.developmentTeam.trim()
+    : process.env.DEFAULT_DEVELOPMENT_TEAM ?? "";
   const filesRaw = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : undefined;
   const files = filesRaw ? normalizeSwiftFiles(filesRaw) : undefined;
   const userPrompt = typeof body?.userPrompt === "string" ? body.userPrompt : undefined;
