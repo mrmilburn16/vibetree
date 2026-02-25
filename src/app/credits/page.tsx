@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { useCredits } from "@/contexts/CreditsContext";
 import { Button, Input } from "@/components/ui";
 import { CREDIT_PACKS, PRICE_PER_CREDIT_USD } from "@/lib/credits";
@@ -13,11 +14,12 @@ export default function CreditsPage() {
   const [purchased, setPurchased] = useState<string | null>(null);
   const [testBalance, setTestBalance] = useState("");
 
+  const { user, loading } = useAuth();
+
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const session = localStorage.getItem("vibetree-session");
-    if (!session) router.replace("/sign-in");
-  }, [router]);
+    if (loading) return;
+    if (!user) router.replace("/sign-in");
+  }, [user, loading, router]);
 
   function handlePurchase(packId: string, credits: number) {
     add(credits);

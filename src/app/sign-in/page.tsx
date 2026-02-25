@@ -4,6 +4,9 @@ import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Input, Card } from "@/components/ui";
+import { useAuth } from "@/contexts/AuthContext";
+import { getFirebaseAuth, isFirebaseAuthEnabled } from "@/lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 type BackgroundVariant = 1 | 2 | 3;
 
@@ -47,6 +50,7 @@ function SignInLoadingWordmark() {
 
 export default function SignInPage() {
   const router = useRouter();
+  const { refreshMockUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -56,22 +60,34 @@ export default function SignInPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (password.length < 1) {
+      setError("Please enter your password.");
+      return;
+    }
     setLoading(true);
     try {
-      // Mock: accept any email/password and create session
-      await new Promise((r) => setTimeout(r, 5000));
-      if (password.length < 1) {
-        setError("Please enter your password.");
-        setLoading(false);
-        return;
+      if (isFirebaseAuthEnabled()) {
+        const auth = getFirebaseAuth();
+        if (!auth) throw new Error("Auth not configured");
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+        router.push("/dashboard");
+        router.refresh();
+      } else {
+        await new Promise((r) => setTimeout(r, 800));
+        if (typeof window !== "undefined") {
+          localStorage.setItem("vibetree-session", JSON.stringify({ email: email.trim(), at: Date.now() }));
+        }
+        refreshMockUser();
+        router.push("/dashboard");
+        router.refresh();
       }
-      if (typeof window !== "undefined") {
-        localStorage.setItem("vibetree-session", JSON.stringify({ email, at: Date.now() }));
-      }
-      router.push("/dashboard");
-      router.refresh();
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "code" in err
+        ? (err as { code?: string }).code === "auth/invalid-credential"
+          ? "Invalid email or password."
+          : (err as { message?: string }).message ?? "Something went wrong. Please try again."
+        : "Something went wrong. Please try again.";
+      setError(msg);
     } finally {
       setLoading(false);
     }

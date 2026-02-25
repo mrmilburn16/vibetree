@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { CreditsProvider } from "@/contexts/CreditsContext";
 import { DevActivityWidget } from "@/components/dev/DevActivityWidget";
 import "./globals.css";
@@ -34,10 +35,12 @@ export default function RootLayout({
             __html: `(function(){var t=document.documentElement;var th=localStorage.getItem('vibetree-theme')||'emerald';t.setAttribute('data-theme',th);})();`,
           }}
         />
-        <CreditsProvider>
-          {children}
-          {process.env.NODE_ENV === "development" && <DevActivityWidget />}
-        </CreditsProvider>
+        <AuthProvider>
+          <CreditsProvider>
+            {children}
+            {process.env.NODE_ENV === "development" && <DevActivityWidget />}
+          </CreditsProvider>
+        </AuthProvider>
       </body>
     </html>
   );

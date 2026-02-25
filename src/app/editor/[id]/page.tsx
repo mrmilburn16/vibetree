@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
 import { getProject } from "@/lib/projects";
 import { EditorLayout } from "@/components/editor/EditorLayout";
 import type { Project } from "@/lib/projects";
@@ -10,18 +11,24 @@ import type { Project } from "@/lib/projects";
 export default function EditorPage() {
   const params = useParams();
   const router = useRouter();
+  const { user, loading } = useAuth();
   const id = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      router.replace("/sign-in");
+      return;
+    }
     const p = getProject(id);
     if (!p) {
       setNotFound(true);
       return;
     }
     setProject(p);
-  }, [id]);
+  }, [id, user, loading, router]);
 
   if (notFound) {
     return (

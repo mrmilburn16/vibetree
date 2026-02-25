@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button, BetaBadge } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { useAuth } from "@/contexts/AuthContext";
 import { getProjects, createProject, deleteProject, duplicateProject, type Project } from "@/lib/projects";
 import { DashboardCard, NewAppCard } from "@/components/dashboard/DashboardCard";
 import { DashboardLayout2 } from "@/components/dashboard/DashboardLayout2";
@@ -52,6 +53,7 @@ const CONFIRM_DELETE_TEXT = "DELETE";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { user, loading } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [mounted, setMounted] = useState(false);
   const [layoutVersion, setLayoutVersion] = useState<"1" | "2">("1");
@@ -59,17 +61,17 @@ export default function DashboardPage() {
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const session = localStorage.getItem("vibetree-session");
-    if (!session) {
+    if (loading) return;
+    if (!user) {
       router.replace("/sign-in");
       return;
     }
+    if (typeof window === "undefined") return;
     setProjects(getProjects());
     const stored = localStorage.getItem(LAYOUT_STORAGE_KEY);
     if (stored === "1" || stored === "2") setLayoutVersion(stored);
     setMounted(true);
-  }, [router]);
+  }, [user, loading, router]);
 
   function setLayoutAndPersist(value: "1" | "2") {
     setLayoutVersion(value);
