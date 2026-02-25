@@ -60,6 +60,9 @@ export async function POST(
   }
 
   if (files.length === 0) {
+    console.warn(
+      `[build-install] No files for project ${projectId} (client sent ${clientFiles.length} files; server store had ${getProjectFilePaths(projectId).length} paths)`
+    );
     return Response.json(
       {
         error:
