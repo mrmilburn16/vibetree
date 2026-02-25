@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { CreditsProvider } from "@/contexts/CreditsContext";
+import { DevActivityWidget } from "@/components/dev/DevActivityWidget";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,6 +36,7 @@ export default function RootLayout({
         />
         <CreditsProvider>
           {children}
+          {process.env.NODE_ENV === "development" && <DevActivityWidget />}
         </CreditsProvider>
       </body>
     </html>
