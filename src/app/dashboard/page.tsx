@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, BetaBadge } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { useAuth } from "@/contexts/AuthContext";
-import { getProjects, createProject, deleteProject, duplicateProject, type Project } from "@/lib/projects";
+import { getProjects, getProject, createProject, deleteProject, duplicateProject, saveProjects, type Project } from "@/lib/projects";
+import { authFetch } from "@/lib/apiClient";
 import { DashboardCard, NewAppCard } from "@/components/dashboard/DashboardCard";
 import { DashboardLayout2 } from "@/components/dashboard/DashboardLayout2";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
@@ -53,12 +54,33 @@ const CONFIRM_DELETE_TEXT = "DELETE";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, isRealAuth, getToken } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [mounted, setMounted] = useState(false);
   const [layoutVersion, setLayoutVersion] = useState<"1" | "2">("1");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+
+  const refreshProjects = useCallback(async () => {
+    if (isRealAuth) {
+      try {
+        const res = await authFetch("/api/projects", { getToken });
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data?.projects) ? data.projects : [];
+          if (list.length > 0) {
+            saveProjects(list);
+            setProjects(list);
+            return;
+          }
+        }
+      } catch {
+        // fall through to localStorage
+      }
+    }
+    const local = getProjects();
+    setProjects(local);
+  }, [isRealAuth, getToken]);
 
   useEffect(() => {
     if (loading) return;
@@ -67,18 +89,40 @@ export default function DashboardPage() {
       return;
     }
     if (typeof window === "undefined") return;
-    setProjects(getProjects());
+    refreshProjects();
     const stored = localStorage.getItem(LAYOUT_STORAGE_KEY);
     if (stored === "1" || stored === "2") setLayoutVersion(stored);
     setMounted(true);
-  }, [user, loading, router]);
+  }, [user, loading, router, refreshProjects]);
 
   function setLayoutAndPersist(value: "1" | "2") {
     setLayoutVersion(value);
     if (typeof window !== "undefined") localStorage.setItem(LAYOUT_STORAGE_KEY, value);
   }
 
-  function handleNewApp() {
+  async function handleNewApp() {
+    if (isRealAuth) {
+      try {
+        const res = await authFetch("/api/projects", {
+          getToken,
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Untitled app" }),
+        });
+        if (res.ok) {
+          const project = await res.json();
+          const list = getProjects();
+          if (!list.some((p) => p.id === project.id)) {
+            saveProjects([project, ...list]);
+          }
+          setProjects(getProjects());
+          router.push(`/editor/${project.id}`);
+          return;
+        }
+      } catch {
+        // fall through
+      }
+    }
     const project = createProject();
     setProjects(getProjects());
     router.push(`/editor/${project.id}`);
@@ -96,17 +140,57 @@ export default function DashboardPage() {
     setDeleteConfirmInput("");
   }
 
-  function handleDeleteConfirm() {
+  async function handleDeleteConfirm() {
     if (deleteTargetId && deleteConfirmInput === CONFIRM_DELETE_TEXT) {
+      if (isRealAuth) {
+        try {
+          const res = await authFetch(`/api/projects/${deleteTargetId}`, {
+            getToken,
+            method: "DELETE",
+          });
+          if (res.ok) {
+            deleteProject(deleteTargetId);
+            setProjects(getProjects());
+            closeDeleteModal();
+            return;
+          }
+        } catch {
+          // fall through
+        }
+      }
       deleteProject(deleteTargetId);
       setProjects(getProjects());
       closeDeleteModal();
     }
   }
 
-  function handleDuplicate(e: React.MouseEvent, id: string) {
+  async function handleDuplicate(e: React.MouseEvent, id: string) {
     e.preventDefault();
     e.stopPropagation();
+    const source = getProject(id);
+    if (!source) return;
+    if (isRealAuth) {
+      try {
+        const res = await authFetch("/api/projects", {
+          getToken,
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: `${source.name} (copy)` }),
+        });
+        if (res.ok) {
+          const project = await res.json();
+          const list = getProjects();
+          if (!list.some((p) => p.id === project.id)) {
+            saveProjects([project, ...list]);
+          }
+          setProjects(getProjects());
+          router.push(`/editor/${project.id}`);
+          return;
+        }
+      } catch {
+        // fall through
+      }
+    }
     const copy = duplicateProject(id);
     if (copy) {
       setProjects(getProjects());

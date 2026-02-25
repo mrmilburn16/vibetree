@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { getFirebaseAuth, isFirebaseAuthEnabled } from "@/lib/firebase";
-import { onAuthStateChanged, signOut as fbSignOut, type User } from "firebase/auth";
+import { onAuthStateChanged, signOut as fbSignOut, getIdToken, type User } from "firebase/auth";
 
 export interface AuthUser {
   uid: string;
@@ -25,6 +25,8 @@ export interface AuthContextValue {
   isRealAuth: boolean;
   /** Call after mock sign-in to refresh user state. No-op when isRealAuth. */
   refreshMockUser: () => void;
+  /** Get Firebase ID token for API requests. Returns null when mock auth or not signed in. */
+  getToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -95,12 +97,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isRealAuth) setUser(getMockUser());
   }, [isRealAuth]);
 
+  const getToken = useCallback(async (): Promise<string | null> => {
+    if (!isRealAuth) return null;
+    const auth = getFirebaseAuth();
+    if (!auth?.currentUser) return null;
+    try {
+      return await getIdToken(auth.currentUser);
+    } catch {
+      return null;
+    }
+  }, [isRealAuth]);
+
   const value: AuthContextValue = {
     user,
     loading,
     signOut,
     isRealAuth,
     refreshMockUser,
+    getToken,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -115,6 +129,7 @@ export function useAuth(): AuthContextValue {
       signOut: async () => {},
       isRealAuth: false,
       refreshMockUser: () => {},
+      getToken: async () => null,
     };
   }
   return ctx;

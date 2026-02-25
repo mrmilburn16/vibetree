@@ -12,6 +12,7 @@ import { FailedIndicator } from "./FailedIndicator";
 import { ChatMessageList } from "./ChatMessageList";
 import { GuidedModeWizard } from "./GuidedModeWizard";
 import { useChat } from "./useChat";
+import { useAuth } from "@/contexts/AuthContext";
 import { useCredits } from "@/contexts/CreditsContext";
 import { featureFlags } from "@/lib/featureFlags";
 import { LLM_OPTIONS, DEFAULT_LLM } from "@/lib/llm-options";
@@ -64,6 +65,7 @@ export function ChatPanel({
   const [llm, setLlm] = useState(DEFAULT_LLM);
   const [projectType, setProjectType] = useState<"standard" | "pro">("standard");
   const [guidedMode, setGuidedMode] = useState(true);
+  const { getToken } = useAuth();
   const { hasCreditsForMessage, deduct } = useCredits();
 
   useEffect(() => {
@@ -122,6 +124,7 @@ export function ChatPanel({
     onProjectRenamed,
     onMessageSuccess: featureFlags.useRealLLM ? () => deduct(1) : undefined,
     onProBuildComplete,
+    getToken,
   });
 
   useEffect(() => {

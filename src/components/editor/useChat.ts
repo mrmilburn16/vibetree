@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { featureFlags } from "@/lib/featureFlags";
 import { updateProject } from "@/lib/projects";
+import { authFetch } from "@/lib/apiClient";
 
 export type MessageRole = "user" | "assistant";
 
@@ -260,9 +261,11 @@ export function useChat(
       compilerErrors?: string[];
       fileNames?: string[];
     }>;
+    /** For authenticated API calls (project persistence). */
+    getToken?: () => Promise<string | null>;
   }
 ) {
-  const { onError, projectName, onProjectRenamed, onMessageSuccess, onProBuildComplete } = options ?? {};
+  const { onError, projectName, onProjectRenamed, onMessageSuccess, onProBuildComplete, getToken } = options ?? {};
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -579,13 +582,15 @@ export function useChat(
       processQueue();
     };
 
-    fetch("/api/projects", {
+    authFetch("/api/projects", {
+      getToken,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: projectId, name: projectName ?? "Untitled app" }),
     })
       .then(() =>
-        fetch(`/api/projects/${projectId}/message/stream`, {
+        authFetch(`/api/projects/${projectId}/message/stream`, {
+          getToken,
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -778,7 +783,8 @@ export function useChat(
           if (autoTitle && !isUntitledName(autoTitle)) {
             updateProjectNameInLocalStorage(projectId, autoTitle);
             onProjectRenamed?.(autoTitle);
-            fetch("/api/projects", {
+            authFetch("/api/projects", {
+              getToken,
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ id: projectId, name: autoTitle }),
