@@ -366,6 +366,8 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       maxAttempts,
       parentJobId: failedJobId,
       userPrompt: failedJob.request.userPrompt,
+      ...(failedJob.request.outputType ? { outputType: failedJob.request.outputType } : {}),
+      ...(failedJob.request.deviceUdid ? { deviceUdid: failedJob.request.deviceUdid } : {}),
     });
 
     setBuildJobNextJob(failedJobId, retryJob.id);

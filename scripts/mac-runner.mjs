@@ -53,7 +53,7 @@ function getXcodebuildPath() {
   return { path: "xcodebuild", tried };
 }
 
-const SERVER_URL = process.env.VIBETREE_SERVER_URL || "http://localhost:3001";
+const SERVER_URL = process.env.VIBETREE_SERVER_URL || "[REDACTED]";
 const TOKEN = process.env.MAC_RUNNER_TOKEN;
 const RUNNER_ID = process.env.MAC_RUNNER_ID || `mac_${process.pid}`;
 
@@ -95,7 +95,10 @@ function parseXcdeviceList(raw) {
           plat.includes("iOS Simulator") ||
           String(d.simulator ?? "") === "true";
         const osVersion = typeof d.operatingSystemVersion === "string" ? d.operatingSystemVersion : (typeof d.osVersion === "string" ? d.osVersion : undefined);
-        const id = typeof d.identifier === "string" ? d.identifier : undefined;
+        const id = typeof d.identifier === "string" ? d.identifier
+          : typeof d.deviceIdentifier === "string" ? d.deviceIdentifier
+          : typeof d.udid === "string" ? d.udid
+          : undefined;
         return { name: d.name, id, platform: plat, osVersion, kind: isSim ? "simulator" : "physical" };
       });
     const physical = mapped.filter((d) => d.kind === "physical");
@@ -333,6 +336,51 @@ async function archiveAndExportIPA(xcodebuildPath, xcodeproj, projectName, unzip
 }
 
 /**
+ * Install .app to physical device and launch it using devicectl (Xcode 15+).
+ * Returns true if both install and launch succeed.
+ */
+async function runDeviceInstallAndLaunch(deviceUdid, appPath, bundleId, logs, flush) {
+  if (!existsSync(appPath)) {
+    logs.push(`[device-run] .app not found: ${appPath}`);
+    await flush(true);
+    return false;
+  }
+  logs.push(`[device-run] Installing to device ${deviceUdid}…`);
+  await flush(true);
+  const installResult = await run("xcrun", [
+    "devicectl",
+    "device",
+    "install",
+    "app",
+    appPath,
+    "--device",
+    deviceUdid,
+  ], { onLine: (line) => { logs.push(line); flush(false).catch(() => {}); } });
+  if (installResult.code !== 0) {
+    logs.push(`[device-run] Install failed (code ${installResult.code})`);
+    await flush(true);
+    return false;
+  }
+  logs.push("[device-run] Install succeeded. Launching…");
+  await flush(true);
+  const launchResult = await run("xcrun", [
+    "devicectl",
+    "device",
+    "process",
+    "launch",
+    "--device",
+    deviceUdid,
+    bundleId,
+  ], { onLine: (line) => { logs.push(line); flush(false).catch(() => {}); } });
+  if (launchResult.code !== 0) {
+    logs.push(`[device-run] Launch failed (code ${launchResult.code})`);
+    await flush(true);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Get or create a cached DerivedData directory for a project.
  */
 function getCachedDerivedDataPath(projectId) {
@@ -395,23 +443,62 @@ async function validateJob(job) {
     };
 
     const wantIPA = job.request.outputType === "ipa";
+    const wantRun = job.request.outputType === "run";
+    const deviceUdid = typeof job.request.deviceUdid === "string" ? job.request.deviceUdid.trim() : "";
+    const teamId = job.request.developmentTeam || "";
+
     const cachedDD = getCachedDerivedDataPath(job.request.projectId);
     const derivedDataPath = cachedDD || join(tmp, "DerivedData");
-    const baseArgs = [
-      "-project",
-      xcodeproj,
-      "-scheme",
-      projectName,
-      "-destination",
-      "generic/platform=iOS Simulator",
-      "-derivedDataPath",
-      derivedDataPath,
-      "build",
-      // Don't require signing for simulator builds.
-      "CODE_SIGNING_ALLOWED=NO",
-      "CODE_SIGNING_REQUIRED=NO",
-      'CODE_SIGN_IDENTITY=""',
-    ];
+
+    let baseArgs;
+    if (wantRun && deviceUdid && teamId) {
+      // Build for physical device — requires signing.
+      baseArgs = [
+        "-project",
+        xcodeproj,
+        "-scheme",
+        projectName,
+        "-destination",
+        `id=${deviceUdid}`,
+        "-derivedDataPath",
+        derivedDataPath,
+        "build",
+        `DEVELOPMENT_TEAM=${teamId}`,
+        "CODE_SIGN_STYLE=Automatic",
+      ];
+    } else if (wantIPA) {
+      // IPA: initial build uses simulator (archive step does device build).
+      baseArgs = [
+        "-project",
+        xcodeproj,
+        "-scheme",
+        projectName,
+        "-destination",
+        "generic/platform=iOS Simulator",
+        "-derivedDataPath",
+        derivedDataPath,
+        "build",
+        "CODE_SIGNING_ALLOWED=NO",
+        "CODE_SIGNING_REQUIRED=NO",
+        'CODE_SIGN_IDENTITY=""',
+      ];
+    } else {
+      // Simulator build (default).
+      baseArgs = [
+        "-project",
+        xcodeproj,
+        "-scheme",
+        projectName,
+        "-destination",
+        "generic/platform=iOS Simulator",
+        "-derivedDataPath",
+        derivedDataPath,
+        "build",
+        "CODE_SIGNING_ALLOWED=NO",
+        "CODE_SIGNING_REQUIRED=NO",
+        'CODE_SIGN_IDENTITY=""',
+      ];
+    }
 
     const { path: xcodebuildPath, tried } = getXcodebuildPath();
     logs.push(xcodebuildPath === "xcodebuild" ? `xcodebuild not found. Tried: ${tried.join(", ")}` : `Using: ${xcodebuildPath}`);
@@ -467,6 +554,24 @@ async function validateJob(job) {
             logs: ["✅ Build succeeded", "⚠️ IPA export failed (build still valid)"],
           });
         }
+      } else if (wantRun && deviceUdid && teamId) {
+        const appPath = join(
+          derivedDataPath,
+          "Build",
+          "Products",
+          "Debug-iphoneos",
+          `${projectName}.app`
+        );
+        const bundleId = job.request.bundleId || "com.vibetree.app";
+        const runOk = await runDeviceInstallAndLaunch(deviceUdid, appPath, bundleId, logs, flush);
+        await updateJob(job.id, {
+          status: runOk ? "succeeded" : "failed",
+          exitCode: runOk ? 0 : 1,
+          logs: runOk
+            ? ["✅ Build succeeded", "✅ Installed and launched on device"]
+            : ["✅ Build succeeded", "❌ Install or launch failed — check logs above"],
+          ...(runOk ? {} : { error: "Install or launch on device failed" }),
+        });
       } else {
         await updateJob(job.id, { status: "succeeded", exitCode: 0, logs: ["✅ Build succeeded"] });
         const appPath = join(

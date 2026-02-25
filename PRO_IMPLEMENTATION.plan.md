@@ -81,9 +81,9 @@ Produce the full set of files (new or updated) in one reply. No markdown, no cod
 | **1** | **Xcode + USB** | Pro (Swift) | 1–3 min first time, then ~30–60 s | Download source (.swift) from Vibetree, create a new iOS app in Xcode, paste or add the Swift files, connect iPhone, Run. Manual project setup. |
 | **2** | **Download for Xcode (zip)** | Pro (Swift) | ~30–60 s after unzip | In Vibetree: Run on device → “Download for Xcode (.zip)”. Unzip, double‑click `VibetreeApp.xcodeproj`, connect iPhone, Run. Ready-to-open project; no manual file wiring. Implemented: `GET /api/projects/[id]/export-xcode`. |
 | **3** | **Expo Go (QR)** | Standard (Expo) only | Often &lt; 30 s | Use Standard (Expo) in the editor. Run on device starts Expo tunnel; scan QR in Expo Go. Not native Swift; runs in Expo Go. |
-| **4** | **Mac build service** | Pro (Swift) | ~1–2 min (when implemented) | Future: one click in browser → backend tells a Mac runner to build and install to a connected device (Rork-style). Requires Mac fleet + device pairing; not yet implemented. |
+| **4** | **Build & Run on device** | Pro (Swift) | ~1–2 min | One click in browser → Mac runner builds for your connected iPhone, installs, and launches (like Xcode ⌘R). Requires iPhone connected via USB to Mac running `npm run mac-runner`, Team ID set. Implemented: `POST /api/projects/[id]/build-run`. |
 
-- For **Pro**, the fastest path today is **#2** (Download for Xcode zip).
+- For **Pro**, the fastest path is **#4** (Build & Run) when a Mac runner is connected; otherwise **#2** (Download for Xcode zip).
 - For **Standard**, **#3** (Expo Go) is the only in-browser “on device” path.
 
 ---

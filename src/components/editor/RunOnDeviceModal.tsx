@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Modal, Button, QRCode, Input } from "@/components/ui";
+import { Modal, Button, QRCode, Input, DropdownSelect } from "@/components/ui";
+import type { SelectOption } from "@/components/ui";
 
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
 const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
@@ -49,12 +50,41 @@ export function RunOnDeviceModal({
   const [errorCopyFeedback, setErrorCopyFeedback] = useState(false);
   const [simulateLoading, setSimulateLoading] = useState(false);
   const [validateIsSimulated, setValidateIsSimulated] = useState(false);
+  const [buildRunLoading, setBuildRunLoading] = useState(false);
+  const [runnerDevices, setRunnerDevices] = useState<{
+    connected: boolean;
+    physical: Array<{ name: string; id?: string }>;
+  } | null>(null);
+  const [selectedDeviceUdid, setSelectedDeviceUdid] = useState("");
 
   const projectType =
     projectTypeProp ??
     (typeof window !== "undefined" && (localStorage.getItem(PROJECT_TYPE_STORAGE_KEY) === "pro" ? "pro" : "standard"));
 
   const expoUrl = expoUrlProp ?? expoUrlLocal;
+
+  useEffect(() => {
+    if (!isOpen || projectType !== "pro") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/macos/devices");
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (data.connected && Array.isArray(data.physical)) {
+          const physical = data.physical.filter((d: { name?: string; id?: string }) => d?.name && d?.id);
+          setRunnerDevices({ connected: true, physical });
+          const first = physical[0];
+          if (first?.id) setSelectedDeviceUdid(first.id);
+        } else {
+          setRunnerDevices({ connected: false, physical: [] });
+        }
+      } catch {
+        if (!cancelled) setRunnerDevices({ connected: false, physical: [] });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, projectType]);
 
   useEffect(() => {
     if (!isOpen || !projectId) return;
@@ -359,6 +389,77 @@ export function RunOnDeviceModal({
     }
   }
 
+  async function handleBuildRun() {
+    if (!teamId.trim()) {
+      setError("Team ID is required for Build & Run. Set it in Advanced settings.");
+      return;
+    }
+    if (!selectedDeviceUdid) {
+      setError("Select a device. Connect your iPhone via USB and ensure the Mac runner is running.");
+      return;
+    }
+    setBuildRunLoading(true);
+    setError(null);
+    setValidateStatus("queued");
+    setValidateLogTail([]);
+    try {
+      let files: any[] = [];
+      if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem(`${PROJECT_FILES_STORAGE_PREFIX}${projectId}`);
+          const parsed = raw ? JSON.parse(raw) : null;
+          files = Array.isArray(parsed?.files) ? parsed.files : [];
+        } catch {}
+      }
+      let projectName = "Untitled app";
+      let bundleId = "";
+      if (typeof window !== "undefined") {
+        try {
+          const projectsRaw = localStorage.getItem("vibetree-projects");
+          const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
+          const p = Array.isArray(projects) ? projects.find((x: any) => x?.id === projectId) : null;
+          if (p?.name) projectName = String(p.name);
+          if (p?.bundleId) bundleId = String(p.bundleId);
+        } catch {}
+      }
+      const finalBundleId = bundleIdOverride.trim() || bundleId;
+      const res = await fetch(`/api/projects/${projectId}/build-run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceUdid: selectedDeviceUdid,
+          developmentTeam: teamId.trim(),
+          projectName,
+          bundleId: finalBundleId,
+          ...(files.length > 0 ? { files } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? "Build & Run request failed");
+      }
+      const data = await res.json().catch(() => ({}));
+      const jobId = typeof data?.job?.id === "string" ? data.job.id : null;
+      if (!jobId) throw new Error("No job id returned");
+      setValidateJobId(jobId);
+      setValidateStatus("queued");
+      setValidateStartedAt(Date.now());
+      setValidateElapsed(0);
+      setValidateAttempt(1);
+      setValidateMaxAttempts(8);
+      setValidateFixing(false);
+      setValidateHadCompilerErrors(false);
+      setValidateFailureReason(null);
+      setValidateLogTail([]);
+      setValidateIsSimulated(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Build & Run failed. Try again.");
+      setValidateStatus("failed");
+    } finally {
+      setBuildRunLoading(false);
+    }
+  }
+
   async function handleSimulateBuild() {
     setSimulateLoading(true);
     setError(null);
@@ -463,11 +564,43 @@ export function RunOnDeviceModal({
                 Build validated. Download the zip below, then unzip and open in Xcode to run on your iPhone.
               </p>
             )}
+            {runnerDevices?.connected && runnerDevices.physical.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm text-[var(--text-secondary)]">Device</label>
+                <DropdownSelect
+                  options={runnerDevices.physical.map((d) => ({
+                    value: d.id!,
+                    label: d.name,
+                  }))}
+                  value={selectedDeviceUdid}
+                  onChange={setSelectedDeviceUdid}
+                  aria-label="Select device for Build & Run"
+                  className="w-full"
+                />
+                <Button
+                  type="button"
+                  onClick={handleBuildRun}
+                  disabled={buildRunLoading || !teamId.trim()}
+                  className="w-full"
+                >
+                  {buildRunLoading ? "Building & running…" : "Build & Run on device"}
+                </Button>
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  Like Xcode ⌘R: builds for your connected iPhone, installs, and launches. Requires Team ID below.
+                </p>
+              </div>
+            )}
+            {(!runnerDevices?.connected || runnerDevices.physical.length === 0) && (
+              <p className="text-xs text-[var(--text-tertiary)]">
+                Connect your iPhone via USB and run <span className="font-mono">npm run mac-runner</span> on your Mac to enable Build & Run on device.
+              </p>
+            )}
             <Button
               type="button"
               onClick={handleDownloadForXcode}
               disabled={downloadLoading}
               className="w-full"
+              variant="secondary"
             >
               {downloadLoading ? "Preparing…" : "Download for Xcode (.zip)"}
             </Button>

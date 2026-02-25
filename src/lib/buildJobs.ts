@@ -11,8 +11,10 @@ export type BuildJobCreateRequest = {
   maxAttempts?: number;
   parentJobId?: string;
   userPrompt?: string;
-  /** "build" = simulator only (default); "ipa" = archive + export signed IPA for OTA install */
-  outputType?: "build" | "ipa";
+  /** "build" = simulator only (default); "ipa" = archive + export signed IPA for OTA install; "run" = build for device, install, and launch */
+  outputType?: "build" | "ipa" | "run";
+  /** Device UDID for outputType "run" — required when building for physical device. */
+  deviceUdid?: string;
 };
 
 export type BuildJobRecord = {
