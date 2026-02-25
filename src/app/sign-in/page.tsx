@@ -4,6 +4,7 @@ import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Input, Card } from "@/components/ui";
+import { useAuth } from "@/contexts/AuthContext";
 
 type BackgroundVariant = 1 | 2 | 3;
 
@@ -47,31 +48,41 @@ function SignInLoadingWordmark() {
 
 export default function SignInPage() {
   const router = useRouter();
+  const { signIn, loading: authLoading, error: authError, isConfigured } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [backgroundVariant] = useState<BackgroundVariant>(2);
 
+  useEffect(() => {
+    if (authError) setError(authError);
+  }, [authError]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      // Mock: accept any email/password and create session
-      await new Promise((r) => setTimeout(r, 5000));
-      if (password.length < 1) {
-        setError("Please enter your password.");
-        setLoading(false);
-        return;
+      if (isConfigured) {
+        await signIn(email, password);
+        router.push("/dashboard");
+        router.refresh();
+      } else {
+        await new Promise((r) => setTimeout(r, 500));
+        if (password.length < 1) {
+          setError("Please enter your password.");
+          setLoading(false);
+          return;
+        }
+        if (typeof window !== "undefined") {
+          localStorage.setItem("vibetree-session", JSON.stringify({ email, at: Date.now() }));
+        }
+        router.push("/dashboard");
+        router.refresh();
       }
-      if (typeof window !== "undefined") {
-        localStorage.setItem("vibetree-session", JSON.stringify({ email, at: Date.now() }));
-      }
-      router.push("/dashboard");
-      router.refresh();
     } catch {
-      setError("Something went wrong. Please try again.");
+      if (!error) setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -86,7 +97,6 @@ export default function SignInPage() {
           : { background: "var(--editor-pane-gradient)" }
       }
     >
-      {/* Full-screen loading state */}
       {loading && (
         <div
           className="sign-in-loading-enter fixed inset-0 z-50 flex flex-col items-center justify-center bg-[var(--background-primary)]"
@@ -118,7 +128,6 @@ export default function SignInPage() {
         </div>
       )}
 
-      {/* Subtle bubbles (variant 3 only) */}
       {backgroundVariant === 3 && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
           {[
@@ -146,7 +155,7 @@ export default function SignInPage() {
         </div>
       )}
 
-<div className="relative z-10 w-full max-w-md">
+      <div className="relative z-10 w-full max-w-md">
         <div className="mb-8 text-center">
           <Link href="/" className="text-2xl font-semibold text-[var(--text-primary)]">
             Vibetree
@@ -197,7 +206,7 @@ export default function SignInPage() {
             {error && (
               <p className="text-sm text-[var(--semantic-error)]">{error}</p>
             )}
-            <Button type="submit" variant="primary" className="w-full" disabled={loading}>
+            <Button type="submit" variant="primary" className="w-full" disabled={loading || authLoading}>
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>

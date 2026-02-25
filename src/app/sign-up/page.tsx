@@ -1,35 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Input, Card } from "@/components/ui";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function SignUpPage() {
   const router = useRouter();
+  const { signUp, error: authError, isConfigured } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (authError) setError(authError);
+  }, [authError]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 600));
-      if (password.length < 6) {
-        setError("Password must be at least 6 characters.");
-        setLoading(false);
-        return;
+      if (isConfigured) {
+        await signUp(email, password);
+        router.push("/dashboard");
+        router.refresh();
+      } else {
+        await new Promise((r) => setTimeout(r, 600));
+        if (password.length < 6) {
+          setError("Password must be at least 6 characters.");
+          setLoading(false);
+          return;
+        }
+        if (typeof window !== "undefined") {
+          localStorage.setItem("vibetree-session", JSON.stringify({ email, at: Date.now() }));
+        }
+        router.push("/dashboard");
+        router.refresh();
       }
-      if (typeof window !== "undefined") {
-        localStorage.setItem("vibetree-session", JSON.stringify({ email, at: Date.now() }));
-      }
-      router.push("/dashboard");
-      router.refresh();
     } catch {
-      setError("Something went wrong. Please try again.");
+      if (!error) setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -46,7 +58,7 @@ export default function SignUpPage() {
         <Card className="p-8">
           <h1 className="text-heading-section mb-2">Create an account</h1>
           <p className="text-body-muted mb-6 text-sm">
-            Build and ship iOS apps with AI. Sign up to get started.
+            Build and ship iOS apps with AI. Sign up to save your apps and pick up where you left off.
           </p>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

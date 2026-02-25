@@ -38,6 +38,7 @@ export function ChatPanel({
   onError,
   onProBuildComplete,
   onProjectRenamed,
+  getIdToken,
 }: {
   projectId: string;
   projectName?: string;
@@ -52,6 +53,8 @@ export function ChatPanel({
     onProgress?: (status: string) => void
   ) => Promise<{ status: "succeeded" | "failed"; error?: string }>;
   onProjectRenamed?: (name: string) => void;
+  /** When provided, chat and files sync to Firestore. */
+  getIdToken?: () => Promise<string | null>;
 }) {
   const [llm, setLlm] = useState(DEFAULT_LLM);
   const [projectType, setProjectType] = useState<"standard" | "pro">("standard");
@@ -104,6 +107,7 @@ export function ChatPanel({
     onProjectRenamed,
     onMessageSuccess: featureFlags.useRealLLM ? () => deduct(1) : undefined,
     onProBuildComplete,
+    getIdToken,
   });
 
   useEffect(() => {

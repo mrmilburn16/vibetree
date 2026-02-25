@@ -4,24 +4,41 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getProject } from "@/lib/projects";
+import { getProject as getFirebaseProject } from "@/lib/firebaseProjectsClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { EditorLayout } from "@/components/editor/EditorLayout";
 import type { Project } from "@/lib/projects";
 
 export default function EditorPage() {
   const params = useParams();
   const router = useRouter();
+  const { user, loading: authLoading, getIdToken, isConfigured } = useAuth();
   const id = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    const p = getProject(id);
-    if (!p) {
-      setNotFound(true);
-      return;
+    if (authLoading) return;
+    async function load() {
+      if (isConfigured && user) {
+        const token = await getIdToken();
+        const p = await getFirebaseProject(token, id);
+        if (!p) {
+          setNotFound(true);
+          return;
+        }
+        setProject(p);
+      } else {
+        const p = getProject(id);
+        if (!p) {
+          setNotFound(true);
+          return;
+        }
+        setProject(p);
+      }
     }
-    setProject(p);
-  }, [id]);
+    load();
+  }, [id, authLoading, isConfigured, user, getIdToken]);
 
   if (notFound) {
     return (

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { fetchProjectFiles } from "@/lib/firebaseProjectsClient";
 import Link from "next/link";
 import { Settings, Smartphone, Share2, Upload } from "lucide-react";
 import { Button, BetaBadge, Toast } from "@/components/ui";
@@ -53,6 +55,7 @@ function getStoredChatWidth(): number {
 }
 
 export function EditorLayout({ project }: { project: Project }) {
+  const { user, getIdToken, isConfigured } = useAuth();
   const [projectName, setProjectName] = useState(project.name);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [runOnDeviceOpen, setRunOnDeviceOpen] = useState(false);
@@ -80,6 +83,26 @@ export function EditorLayout({ project }: { project: Project }) {
       .then((data) => { if (data.expoUrl) setExpoUrl(data.expoUrl); })
       .catch(() => {});
   }, [project.id]);
+
+  // Hydrate project files from Firestore when user is logged in (so run-on-device etc. have files)
+  useEffect(() => {
+    if (!isConfigured || !user || !project.id) return;
+    getIdToken().then((token) => {
+      if (!token) return;
+      fetchProjectFiles(token, project.id).then((files) => {
+        if (files.length > 0 && typeof window !== "undefined") {
+          try {
+            localStorage.setItem(
+              `${PROJECT_FILES_PREFIX}${project.id}`,
+              JSON.stringify({ updatedAt: Date.now(), files })
+            );
+          } catch {
+            // ignore
+          }
+        }
+      });
+    });
+  }, [project.id, isConfigured, user, getIdToken]);
 
   // Auto-start Expo when build goes live (Standard): QR appears without user clicking "Run on device"
   const prevBuildStatusRef = useRef<"idle" | "building" | "live" | "failed">("idle");
@@ -348,6 +371,7 @@ export function EditorLayout({ project }: { project: Project }) {
             projectName={projectName}
             buildFailureReason={buildFailureReason}
             onProjectRenamed={(name) => setProjectName(name)}
+            getIdToken={isConfigured && user ? getIdToken : undefined}
             onBuildStatusChange={(status) => {
               setBuildStatus(status);
               if (status !== "failed") setBuildFailureReason(null);

@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, BetaBadge } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { getProjects, createProject, deleteProject, duplicateProject, type Project } from "@/lib/projects";
+import {
+  fetchProjects,
+  createProject as createFirebaseProject,
+  deleteProject as deleteFirebaseProject,
+  duplicateProject as duplicateFirebaseProject,
+} from "@/lib/firebaseProjectsClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { DashboardCard, NewAppCard } from "@/components/dashboard/DashboardCard";
 import { DashboardLayout2 } from "@/components/dashboard/DashboardLayout2";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
@@ -52,34 +59,62 @@ const CONFIRM_DELETE_TEXT = "DELETE";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { user, loading: authLoading, signOut, getIdToken, isConfigured } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [mounted, setMounted] = useState(false);
   const [layoutVersion, setLayoutVersion] = useState<"1" | "2">("1");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
 
+  const loadProjects = useCallback(async () => {
+    if (isConfigured && user) {
+      const token = await getIdToken();
+      const list = await fetchProjects(token);
+      setProjects(list);
+    } else if (!isConfigured && typeof window !== "undefined") {
+      setProjects(getProjects());
+    }
+  }, [isConfigured, user, getIdToken]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const session = localStorage.getItem("vibetree-session");
-    if (!session) {
-      router.replace("/sign-in");
-      return;
+    if (authLoading) return;
+    if (isConfigured) {
+      if (!user) {
+        router.replace("/sign-in");
+        return;
+      }
+    } else {
+      const session = localStorage.getItem("vibetree-session");
+      if (!session) {
+        router.replace("/sign-in");
+        return;
+      }
     }
-    setProjects(getProjects());
+    loadProjects();
     const stored = localStorage.getItem(LAYOUT_STORAGE_KEY);
     if (stored === "1" || stored === "2") setLayoutVersion(stored);
     setMounted(true);
-  }, [router]);
+  }, [router, authLoading, isConfigured, user, loadProjects]);
 
   function setLayoutAndPersist(value: "1" | "2") {
     setLayoutVersion(value);
     if (typeof window !== "undefined") localStorage.setItem(LAYOUT_STORAGE_KEY, value);
   }
 
-  function handleNewApp() {
-    const project = createProject();
-    setProjects(getProjects());
-    router.push(`/editor/${project.id}`);
+  async function handleNewApp() {
+    if (isConfigured && user) {
+      const token = await getIdToken();
+      const project = await createFirebaseProject(token);
+      if (project) {
+        await loadProjects();
+        router.push(`/editor/${project.id}`);
+      }
+    } else {
+      const project = createProject();
+      setProjects(getProjects());
+      router.push(`/editor/${project.id}`);
+    }
   }
 
   function handleDeleteClick(e: React.MouseEvent, id: string) {
@@ -94,25 +129,54 @@ export default function DashboardPage() {
     setDeleteConfirmInput("");
   }
 
-  function handleDeleteConfirm() {
-    if (deleteTargetId && deleteConfirmInput === CONFIRM_DELETE_TEXT) {
+  async function handleDeleteConfirm() {
+    if (!deleteTargetId || deleteConfirmInput !== CONFIRM_DELETE_TEXT) return;
+    if (isConfigured && user) {
+      const token = await getIdToken();
+      const ok = await deleteFirebaseProject(token, deleteTargetId);
+      if (ok) {
+        await loadProjects();
+        closeDeleteModal();
+      }
+    } else {
       deleteProject(deleteTargetId);
       setProjects(getProjects());
       closeDeleteModal();
     }
   }
 
-  function handleDuplicate(e: React.MouseEvent, id: string) {
+  async function handleDuplicate(e: React.MouseEvent, id: string) {
     e.preventDefault();
     e.stopPropagation();
-    const copy = duplicateProject(id);
-    if (copy) {
-      setProjects(getProjects());
-      router.push(`/editor/${copy.id}`);
+    if (isConfigured && user) {
+      const token = await getIdToken();
+      const copy = await duplicateFirebaseProject(token, id);
+      if (copy) {
+        await loadProjects();
+        router.push(`/editor/${copy.id}`);
+      }
+    } else {
+      const copy = duplicateProject(id);
+      if (copy) {
+        setProjects(getProjects());
+        router.push(`/editor/${copy.id}`);
+      }
     }
   }
 
-  if (!mounted) {
+  async function handleSignOut() {
+    if (isConfigured) {
+      await signOut();
+      router.replace("/sign-in");
+      router.refresh();
+    } else {
+      localStorage.removeItem("vibetree-session");
+      router.replace("/sign-in");
+      router.refresh();
+    }
+  }
+
+  if (!mounted || authLoading) {
     return (
       <div className="min-h-screen bg-[var(--background-primary)]">
         <header className="sticky top-0 z-10 border-b border-[var(--border-default)] bg-[var(--background-primary)]/80 px-4 py-4 backdrop-blur-md sm:px-6">
@@ -189,9 +253,9 @@ export default function DashboardPage() {
               <IconPlus />
               New app
             </Button>
-            <Link href="/sign-in">
-              <Button variant="ghost">Sign out</Button>
-            </Link>
+            <Button variant="ghost" onClick={handleSignOut}>
+              Sign out
+            </Button>
           </div>
         </div>
       </header>
@@ -207,7 +271,6 @@ export default function DashboardPage() {
         />
       ) : (
       <main className="relative mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        {/* Hero strip */}
         <div className="animate-fade-in mb-8">
           <p className="text-caption mb-1 font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
             {welcomeLine}
@@ -239,7 +302,6 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* Quick links */}
             <div className="mt-16 flex flex-wrap gap-3 border-t border-[var(--border-default)] pt-12">
                 <Link
                   href="/docs"

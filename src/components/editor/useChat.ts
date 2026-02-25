@@ -190,24 +190,32 @@ function formatStatusDurations(status: string): string {
   });
 }
 
-function persistChatToServer(projectId: string, messages: ChatMessage[]): void {
+async function persistChatToServer(
+  projectId: string,
+  messages: ChatMessage[],
+  getIdToken?: () => Promise<string | null>
+): Promise<void> {
   if (typeof window === "undefined") return;
   const stable = getStableMessagesForPersistence(messages);
   if (stable.length === 0) return;
-  const url = `/api/projects/${projectId}/chat`;
-  try {
-    if (typeof navigator !== "undefined" && "sendBeacon" in navigator) {
+  const token = getIdToken ? await getIdToken() : null;
+  const url = token
+    ? `/api/users/me/projects/${projectId}/chat`
+    : `/api/projects/${projectId}/chat`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (!token && typeof navigator !== "undefined" && "sendBeacon" in navigator) {
+    try {
       const blob = new Blob([JSON.stringify({ messages: stable })], { type: "application/json" });
-      // sendBeacon is best-effort and survives refresh/pagehide.
       (navigator as any).sendBeacon(url, blob);
       return;
+    } catch {
+      // fall through to fetch
     }
-  } catch {
-    // fall through to fetch
   }
   fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ messages: stable }),
     keepalive: true,
   }).catch(() => {});
@@ -260,9 +268,11 @@ export function useChat(
       compilerErrors?: string[];
       fileNames?: string[];
     }>;
+    /** When provided, chat and files sync to Firestore (logged-in user). */
+    getIdToken?: () => Promise<string | null>;
   }
 ) {
-  const { onError, projectName, onProjectRenamed, onMessageSuccess, onProBuildComplete } = options ?? {};
+  const { onError, projectName, onProjectRenamed, onMessageSuccess, onProBuildComplete, getIdToken } = options ?? {};
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -349,39 +359,63 @@ export function useChat(
   // Restore chat history when returning to the editor for the same project.
   useEffect(() => {
     hydratedRef.current = false;
-    const restored = loadChatMessagesFromLocalStorage(projectId);
-    if (restored && restored.length > 0) {
-      setMessages(restored);
-      // If we have history, default to ready.
-      setBuildStatus("live");
-    } else {
-      setMessages([]);
-      // Fallback: restore from server-side persisted chat (survives reboots + cleared localStorage).
-      fetch(`/api/projects/${projectId}/chat`, { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          const msgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
-          if (msgs.length > 0) {
-            setMessages(msgs);
-            setBuildStatus("live");
+    let cancelled = false;
+    (async () => {
+      if (getIdToken) {
+        const token = await getIdToken();
+        if (token && !cancelled) {
+          const res = await fetch(`/api/users/me/projects/${projectId}/chat`, {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          });
+          if (res.ok && !cancelled) {
+            const data = await res.json().catch(() => ({}));
+            const msgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
+            if (msgs.length > 0) {
+              setMessages(msgs);
+              setBuildStatus("live");
+              hydratedRef.current = true;
+              return;
+            }
           }
-        })
-        .catch(() => {});
-    }
-    hydratedRef.current = true;
-  }, [projectId]);
+        }
+      }
+      if (cancelled) return;
+      const restored = loadChatMessagesFromLocalStorage(projectId);
+      if (restored && restored.length > 0) {
+        setMessages(restored);
+        setBuildStatus("live");
+      } else {
+        setMessages([]);
+        fetch(`/api/projects/${projectId}/chat`, { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            if (cancelled) return;
+            const msgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
+            if (msgs.length > 0) {
+              setMessages(msgs);
+              setBuildStatus("live");
+            }
+          })
+          .catch(() => {});
+      }
+      hydratedRef.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, getIdToken]);
 
   // Persist chat history per project id.
   useEffect(() => {
     if (!hydratedRef.current) return;
     saveChatMessagesToLocalStorage(projectId, messages);
 
-    // Debounced server persistence of stable messages (backup for pagehide).
     if (serverPersistTimeoutRef.current) clearTimeout(serverPersistTimeoutRef.current);
     serverPersistTimeoutRef.current = setTimeout(() => {
-      persistChatToServer(projectId, messages);
+      persistChatToServer(projectId, messages, getIdToken);
     }, 250);
-  }, [projectId, messages]);
+  }, [projectId, messages, getIdToken]);
 
   const runClientMock = useCallback(
     (trimmed: string) => {
@@ -712,6 +746,17 @@ export function useChat(
           clearInterval(localTick);
           if (Array.isArray(doneEvent.projectFiles) && doneEvent.projectFiles.length > 0) {
             saveProjectFilesToLocalStorage(projectId, doneEvent.projectFiles);
+            if (getIdToken) {
+              getIdToken().then((token) => {
+                if (token) {
+                  fetch(`/api/users/me/projects/${projectId}/files`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ files: doneEvent.projectFiles }),
+                  }).catch(() => {});
+                }
+              });
+            }
           }
           const am = doneEvent.assistantMessage as {
             id?: string;
@@ -747,11 +792,23 @@ export function useChat(
           if (autoTitle && !isUntitledName(autoTitle)) {
             updateProjectNameInLocalStorage(projectId, autoTitle);
             onProjectRenamed?.(autoTitle);
-            fetch("/api/projects", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: projectId, name: autoTitle }),
-            }).catch(() => {});
+            if (getIdToken) {
+              getIdToken().then((token) => {
+                if (token) {
+                  fetch(`/api/users/me/projects/${projectId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ name: autoTitle }),
+                  }).catch(() => {});
+                }
+              });
+            } else {
+              fetch("/api/projects", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: projectId, name: autoTitle }),
+              }).catch(() => {});
+            }
           }
           const projectNameForLogs = autoTitle ?? projectName ?? "Unknown";
           const isProBuild =
@@ -832,6 +889,17 @@ export function useChat(
                 setIsValidating(false);
                 if (result.fixedFiles && result.fixedFiles.length > 0) {
                   saveProjectFilesToLocalStorage(projectId, result.fixedFiles);
+                  if (getIdToken) {
+                    getIdToken().then((token) => {
+                      if (token) {
+                        fetch(`/api/users/me/projects/${projectId}/files`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                          body: JSON.stringify({ files: result.fixedFiles }),
+                        }).catch(() => {});
+                      }
+                    });
+                  }
                   editedFiles = result.fixedFiles.map((f) => f.path);
                 }
                 fetch("/api/build-results", {
