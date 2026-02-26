@@ -8,7 +8,7 @@ alwaysApply: true
 When the user tells you that an app **didn’t build**, **failed after N attempts**, **didn’t do what they wanted**, or **behaved incorrectly** (e.g. wrong integration, zoomed layout, missing feature), treat it as a **system improvement** task, not only a one-off fix.
 
 **Do this automatically:**
-1. **Diagnose** why it failed or misbehaved (errors, prompts, missing guidance).
+1. **Diagnose** why it failed or misbehaved (errors, prompts, missing guidance). Use the **Skills Health Report** and the test-suite **Summary → Error patterns** (admin/test-suite) when available: they list per-skill compile rates, common errors, and pattern counts (e.g. "Member not found", "Trailing closure", "Other"). High counts for a pattern mean add or extend fixes for that class (e.g. "Member not found" → accentColor/NSAttributedString/correct API in auto-fix + claudeAdapter; "Trailing closure" → BarMark/LineMark no trailing closure; "Other" → add new ERROR_PATTERNS in test-suite page or new rules in auto-fix so those errors get a category and a fix).
 2. **Improve the system** so future builds handle this case:
    - **Master prompts:** `src/lib/llm/claudeAdapter.ts`, `src/lib/llm/structuredOutput.ts` — add or tighten rules, anti-patterns, or capability notes.
    - **Skills:** `data/skills/*.json` — add a new skill or extend an existing one (keywords + `promptInjection`) so the model gets the right guidance when similar prompts are used.

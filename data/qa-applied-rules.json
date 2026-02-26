@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": "qr_1772099542577_nuuf",
+    "tag": "crash_on_launch",
+    "description": "Prevent launch crashes from missing setup",
+    "rule": "Always check API availability before calling (e.g. HKHealthStore.isHealthDataAvailable(), DataScannerViewController.isSupported). Always handle nil/optional cases. Never force-unwrap optionals in the app entry point or initial view.",
+    "type": "prompt_rule",
+    "affectedSkills": [],
+    "active": true,
+    "appliedAt": "2026-02-26T09:52:22.577Z"
+  }
+]

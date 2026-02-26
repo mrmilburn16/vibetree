@@ -1,4 +1,5 @@
 import { getProject, ensureProject } from "@/lib/projectStore";
+import { setProjectFiles } from "@/lib/projectFileStore";
 import { createBuildJob } from "@/lib/buildJobs";
 
 type SwiftFile = { path: string; content: string };
@@ -76,6 +77,10 @@ export async function POST(
   const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";
 
   const autoFix = body?.autoFix !== false;
+
+  if (files?.length) {
+    setProjectFiles(projectId, files);
+  }
 
   const job = createBuildJob({
     projectId,

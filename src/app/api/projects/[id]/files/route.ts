@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getProjectFiles, getProjectFilePaths } from "@/lib/projectFileStore";
+import { getProjectFiles, getProjectFilePaths, setProjectFiles } from "@/lib/projectFileStore";
 
 /**
  * GET /api/projects/[id]/files
@@ -26,4 +26,32 @@ export async function GET(
     content: filesMap[path] ?? "",
   }));
   return NextResponse.json({ files });
+}
+
+/**
+ * POST /api/projects/[id]/files
+ * Saves project files to the server so build-install and GET /files can use them
+ * (e.g. test-suite syncing after a successful build).
+ */
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  if (!id) {
+    return NextResponse.json({ error: "Project ID required" }, { status: 400 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const files = Array.isArray(body?.files)
+    ? (body.files as { path: string; content: string }[]).filter(
+        (f) => typeof f.path === "string" && typeof f.content === "string"
+      )
+    : [];
+  if (files.length === 0) {
+    return NextResponse.json({ error: "No valid files in body" }, { status: 400 });
+  }
+
+  setProjectFiles(id, files);
+  return NextResponse.json({ ok: true });
 }

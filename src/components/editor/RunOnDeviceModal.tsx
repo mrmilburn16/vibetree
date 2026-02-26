@@ -285,6 +285,17 @@ export function RunOnDeviceModal({
           files = Array.isArray(parsed?.files) ? parsed.files : [];
         } catch {}
       }
+      if (files.length === 0) {
+        try {
+          const filesRes = await fetch(`/api/projects/${projectId}/files`);
+          if (filesRes.ok) {
+            const data = (await filesRes.json()) as { files?: { path: string; content: string }[] };
+            if (Array.isArray(data.files) && data.files.length > 0) {
+              files = data.files;
+            }
+          }
+        } catch {}
+      }
 
       let projectName = "Untitled app";
       let bundleId = "";
@@ -302,6 +313,16 @@ export function RunOnDeviceModal({
 
       const finalBundleId = bundleIdOverride.trim() || bundleId;
       const finalTeamId = teamId.trim();
+
+      if (files.length > 0) {
+        try {
+          await fetch(`/api/projects/${projectId}/files`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ files }),
+          });
+        } catch {}
+      }
 
       const res = await fetch(`/api/projects/${projectId}/build-install`, {
         method: "POST",
@@ -352,6 +373,13 @@ export function RunOnDeviceModal({
           const parsed = raw ? JSON.parse(raw) : null;
           const files = Array.isArray(parsed?.files) ? parsed.files : [];
           if (files.length > 0) {
+            try {
+              await fetch(`/api/projects/${projectId}/files`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ files }),
+              });
+            } catch {}
             let projectName = "Untitled app";
             let bundleId = "";
             try {

@@ -117,12 +117,21 @@ const AUTO_FIX_SYSTEM_PROMPT = `You are a Swift compiler-error repair specialist
 Rules:
 1. Fix ONLY what is broken. Do NOT change app behavior, styling, or architecture.
 2. Common Swift/SwiftUI errors and their fixes:
-   - "Cannot find type 'X' in scope": add missing import (SwiftUI, Foundation, UIKit, AppIntents, WidgetKit) or ensure the type is defined. Check if there's a typo.
+   - "Cannot find type 'X' in scope": add missing import (SwiftUI, Foundation, UIKit, AppIntents, WidgetKit, Combine) or ensure the type is defined. Check if there's a typo.
+   - "unknown attribute 'Published'": Add "import Combine" at the top of the file. @Published is defined in Combine, not SwiftUI.
    - "Cannot find type 'XIntent' in scope" in a file under WidgetExtension/: the widget extension is a separate target and cannot see types from the main app. You MUST define the Intent type inside WidgetExtension/. Add a new file WidgetExtension/<Name>Intent.swift (e.g. WidgetExtension/VoiceNoteIntent.swift) that defines the App Intent struct conforming to WidgetConfigurationIntent or AppIntent, with import AppIntents. If the same Intent exists in the main app, copy its definition into WidgetExtension/ so the widget target can see it.
-   - "Extra trailing closure passed in call": Remove the trailing closure syntax and use explicit parameter labels instead.
-   - "Value of type 'X' has no member 'Y'": The API doesn't exist. Use the correct SwiftUI API.
-   - "type 'ShapeStyle' has no member 'accentColor'": Use Color.accentColor instead of .accentColor (e.g. .foregroundStyle(Color.accentColor), .tint(Color.accentColor), .fill(Color.accentColor)).
+   - "Extra trailing closure passed in call" or "contextual closure type" (trailing closure misuse): Remove the trailing closure and use explicit parameter labels. BarMark/LineMark/AreaMark/PointMark do NOT take trailing closures; use modifiers like .foregroundStyle(...), .annotation { }, etc. after the initializer.
+   - "Value of type 'X' has no member 'Y'" / "has no member": (1) If Y is accentColor, use Color.accentColor (Theme, ShapeStyle, HapticPattern, BeatPattern have no accentColor). (2) If X is NSAttributedString.Key, use .foregroundColor not .foregroundStyle. (3) Otherwise use the correct API for that type (check SwiftUI/UIKit docs) or fix a typo; add missing import if the type is from another module.
+   - "type 'Theme' has no member 'accentColor'" or "type 'HapticPattern' has no member 'accentColor'" or "type 'BeatPattern' has no member 'accentColor'" or "type 'ShapeStyle' has no member 'accentColor'": Use Color.accentColor instead (e.g. .foregroundStyle(Color.accentColor), .tint(Color.accentColor)). Do not use a custom type's .accentColor.
+   - "type 'NSAttributedString.Key' has no member 'foregroundStyle'": Use NSAttributedString.Key.foregroundColor (not .foregroundStyle). .foregroundStyle is a SwiftUI modifier; for attributed strings use .foregroundColor.
+   - "generic parameter 'C' could not be inferred": Often with ForEach—provide an explicit id (e.g. ForEach(items, id: \\.id)) or use ForEach(array.indices, id: \\.self) and subscript the array. Ensure the collection type is clear.
+   - "cannot find type 'UIView' in scope": Add "import UIKit" at the top. UIView is from UIKit; SwiftUI does not re-export it in all contexts.
+   - "cannot find type 'Context' in scope": Context in makeUIView(context: Context) comes from SwiftUI (UIViewRepresentable). Add "import SwiftUI". For TimelineProvider use "import WidgetKit" and qualify as TimelineProvider.Context if needed.
+   - "for-in loop requires 'AsyncStream<...>' to conform to 'Sequence'": AsyncStream is async. Use "for await item in stream" not "for item in stream".
+   - "generic struct 'StateObject' requires that 'X' conform to 'ObservableObject'": The type passed to @StateObject must conform to ObservableObject. Add ": ObservableObject" to the class declaration and ensure it has @Published properties or an objectWillChange publisher.
+   - "cannot convert value of type '[X]' to expected argument type 'Binding<C>'": ForEach expects a collection and id, or a Binding. Use ForEach(items, id: \\.id) { item in ... } not ForEach($items) with a plain array. For mutable list use ForEach(items.indices, id: \\.self) { i in ... } with $items[i] if needed.
    - "Missing return in closure": Add explicit return statement.
+   - For any error not listed above: read the message carefully and apply the minimal fix (correct API name, add import, fix type conformance, or remove invalid syntax). Prefer the smallest change that resolves the error.
    - "Type 'X' does not conform to protocol 'Y'": Implement required protocol methods/properties. For NavigationLink(value:) and .navigationDestination(for:), the type MUST conform to Hashable. Add ": Hashable" to the struct/class declaration.
    - "Cannot convert value of type 'X' to expected type 'Y'": Use proper type conversion.
    - "$viewModel" without a property: Use viewModel (no $) unless binding a specific property like $viewModel.isRunning.

@@ -27,6 +27,8 @@ import {
   Pause,
   Minimize2,
   Maximize2,
+  Smartphone,
+  CheckSquare,
 } from "lucide-react";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
@@ -74,6 +76,8 @@ type TestResult = {
   liveStatus?: string;
   startedAt?: number;
   liveEvents?: Array<{ at: number; msg: string }>;
+  /** When false, this app is skipped when clicking Run (manual selection). Default true. */
+  selected?: boolean;
 };
 
 type RunConfig = {
@@ -687,6 +691,7 @@ function ResultRow({
   index,
   onRerun,
   onExclude,
+  onToggleSelect,
   onUpdate,
   onCancel,
   running,
@@ -695,6 +700,7 @@ function ResultRow({
   index: number;
   onRerun?: () => void;
   onExclude?: () => void;
+  onToggleSelect?: () => void;
   onUpdate?: (updates: Partial<TestResult>) => void;
   onCancel?: () => void;
   running: boolean;
@@ -702,6 +708,9 @@ function ResultRow({
   const [expanded, setExpanded] = useState(false);
   const [xcodeLoading, setXcodeLoading] = useState(false);
   const [xcodeError, setXcodeError] = useState<string | null>(null);
+  const [runOnDeviceLoading, setRunOnDeviceLoading] = useState(false);
+  const [runOnDeviceError, setRunOnDeviceError] = useState<string | null>(null);
+  const [runOnDeviceQueued, setRunOnDeviceQueued] = useState(false);
   const [copied, setCopied] = useState(false);
   const isActive = result.status === "generating" || result.status === "building" || result.status === "auto-fixing";
 
@@ -718,6 +727,21 @@ function ResultRow({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
+          {!running && onToggleSelect && (
+            <button
+              type="button"
+              onClick={onToggleSelect}
+              className="shrink-0 rounded p-0.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-default)]"
+              title={result.selected !== false ? "Deselect this app (will not run when you click Run)" : "Select this app to include in the next run"}
+              aria-label={result.selected !== false ? "Deselect from build" : "Select for build"}
+            >
+              {result.selected !== false ? (
+                <CheckSquare className="h-5 w-5 text-[var(--primary-default)]" aria-hidden />
+              ) : (
+                <Square className="h-5 w-5" aria-hidden />
+              )}
+            </button>
+          )}
           {result.excluded ? (
             <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-[var(--background-tertiary)] text-[var(--text-tertiary)]">
               Excluded
@@ -772,8 +796,76 @@ function ResultRow({
             </span>
           )}
 
-          {result.compiled && result.projectId && (
+          {result.status === "succeeded" && result.projectId && (
             <span className="inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={runOnDeviceLoading}
+                onClick={async () => {
+                  setRunOnDeviceError(null);
+                  setRunOnDeviceQueued(false);
+                  setRunOnDeviceLoading(true);
+                  try {
+                    let teamId = "";
+                    try {
+                      const ud = JSON.parse(localStorage.getItem("vibetree-universal-defaults") || "{}");
+                      teamId = (ud.teamId || "").trim();
+                    } catch {}
+                    let files = result.projectFiles?.length ? result.projectFiles : undefined;
+                    if (!files?.length) {
+                      const filesRes = await fetch(`/api/projects/${result.projectId}/files`);
+                      if (filesRes.ok) {
+                        const filesData = (await filesRes.json()) as { files?: Array<{ path: string; content: string }> };
+                        if (filesData.files?.length) files = filesData.files;
+                      }
+                    }
+                    if (files?.length) {
+                      await fetch(`/api/projects/${result.projectId}/files`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ files }),
+                      }).catch(() => {});
+                    }
+                    const res = await fetch(`/api/projects/${result.projectId}/build-install`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        files: files?.length ? files : undefined,
+                        projectName: toPascalCase(result.idea.title),
+                        bundleId: "com.vibetree.test",
+                        developmentTeam: teamId || undefined,
+                      }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                      throw new Error((data as { error?: string }).error ?? "Install request failed");
+                    }
+                    if (!data?.job?.id) throw new Error("No job returned");
+                    setRunOnDeviceError(null);
+                    setRunOnDeviceQueued(true);
+                    setTimeout(() => setRunOnDeviceQueued(false), 3000);
+                  } catch (e) {
+                    setRunOnDeviceError(e instanceof Error ? e.message : "Install failed");
+                  } finally {
+                    setRunOnDeviceLoading(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--button-primary-bg)] px-2 py-1 text-xs font-medium text-[var(--button-primary-text)] transition-colors hover:opacity-90 disabled:opacity-60"
+                title="Build and install this app on your iPhone (Mac runner must be running)"
+              >
+                {runOnDeviceLoading ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : <Smartphone className="h-3 w-3" aria-hidden />}
+                Run on iPhone
+              </button>
+              {runOnDeviceQueued && (
+                <span className="text-xs text-[var(--semantic-success)]">Queued</span>
+              )}
+              {runOnDeviceError && (
+                <span className="max-w-[220px] truncate text-xs text-[var(--semantic-error)]" title={runOnDeviceError}>
+                  {runOnDeviceError.includes("No files to build")
+                    ? "No files — use Xcode button or re-run app once"
+                    : runOnDeviceError}
+                </span>
+              )}
               <button
                 type="button"
                 disabled={xcodeLoading}
@@ -787,6 +879,11 @@ function ResultRow({
                       teamId = ud.teamId || undefined;
                     } catch {}
                     if (result.projectFiles?.length) {
+                      await fetch(`/api/projects/${result.projectId}/files`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ files: result.projectFiles }),
+                      }).catch(() => {});
                       await downloadXcodeZip(
                         result.projectId!,
                         result.idea.title,
@@ -820,8 +917,10 @@ function ResultRow({
                 Xcode
               </button>
               {xcodeError && (
-                <span className="text-xs text-[var(--semantic-error)]" title={xcodeError}>
-                  Failed
+                <span className="max-w-[220px] truncate text-xs text-[var(--semantic-error)]" title={xcodeError}>
+                  {xcodeError.includes("No Swift files") || xcodeError.includes("No files")
+                    ? "No files — re-run this app once to generate"
+                    : xcodeError}
                 </span>
               )}
             </span>
@@ -1280,6 +1379,7 @@ function makeInitialResults(ideas: AppIdea[]): TestResult[] {
     compilerErrors: [],
     durationMs: 0,
     fileCount: 0,
+    selected: true,
   }));
 }
 
@@ -1327,6 +1427,7 @@ function loadPersistedState(storageKey: string = TEST_SUITE_STORAGE_KEY): {
         buildResultId: row.buildResultId as string | undefined,
         projectFiles: Array.isArray(row.projectFiles) ? (row.projectFiles as Array<{ path: string; content: string }>) : undefined,
         excluded: (row.excluded as boolean) ?? false,
+        selected: (row.selected as boolean) ?? true,
         model: (row.model as string) || undefined,
         designRating: typeof row.designRating === "number" ? (row.designRating as number) : undefined,
         functionalityRating: typeof row.functionalityRating === "number" ? (row.functionalityRating as number) : undefined,
@@ -1870,6 +1971,14 @@ export default function TestSuitePage() {
           }
         } catch {}
 
+        if (compiled && builtFiles?.length && projectId) {
+          fetch(`/api/projects/${projectId}/files`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ files: builtFiles }),
+          }).catch(() => {});
+        }
+
         const finalResult: Partial<TestResult> = {
           status: compiled ? "succeeded" : "failed",
           compiled,
@@ -1934,7 +2043,7 @@ export default function TestSuitePage() {
     setRunElapsed(0);
     const pending = results
       .map((_, i) => i)
-      .filter((i) => results[i].status === "pending" && !results[i].excluded);
+      .filter((i) => results[i].status === "pending" && !results[i].excluded && results[i].selected !== false);
     const baseDone = results.filter((r) => !r.excluded && r.status !== "pending").length;
     setCompletedCount(baseDone);
     if (pending.length === 0) {
@@ -2148,7 +2257,7 @@ export default function TestSuitePage() {
 
   const pendingIndices = results
     .map((r, i) => i)
-    .filter((i) => results[i].status === "pending" && !results[i].excluded);
+    .filter((i) => results[i].status === "pending" && !results[i].excluded && results[i].selected !== false);
   const canResume = !running && pendingIndices.length > 0;
 
   const activeIndex = results.findIndex(
@@ -2172,7 +2281,7 @@ export default function TestSuitePage() {
   const resumeRun = useCallback(async () => {
     const pending = results
       .map((_, i) => i)
-      .filter((i) => results[i].status === "pending" && !results[i].excluded);
+      .filter((i) => results[i].status === "pending" && !results[i].excluded && results[i].selected !== false);
     if (pending.length === 0) return;
     abortRef.current = false;
     setRunning(true);
@@ -2275,6 +2384,14 @@ export default function TestSuitePage() {
     setResults((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], excluded: !next[index].excluded };
+      return next;
+    });
+  }, []);
+
+  const toggleSelect = useCallback((index: number) => {
+    setResults((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], selected: next[index].selected === false };
       return next;
     });
   }, []);
@@ -2677,6 +2794,7 @@ export default function TestSuitePage() {
                 running={running}
                 onRerun={() => rerunSingle(i)}
                 onExclude={() => toggleExclude(i)}
+                onToggleSelect={() => toggleSelect(i)}
                 onUpdate={(updates) => updateResult(i, updates)}
                 onCancel={() => cancelEntry(i)}
               />

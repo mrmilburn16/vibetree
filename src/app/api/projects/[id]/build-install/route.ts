@@ -1,5 +1,5 @@
 import { getProject, ensureProject } from "@/lib/projectStore";
-import { getProjectFiles, getProjectFilePaths } from "@/lib/projectFileStore";
+import { getProjectFiles, getProjectFilePaths, setProjectFiles } from "@/lib/projectFileStore";
 import { createBuildJob } from "@/lib/buildJobs";
 
 function isValidBundleId(value: string): boolean {
@@ -59,6 +59,10 @@ export async function POST(
     }
   }
 
+  if (files.length > 0) {
+    setProjectFiles(projectId, files);
+  }
+
   if (files.length === 0) {
     console.warn(
       `[build-install] No files for project ${projectId} (client sent ${clientFiles.length} files; server store had ${getProjectFilePaths(projectId).length} paths)`
@@ -66,7 +70,7 @@ export async function POST(
     return Response.json(
       {
         error:
-          "No files to build. Send a message first to generate your app, then try Install on Device again.",
+          "No files to build. Use the Xcode button to download the project, open it in Xcode, select your iPhone, and run (⌘R). Or re-run this app once in the test suite so files are saved, then try Run on iPhone again.",
       },
       { status: 400 }
     );

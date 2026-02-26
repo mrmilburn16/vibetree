@@ -51,6 +51,11 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       /\bTheme\.accentColor\b/g,
       "Color.accentColor"
     );
+    // HapticPattern, BeatPattern, and other types have no member 'accentColor' — use Color.accentColor
+    content = content.replace(
+      /\b(HapticPattern|BeatPattern)\.accentColor\b/g,
+      "Color.accentColor"
+    );
     // ShapeStyle has no member 'accentColor' — use Color.accentColor (e.g. in .foregroundStyle, .tint, .fill)
     content = content.replace(
       /(?<!Color\.)\.accentColor\b/g,
@@ -132,7 +137,8 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       content = "import UIKit\n" + content;
     }
 
-    const usesCombine = /\b(PassthroughSubject|CurrentValueSubject|AnyCancellable|\.sink\(|\.assign\(|Publishers\.)\b/.test(content);
+    // @Published requires Combine; unknown attribute 'Published' means missing import Combine
+    const usesCombine = /\b(@Published|PassthroughSubject|CurrentValueSubject|AnyCancellable|\.sink\(|\.assign\(|Publishers\.)\b/.test(content);
     if (usesCombine && !content.includes("import Combine")) {
       content = "import Combine\n" + content;
     }
@@ -330,10 +336,35 @@ export function applyRuleBasedFixesFromBuild(
     }
   }
 
+  // unknown attribute 'Published' — @Published requires import Combine
+  if (/unknown attribute ['"]Published['"]/i.test(combined)) {
+    for (const file of result) {
+      if (!hasImport(file.content, "Combine") && /@Published\b/.test(file.content)) {
+        result = result.map((f) => (f.path === file.path ? addImportToFile(f, "Combine") : f));
+        changed = true;
+      }
+    }
+  }
+
+  // cannot find type 'Context' in scope — UIViewRepresentable/WidgetKit provide Context; need SwiftUI or WidgetKit
+  if (/cannot find type ['"]Context['"] in scope/i.test(combined)) {
+    for (const file of result) {
+      if (/\b(makeUIView|updateUIView)\s*\([^)]*context:\s*Context\b/.test(file.content) && !hasImport(file.content, "SwiftUI")) {
+        result = result.map((f) => (f.path === file.path ? addImportToFile(f, "SwiftUI") : f));
+        changed = true;
+      }
+      if (/\b(TimelineProvider|getSnapshot|getTimeline)\b.*Context\b/.test(file.content) && !hasImport(file.content, "WidgetKit")) {
+        result = result.map((f) => (f.path === file.path ? addImportToFile(f, "WidgetKit") : f));
+        changed = true;
+      }
+    }
+  }
+
   for (const file of result) {
     let c = file.content;
     let fileChanged = false;
 
+    // AsyncStream is AsyncSequence — use "for await" not "for"
     if (/for\s+(\w+)\s+in\s+\w+\.recognizedItems\b/.test(c) && !/for\s+await\s/.test(c)) {
       c = c.replace(/for\s+(\w+)\s+in\s+(\w+\.recognizedItems)\b/g, "for await $1 in $2");
       fileChanged = true;
