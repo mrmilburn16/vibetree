@@ -31,7 +31,7 @@ struct PreviewWebView: View {
             ProgressView()
                 .tint(Forest.accent)
             Text("Loading preview…")
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -40,13 +40,13 @@ struct PreviewWebView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: Forest.space4) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 32))
+                .font(Forest.font(size: 32))
                 .foregroundColor(Forest.warning)
             Text("Preview unavailable")
-                .font(.system(size: Forest.textLg, weight: .semibold))
+                .font(Forest.font(size: Forest.textLg, weight: .semibold))
                 .foregroundColor(Forest.textSecondary)
             Text(message)
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textTertiary)
                 .multilineTextAlignment(.center)
         }

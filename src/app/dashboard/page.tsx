@@ -3,17 +3,55 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Send, Sparkles, ArrowRight, Copy, Trash2 } from "lucide-react";
-import { Button, BetaBadge, Textarea } from "@/components/ui";
+import { Send, Sparkles, ArrowRight, Copy, Trash2, Zap } from "lucide-react";
+import { Button, BetaBadge, Textarea, DropdownSelect } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { getProjects, createProject, deleteProject, duplicateProject, type Project } from "@/lib/projects";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
 import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
 import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
+import { LLM_OPTIONS, DEFAULT_LLM } from "@/lib/llm-options";
 
 const PENDING_PROMPT_KEY = "vibetree-pending-prompt";
+const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
+const LLM_STORAGE_KEY = "vibetree-llm";
 const CONFIRM_DELETE_TEXT = "DELETE";
+
+const PROJECT_TYPE_OPTIONS = [
+  { value: "standard", label: "Standard (Expo)" },
+  { value: "pro", label: "Pro (Swift)" },
+] as const;
+
+type PreflightResult = {
+  runner: { ok: boolean; runnerId?: string };
+  device: { ok: boolean; name?: string; id?: string };
+  teamId: { ok: boolean; value?: string };
+  files: { ok: boolean; count?: number };
+};
+
+function getTeamIdForPreflight(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const universal = localStorage.getItem("vibetree-universal-defaults");
+    if (universal) {
+      const parsed = JSON.parse(universal);
+      if (typeof parsed.teamId === "string") return parsed.teamId;
+    }
+  } catch {}
+  return "";
+}
+
+const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
+  ...opt,
+  icon:
+    opt.value === "auto"
+      ? <Zap className="h-4 w-4" />
+      : opt.value.startsWith("gpt")
+        ? <OpenAILogo />
+        : <AnthropicLogo />,
+}));
 
 const SUGGESTION_CHIPS = [
   "A fitness tracker with activity rings",
@@ -39,6 +77,10 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [mounted, setMounted] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [projectType, setProjectType] = useState<"standard" | "pro">("pro");
+  const [llm, setLlm] = useState(DEFAULT_LLM);
+  const [preflightChecks, setPreflightChecks] = useState<PreflightResult | null>(null);
+  const [preflightLoading, setPreflightLoading] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -55,22 +97,83 @@ export default function DashboardPage() {
   }, [router]);
 
   useEffect(() => {
+    if (!mounted || typeof window === "undefined") return;
+    const storedType = localStorage.getItem(PROJECT_TYPE_STORAGE_KEY);
+    const storedLlm = localStorage.getItem(LLM_STORAGE_KEY);
+    if (storedType === "pro" || storedType === "standard") setProjectType(storedType);
+    else localStorage.setItem(PROJECT_TYPE_STORAGE_KEY, "pro");
+    const llmOption = LLM_OPTIONS.find((o) => o.value === storedLlm && !o.disabled);
+    if (llmOption) setLlm(storedLlm!);
+    else localStorage.setItem(LLM_STORAGE_KEY, DEFAULT_LLM);
+  }, [mounted]);
+
+  const handleProjectTypeChange = (value: string) => {
+    const next = value === "pro" ? "pro" : "standard";
+    setProjectType(next);
+    if (typeof window !== "undefined") localStorage.setItem(PROJECT_TYPE_STORAGE_KEY, next);
+  };
+
+  const handleLlmChange = (value: string) => {
+    setLlm(value);
+    if (typeof window !== "undefined") localStorage.setItem(LLM_STORAGE_KEY, value);
+  };
+
+  const runPreflight = useCallback(async () => {
+    setPreflightLoading(true);
+    try {
+      const teamId = getTeamIdForPreflight();
+      const q = new URLSearchParams();
+      if (teamId) q.set("teamId", teamId);
+      const res = await fetch(`/api/macos/preflight?${q.toString()}`);
+      if (res.ok) {
+        const data: PreflightResult = await res.json();
+        setPreflightChecks(data);
+      }
+    } catch {
+      setPreflightChecks(null);
+    } finally {
+      setPreflightLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || projectType !== "pro") return;
+    runPreflight();
+  }, [mounted, projectType, runPreflight]);
+
+  const proPreflightReady =
+    preflightChecks != null &&
+    preflightChecks.runner.ok &&
+    preflightChecks.device.ok &&
+    preflightChecks.teamId.ok;
+
+  useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [prompt]);
 
-  const handleSubmitPrompt = useCallback(
-    (text?: string) => {
-      const trimmed = (text ?? prompt).trim();
-      if (!trimmed) return;
+  const doSubmitPrompt = useCallback(
+    (trimmed: string) => {
       localStorage.setItem(PENDING_PROMPT_KEY, trimmed);
       const project = createProject();
       setProjects(getProjects());
       router.push(`/editor/${project.id}`);
     },
-    [prompt, router]
+    [router]
+  );
+
+  const blockStartUntilPreflight = projectType === "pro" && !proPreflightReady;
+
+  const handleSubmitPrompt = useCallback(
+    (text?: string) => {
+      const trimmed = (text ?? prompt).trim();
+      if (!trimmed) return;
+      if (blockStartUntilPreflight) return;
+      doSubmitPrompt(trimmed);
+    },
+    [prompt, blockStartUntilPreflight, doSubmitPrompt]
   );
 
   function handleNewApp() {
@@ -161,8 +264,99 @@ export default function DashboardPage() {
             Describe your app — AI writes the code, you ship to your iPhone.
           </p>
 
+          {/* Mode and model selectors */}
+          <div className="mt-8 flex w-full max-w-xl flex-col gap-2 sm:flex-row sm:items-center">
+            <DropdownSelect
+              options={[...PROJECT_TYPE_OPTIONS]}
+              value={projectType}
+              onChange={handleProjectTypeChange}
+              aria-label="Build mode: Standard (Expo) or Pro (Swift)"
+              className="w-full sm:w-auto"
+            />
+            <DropdownSelect
+              options={LLM_OPTIONS_WITH_ICONS}
+              value={llm}
+              onChange={handleLlmChange}
+              aria-label="Select AI model for app design"
+              className="w-full sm:w-auto"
+            />
+          </div>
+
+          {/* Pro (Swift): Run on iPhone readiness — check before spending credits */}
+          {projectType === "pro" && (
+            <div className="mt-4 w-full max-w-xl rounded-xl border border-[var(--border-default)] bg-[var(--background-secondary)] p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
+                  Run on iPhone readiness
+                </span>
+                <button
+                  type="button"
+                  onClick={runPreflight}
+                  disabled={preflightLoading}
+                  className="text-xs text-[var(--link-default)] hover:underline disabled:opacity-50"
+                >
+                  {preflightLoading ? "Checking…" : "Re-check"}
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                    {preflightLoading && !preflightChecks ? (
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-[var(--border-default)] border-t-[var(--button-primary-bg)]" />
+                    ) : preflightChecks?.runner.ok ? (
+                      <span className="text-green-400">✓</span>
+                    ) : (
+                      <span className="text-red-400">✗</span>
+                    )}
+                  </span>
+                  <span className="text-[var(--text-primary)]">Mac runner</span>
+                  {preflightChecks && (
+                    <span className="text-xs text-[var(--text-tertiary)]">
+                      {preflightChecks.runner.ok ? "Connected" : "Start npm run mac-runner"}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                    {preflightLoading && !preflightChecks ? null : preflightChecks?.device.ok ? (
+                      <span className="text-green-400">✓</span>
+                    ) : (
+                      <span className="text-red-400">✗</span>
+                    )}
+                  </span>
+                  <span className="text-[var(--text-primary)]">iPhone connected</span>
+                  {preflightChecks && (
+                    <span className="text-xs text-[var(--text-tertiary)]">
+                      {preflightChecks.device.ok ? (preflightChecks.device.name ?? "Detected") : "USB or same WiFi"}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                    {preflightLoading && !preflightChecks ? null : preflightChecks?.teamId.ok ? (
+                      <span className="text-green-400">✓</span>
+                    ) : (
+                      <span className="text-red-400">✗</span>
+                    )}
+                  </span>
+                  <span className="text-[var(--text-primary)]">Team ID</span>
+                  {preflightChecks && (
+                    <span className="text-xs text-[var(--text-tertiary)]">
+                      {preflightChecks.teamId.ok ? preflightChecks.teamId.value : "Set in editor or .env"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {preflightChecks && !proPreflightReady && (
+                <p className="mt-2 text-xs text-[var(--semantic-warning)]">
+                  Fix these before building so you can run on device and avoid wasting credits.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Prompt input */}
-          <div className="mt-8 w-full max-w-xl">
+          <div className="mt-4 w-full max-w-xl">
             <div
               className="flex items-end rounded-2xl border-2 border-[var(--border-default)] bg-[var(--background-secondary)] py-2 pr-2 pl-4 transition-colors duration-150 focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/25"
             >
@@ -184,14 +378,20 @@ export default function DashboardPage() {
               />
               <Button
                 variant="primary"
-                disabled={!prompt.trim()}
+                disabled={!prompt.trim() || blockStartUntilPreflight}
                 onClick={() => handleSubmitPrompt()}
                 className="!flex h-10 w-10 shrink-0 items-center justify-center rounded-xl p-0"
-                aria-label="Start building"
+                aria-label={blockStartUntilPreflight ? "Complete Run on iPhone readiness above to start" : "Start building"}
+                title={blockStartUntilPreflight ? "Complete Run on iPhone readiness above to start building" : undefined}
               >
                 <Send className="h-5 w-5" aria-hidden />
               </Button>
             </div>
+            {blockStartUntilPreflight && (
+              <p className="mt-2 text-xs text-[var(--semantic-warning)]">
+                Complete Run on iPhone readiness above to start building.
+              </p>
+            )}
 
             {/* Suggestion chips */}
             <div className="mt-3 flex flex-wrap justify-center gap-2">
@@ -321,6 +521,7 @@ export default function DashboardPage() {
           autoComplete="off"
         />
       </Modal>
+
     </div>
   );
 }

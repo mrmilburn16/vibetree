@@ -346,6 +346,7 @@ export function EditorLayout({ project }: { project: Project }) {
               setToast({ message, variant: "error" });
               setBuildFailureReason(message);
             }}
+            onAppBuilt={() => setToast({ message: "App built.", variant: "success" })}
             onProBuildComplete={onProBuildComplete}
           />
         </aside>

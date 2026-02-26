@@ -2,32 +2,41 @@ import SwiftUI
 
 struct ProjectSettingsSheet: View {
     let project: Project
+    var onProjectUpdate: ((String, String) -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     @State private var displayName: String = ""
     @State private var bundleId: String = ""
+    @State private var nameError: String?
+    @State private var bundleError: String?
     @State private var teamId: String = ""
     @State private var teamIdOverride = false
     @State private var minIOSVersion: String = "17.0"
     @State private var minIOSOverride = false
-    @State private var deviceFamily: DeviceFamily = .iphone
+    @State private var deviceFamily: String = "1"
     @State private var deviceFamilyOverride = false
-    @State private var orientation: Orientation = .portrait
+    @State private var orientation: String = "all"
     @State private var orientationOverride = false
+    @State private var exportLoading = false
 
     private static let universalKey = "vibetree-universal-defaults"
+    private static let teamIdPrefix = "vibetree-xcode-team-id:"
+    private static let projectSettingsPrefix = "vibetree-project-settings:"
 
-    enum DeviceFamily: String, CaseIterable {
-        case iphone = "iPhone"
-        case ipad = "iPad"
-        case both = "iPhone & iPad"
-    }
-
-    enum Orientation: String, CaseIterable {
-        case portrait = "Portrait"
-        case landscape = "Landscape"
-        case all = "All"
-    }
+    /// Web app order: 17.0, 17.2, 18.0, 18.1, 26.0 (iOS 26 Liquid Glass).
+    private let iosVersionOptions = ["17.0", "17.2", "18.0", "18.1", "26.0"]
+    /// Web: iPhone only, iPhone & iPad, iPad only (value 1, 1,2, 2).
+    private let deviceFamilyOptions: [(value: String, label: String)] = [
+        ("1", "iPhone only"),
+        ("1,2", "iPhone & iPad"),
+        ("2", "iPad only"),
+    ]
+    /// Web: All orientations, Portrait only, Landscape only.
+    private let orientationOptions: [(value: String, label: String)] = [
+        ("all", "All orientations"),
+        ("portrait", "Portrait only"),
+        ("landscape", "Landscape only"),
+    ]
 
     var body: some View {
         NavigationStack {
@@ -46,16 +55,22 @@ struct ProjectSettingsSheet: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundColor(Forest.textSecondary)
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .font(Forest.font(size: Forest.textBase, weight: .medium))
+                    .foregroundColor(Forest.textSecondary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
-                        saveSettings()
-                        dismiss()
+                        saveAndDismiss()
                     }
-                    .foregroundColor(Forest.accent)
-                    .fontWeight(.semibold)
+                    .font(Forest.font(size: Forest.textBase, weight: .semibold))
+                    .foregroundColor(Forest.buttonPrimaryText)
+                    .padding(.horizontal, Forest.space3)
+                    .padding(.vertical, Forest.space2)
+                    .background(Forest.accent)
+                    .cornerRadius(Forest.radiusSm)
                 }
             }
         }
@@ -66,21 +81,31 @@ struct ProjectSettingsSheet: View {
 
     private var identitySection: some View {
         VStack(alignment: .leading, spacing: Forest.space3) {
-            sectionLabel("Identity")
+            sectionHeader("IDENTITY")
 
             fieldRow(label: "Display Name") {
-                TextField("My App", text: $displayName)
+                TextField("My app", text: $displayName)
                     .textFieldStyle(.plain)
                     .forestInput()
             }
+            if let nameError {
+                Text(nameError)
+                    .font(Forest.font(size: Forest.textXs))
+                    .foregroundColor(Forest.error)
+            }
 
             fieldRow(label: "Bundle ID") {
-                TextField("com.example.myapp", text: $bundleId)
+                TextField("com.yourcompany.appname", text: $bundleId)
                     .textFieldStyle(.plain)
                     .forestInput()
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
+            }
+            if let bundleError {
+                Text(bundleError)
+                    .font(Forest.font(size: Forest.textXs))
+                    .foregroundColor(Forest.error)
             }
         }
         .forestCard()
@@ -90,19 +115,23 @@ struct ProjectSettingsSheet: View {
 
     private var signingSection: some View {
         VStack(alignment: .leading, spacing: Forest.space3) {
-            sectionLabel("Signing")
+            sectionHeader("SIGNING")
 
-            universalField(
+            universalFieldRow(
                 label: "Team ID",
-                value: $teamId,
-                isOverridden: $teamIdOverride,
-                placeholder: "ABCDE12345"
+                isOverridden: teamIdOverride,
+                onReset: { teamIdOverride = false; teamId = loadUniversalDefaults()["teamId"] ?? "" }
             ) {
                 TextField("ABCDE12345", text: $teamId)
                     .textFieldStyle(.plain)
                     .forestInput()
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.characters)
+                    .onChange(of: teamId) { _, newValue in
+                        let filtered = String(newValue.uppercased().filter { $0.isLetter || $0.isNumber })
+                        if filtered != newValue { teamId = filtered }
+                        teamIdOverride = true
+                    }
             }
         }
         .forestCard()
@@ -112,95 +141,47 @@ struct ProjectSettingsSheet: View {
 
     private var deploymentSection: some View {
         VStack(alignment: .leading, spacing: Forest.space3) {
-            sectionLabel("Deployment")
+            sectionHeader("DEPLOYMENT")
 
-            universalField(
+            universalFieldRow(
                 label: "Minimum iOS",
-                value: $minIOSVersion,
-                isOverridden: $minIOSOverride,
-                placeholder: "17.0"
+                isOverridden: minIOSOverride,
+                onReset: { minIOSOverride = false; minIOSVersion = loadUniversalDefaults()["deploymentTarget"] ?? "17.0" }
             ) {
-                Menu {
-                    ForEach(["17.0", "17.2", "17.4", "18.0", "18.2", "26.0"], id: \.self) { version in
-                        Button(version) { minIOSVersion = version }
+                menuField(value: minIOSVersion) {
+                    ForEach(iosVersionOptions, id: \.self) { v in
+                        Button(v) { minIOSVersion = v; minIOSOverride = true }
                     }
-                } label: {
-                    HStack {
-                        Text(minIOSVersion)
-                            .font(.system(size: Forest.textBase))
-                            .foregroundColor(Forest.inputText)
-                        Spacer()
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 12))
-                            .foregroundColor(Forest.textTertiary)
-                    }
-                    .padding(Forest.space3)
-                    .background(Forest.inputBg)
-                    .cornerRadius(Forest.radiusSm)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Forest.radiusSm)
-                            .stroke(Forest.inputBorder, lineWidth: 1)
-                    )
                 }
             }
 
-            universalField(
+            universalFieldRow(
                 label: "Supported Devices",
-                value: .constant(deviceFamily.rawValue),
-                isOverridden: $deviceFamilyOverride,
-                placeholder: "iPhone"
+                isOverridden: deviceFamilyOverride,
+                onReset: {
+                    deviceFamilyOverride = false
+                    deviceFamily = loadUniversalDefaults()["deviceFamily"] ?? "1"
+                }
             ) {
-                Menu {
-                    ForEach(DeviceFamily.allCases, id: \.rawValue) { family in
-                        Button(family.rawValue) { deviceFamily = family }
+                menuField(value: deviceFamilyOptions.first(where: { $0.value == deviceFamily })?.label ?? "iPhone only") {
+                    ForEach(deviceFamilyOptions, id: \.value) { opt in
+                        Button(opt.label) { deviceFamily = opt.value; deviceFamilyOverride = true }
                     }
-                } label: {
-                    HStack {
-                        Text(deviceFamily.rawValue)
-                            .font(.system(size: Forest.textBase))
-                            .foregroundColor(Forest.inputText)
-                        Spacer()
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 12))
-                            .foregroundColor(Forest.textTertiary)
-                    }
-                    .padding(Forest.space3)
-                    .background(Forest.inputBg)
-                    .cornerRadius(Forest.radiusSm)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Forest.radiusSm)
-                            .stroke(Forest.inputBorder, lineWidth: 1)
-                    )
                 }
             }
 
-            universalField(
+            universalFieldRow(
                 label: "Orientation",
-                value: .constant(orientation.rawValue),
-                isOverridden: $orientationOverride,
-                placeholder: "Portrait"
+                isOverridden: orientationOverride,
+                onReset: {
+                    orientationOverride = false
+                    orientation = loadUniversalDefaults()["orientation"] ?? "all"
+                }
             ) {
-                Menu {
-                    ForEach(Orientation.allCases, id: \.rawValue) { ori in
-                        Button(ori.rawValue) { orientation = ori }
+                menuField(value: orientationOptions.first(where: { $0.value == orientation })?.label ?? "All orientations") {
+                    ForEach(orientationOptions, id: \.value) { opt in
+                        Button(opt.label) { orientation = opt.value; orientationOverride = true }
                     }
-                } label: {
-                    HStack {
-                        Text(orientation.rawValue)
-                            .font(.system(size: Forest.textBase))
-                            .foregroundColor(Forest.inputText)
-                        Spacer()
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 12))
-                            .foregroundColor(Forest.textTertiary)
-                    }
-                    .padding(Forest.space3)
-                    .background(Forest.inputBg)
-                    .cornerRadius(Forest.radiusSm)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Forest.radiusSm)
-                            .stroke(Forest.inputBorder, lineWidth: 1)
-                    )
                 }
             }
         }
@@ -211,91 +192,154 @@ struct ProjectSettingsSheet: View {
 
     private var exportSection: some View {
         VStack(alignment: .leading, spacing: Forest.space3) {
-            sectionLabel("Export")
+            sectionHeader("EXPORT")
 
             Button {
-                if let url = URL(string:
-                    "\(UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001")/api/projects/\(project.id)/export-xcode"
-                ) {
-                    UIApplication.shared.open(url)
-                }
+                exportXcodeZip()
             } label: {
-                HStack {
-                    Spacer()
+                HStack(spacing: Forest.space2) {
                     Image(systemName: "arrow.down.doc.fill")
-                        .font(.system(size: 14))
-                    Text("Download for Xcode (.zip)")
-                        .font(.system(size: Forest.textBase, weight: .semibold))
-                    Spacer()
+                        .font(Forest.font(size: 16))
+                    Text(exportLoading ? "Preparing…" : "Download for Xcode (.zip)")
+                        .font(Forest.font(size: Forest.textBase, weight: .semibold))
                 }
+                .frame(maxWidth: .infinity)
                 .foregroundColor(Forest.buttonPrimaryText)
-                .padding(Forest.space3)
+                .padding(Forest.space4)
                 .background(Forest.accent)
                 .cornerRadius(Forest.radiusSm)
             }
+            .disabled(exportLoading)
         }
         .forestCard()
     }
 
     // MARK: - Helpers
 
-    @ViewBuilder
-    private func sectionLabel(_ title: String) -> some View {
+    private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: Forest.textXs, weight: .semibold))
+            .font(Forest.font(size: Forest.textXs, weight: .semibold))
             .foregroundColor(Forest.textTertiary)
             .textCase(.uppercase)
             .tracking(0.8)
     }
 
-    @ViewBuilder
-    private func fieldRow(label: String, @ViewBuilder content: () -> some View) -> some View {
+    private func fieldRow<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: Forest.space1) {
             Text(label)
-                .font(.system(size: Forest.textXs, weight: .medium))
-                .foregroundColor(Forest.textTertiary)
+                .font(Forest.font(size: Forest.textSm, weight: .medium))
+                .foregroundColor(Forest.textSecondary)
             content()
         }
     }
 
-    @ViewBuilder
-    private func universalField<V, Content: View>(
+    private func universalFieldRow<Content: View>(
         label: String,
-        value: Binding<V>,
-        isOverridden: Binding<Bool>,
-        placeholder: String,
+        isOverridden: Bool,
+        onReset: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: Forest.space1) {
             HStack {
                 Text(label)
-                    .font(.system(size: Forest.textXs, weight: .medium))
-                    .foregroundColor(Forest.textTertiary)
+                    .font(Forest.font(size: Forest.textSm, weight: .medium))
+                    .foregroundColor(Forest.textSecondary)
                 Spacer()
-                if !isOverridden.wrappedValue {
-                    Text("Universal")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(Forest.accent)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Forest.accent.opacity(0.12))
-                        .cornerRadius(4)
-                } else {
-                    Button {
-                        isOverridden.wrappedValue = false
-                    } label: {
+                if isOverridden {
+                    Button(action: onReset) {
                         HStack(spacing: 2) {
                             Image(systemName: "arrow.uturn.backward")
-                                .font(.system(size: 10))
+                                .font(Forest.font(size: 10))
                             Text("Reset")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(Forest.font(size: 10, weight: .medium))
                         }
                         .foregroundColor(Forest.textTertiary)
                     }
+                } else {
+                    Text("Universal")
+                        .font(Forest.font(size: 10, weight: .medium))
+                        .foregroundColor(Forest.accentLight)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Forest.accent.opacity(0.25))
+                        .cornerRadius(4)
                 }
             }
             content()
-                .onChange(of: isOverridden.wrappedValue) { _, _ in }
+        }
+    }
+
+    private func menuField<Content: View>(value: String, @ViewBuilder menuContent: () -> Content) -> some View {
+        Menu {
+            menuContent()
+        } label: {
+            HStack {
+                Text(value)
+                    .font(Forest.font(size: Forest.textBase))
+                    .foregroundColor(Forest.inputText)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(Forest.font(size: 12))
+                    .foregroundColor(Forest.textTertiary)
+            }
+            .padding(Forest.space3)
+            .background(Forest.inputBg)
+            .cornerRadius(Forest.radiusSm)
+            .overlay(
+                RoundedRectangle(cornerRadius: Forest.radiusSm)
+                    .stroke(Forest.inputBorder, lineWidth: 1)
+            )
+        }
+    }
+
+    // MARK: - Validation & Save
+
+    private func saveAndDismiss() {
+        nameError = nil
+        bundleError = nil
+
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedName.isEmpty {
+            nameError = "Project name is required."
+            return
+        }
+
+        let trimmedBundle = bundleId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedBundle.isEmpty && !isValidBundleId(trimmedBundle) {
+            bundleError = "Use a valid bundle ID (e.g. com.yourcompany.appname)."
+            return
+        }
+
+        saveSettings()
+        Task {
+            do {
+                _ = try await APIService.shared.updateProject(id: project.id, name: trimmedName, bundleId: trimmedBundle.isEmpty ? nil : trimmedBundle)
+                await MainActor.run {
+                    onProjectUpdate?(trimmedName, trimmedBundle.isEmpty ? project.effectiveBundleId : trimmedBundle)
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    nameError = "Failed to save."
+                }
+            }
+        }
+    }
+
+    private func isValidBundleId(_ value: String) -> Bool {
+        let pattern = #"^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$"#
+        return value.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    private func exportXcodeZip() {
+        exportLoading = true
+        let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
+        guard let url = URL(string: "\(baseURL)/api/projects/\(project.id)/export-xcode") else {
+            exportLoading = false
+            return
+        }
+        UIApplication.shared.open(url) { _ in
+            DispatchQueue.main.async { exportLoading = false }
         }
     }
 
@@ -303,41 +347,51 @@ struct ProjectSettingsSheet: View {
 
     private func loadSettings() {
         displayName = project.name
-        bundleId = "com.vibetree.\(project.name.lowercased().replacingOccurrences(of: " ", with: ""))"
+        bundleId = project.bundleId ?? project.effectiveBundleId
 
-        let defaults = loadUniversalDefaults()
+        var defaults = loadUniversalDefaults()
         teamId = defaults["teamId"] ?? ""
-        minIOSVersion = defaults["minIOSVersion"] ?? "17.0"
-        deviceFamily = DeviceFamily(rawValue: defaults["deviceFamily"] ?? "iPhone") ?? .iphone
-        orientation = Orientation(rawValue: defaults["orientation"] ?? "Portrait") ?? .portrait
+        minIOSVersion = defaults["deploymentTarget"] ?? "17.0"
+        deviceFamily = defaults["deviceFamily"] ?? "1"
+        orientation = defaults["orientation"] ?? "all"
 
-        let projectKey = "vibetree-project-\(project.id)-settings"
+        let projectKey = Self.projectSettingsPrefix + project.id
         if let data = UserDefaults.standard.data(forKey: projectKey),
-           let overrides = try? JSONDecoder().decode([String: String].self, from: data) {
-            if let v = overrides["teamId"] { teamId = v; teamIdOverride = true }
-            if let v = overrides["minIOSVersion"] { minIOSVersion = v; minIOSOverride = true }
-            if let v = overrides["deviceFamily"], let f = DeviceFamily(rawValue: v) { deviceFamily = f; deviceFamilyOverride = true }
-            if let v = overrides["orientation"], let o = Orientation(rawValue: v) { orientation = o; orientationOverride = true }
+           let decoded = try? JSONDecoder().decode(ProjectSettingsOverrides.self, from: data) {
+            if let v = decoded.teamId { teamId = v; teamIdOverride = true }
+            if let v = decoded.deploymentTarget { minIOSVersion = v; minIOSOverride = true }
+            if let v = decoded.deviceFamily { deviceFamily = v; deviceFamilyOverride = true }
+            if let v = decoded.orientation { orientation = v; orientationOverride = true }
+        }
+
+        let teamIdStored = UserDefaults.standard.string(forKey: Self.teamIdPrefix + project.id)
+        if let v = teamIdStored {
+            teamId = v
+            teamIdOverride = true
         }
     }
 
     private func saveSettings() {
-        var universals = loadUniversalDefaults()
-        if !teamIdOverride { universals["teamId"] = teamId }
-        if !minIOSOverride { universals["minIOSVersion"] = minIOSVersion }
-        if !deviceFamilyOverride { universals["deviceFamily"] = deviceFamily.rawValue }
-        if !orientationOverride { universals["orientation"] = orientation.rawValue }
-        saveUniversalDefaults(universals)
+        var defaults = loadUniversalDefaults()
+        if !teamIdOverride { defaults["teamId"] = teamId }
+        if !minIOSOverride { defaults["deploymentTarget"] = minIOSVersion }
+        if !deviceFamilyOverride { defaults["deviceFamily"] = deviceFamily }
+        if !orientationOverride { defaults["orientation"] = orientation }
+        saveUniversalDefaults(defaults)
 
-        var overrides: [String: String] = [:]
-        if teamIdOverride { overrides["teamId"] = teamId }
-        if minIOSOverride { overrides["minIOSVersion"] = minIOSVersion }
-        if deviceFamilyOverride { overrides["deviceFamily"] = deviceFamily.rawValue }
-        if orientationOverride { overrides["orientation"] = orientation.rawValue }
+        if teamIdOverride {
+            UserDefaults.standard.set(teamId, forKey: Self.teamIdPrefix + project.id)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.teamIdPrefix + project.id)
+        }
 
-        let projectKey = "vibetree-project-\(project.id)-settings"
+        var overrides = ProjectSettingsOverrides()
+        if teamIdOverride { overrides.teamId = teamId }
+        if minIOSOverride { overrides.deploymentTarget = minIOSVersion }
+        if deviceFamilyOverride { overrides.deviceFamily = deviceFamily }
+        if orientationOverride { overrides.orientation = orientation }
         if let data = try? JSONEncoder().encode(overrides) {
-            UserDefaults.standard.set(data, forKey: projectKey)
+            UserDefaults.standard.set(data, forKey: Self.projectSettingsPrefix + project.id)
         }
     }
 
@@ -353,4 +407,11 @@ struct ProjectSettingsSheet: View {
             UserDefaults.standard.set(data, forKey: Self.universalKey)
         }
     }
+}
+
+private struct ProjectSettingsOverrides: Codable {
+    var teamId: String?
+    var deploymentTarget: String?
+    var deviceFamily: String?
+    var orientation: String?
 }

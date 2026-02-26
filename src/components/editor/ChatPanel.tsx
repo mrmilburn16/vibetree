@@ -42,6 +42,27 @@ const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
         : <AnthropicLogo />,
 }));
 
+type PreflightResult = {
+  runner: { ok: boolean; runnerId?: string };
+  device: { ok: boolean; name?: string; id?: string };
+  teamId: { ok: boolean; value?: string };
+  files: { ok: boolean; count?: number };
+};
+
+function getTeamIdForPreflight(projectId: string): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const perProject = localStorage.getItem(`vibetree-xcode-team-id:${projectId}`);
+    if (perProject) return perProject;
+    const universal = localStorage.getItem("vibetree-universal-defaults");
+    if (universal) {
+      const parsed = JSON.parse(universal);
+      if (typeof parsed.teamId === "string") return parsed.teamId;
+    }
+  } catch {}
+  return "";
+}
+
 export function ChatPanel({
   projectId,
   projectName,
@@ -49,6 +70,7 @@ export function ChatPanel({
   onBuildStatusChange,
   onOutOfCredits,
   onError,
+  onAppBuilt,
   onProBuildComplete,
   onProjectRenamed,
 }: {
@@ -59,6 +81,8 @@ export function ChatPanel({
   onBuildStatusChange: (status: "idle" | "building" | "live" | "failed") => void;
   onOutOfCredits?: () => void;
   onError?: (message: string) => void;
+  /** Called when the agent finishes with built app files (e.g. to show a toast). */
+  onAppBuilt?: () => void;
   /** When a Pro build completes, run validate on Mac and return result; useChat will post the result in chat. */
   onProBuildComplete?: (
     projectId: string,
@@ -126,12 +150,54 @@ export function ChatPanel({
     projectName,
     onProjectRenamed,
     onMessageSuccess: featureFlags.useRealLLM ? () => deduct(1) : undefined,
+    onAppBuilt,
     onProBuildComplete,
   });
 
   useEffect(() => {
     onBuildStatusChange(buildStatus);
   }, [buildStatus, onBuildStatusChange]);
+
+  const [preflightChecks, setPreflightChecks] = useState<PreflightResult | null>(null);
+  const [preflightLoading, setPreflightLoading] = useState(false);
+
+  const runPreflight = useCallback(async () => {
+    if (!projectId) return;
+    setPreflightLoading(true);
+    try {
+      const teamId = getTeamIdForPreflight(projectId);
+      const q = new URLSearchParams({ projectId });
+      if (teamId) q.set("teamId", teamId);
+      const res = await fetch(`/api/macos/preflight?${q.toString()}`);
+      if (res.ok) {
+        const data: PreflightResult = await res.json();
+        setPreflightChecks(data);
+      }
+    } catch {
+      setPreflightChecks(null);
+    } finally {
+      setPreflightLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (projectType !== "pro" || !projectId) return;
+    runPreflight();
+  }, [projectType, projectId, runPreflight]);
+
+  const prevBuildStatusRef = useRef<typeof buildStatus>(undefined);
+  useEffect(() => {
+    const justBecameLive = buildStatus === "live" && prevBuildStatusRef.current !== "live";
+    prevBuildStatusRef.current = buildStatus;
+    if (projectType === "pro" && justBecameLive) runPreflight();
+  }, [buildStatus, projectType, runPreflight]);
+
+  const proPreflightReady =
+    preflightChecks != null &&
+    preflightChecks.runner.ok &&
+    preflightChecks.device.ok &&
+    preflightChecks.teamId.ok;
+  const blockSendUntilPreflight = projectType === "pro" && !proPreflightReady;
 
   // Auto-send a pending prompt from the dashboard (stored in localStorage before redirect).
   const pendingPromptSent = useRef(false);
@@ -155,6 +221,7 @@ export function ChatPanel({
       e.preventDefault();
       const text = input.trim();
       if (!text || !canSend) return;
+      if (blockSendUntilPreflight) return;
       if (!hasCreditsForMessage) {
         onOutOfCredits?.();
         return;
@@ -169,11 +236,12 @@ export function ChatPanel({
       setJustSent(true);
       setTimeout(() => setJustSent(false), 80);
     },
-    [input, canSend, sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
+    [input, canSend, blockSendUntilPreflight, sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
   );
 
   const handleGuidedComplete = useCallback(
     (enrichedPrompt: string) => {
+      if (blockSendUntilPreflight) return;
       if (!hasCreditsForMessage) {
         onOutOfCredits?.();
         return;
@@ -184,12 +252,12 @@ export function ChatPanel({
       }
       sendMessage(enrichedPrompt, llm, projectType);
     },
-    [sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
+    [blockSendUntilPreflight, sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
   );
 
   const showGuidedWizard = guidedMode && messages.length === 0 && !isTyping;
 
-  const canSendWithCredits = canSend && hasCreditsForMessage;
+  const canSendWithCredits = canSend && hasCreditsForMessage && !blockSendUntilPreflight;
   const showCharCount = input.length > 0 && input.length >= 0.8 * maxMessageLength;
   const placeholderIndex = messages.length % CHAT_PLACEHOLDERS.length;
   const placeholderText =
@@ -202,7 +270,15 @@ export function ChatPanel({
 
   const busy = isTyping || isValidating;
   const sendButtonTitle =
-    busy ? "Stop" : !canSend ? "Building…" : !hasCreditsForMessage ? "Out of credits" : "Send message (1 credit)";
+    busy
+      ? "Stop"
+      : blockSendUntilPreflight
+        ? "Complete Run on iPhone checks above to send"
+        : !canSend
+          ? "Building…"
+          : !hasCreditsForMessage
+            ? "Out of credits"
+            : "Send message (1 credit)";
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -214,13 +290,21 @@ export function ChatPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--border-default)] px-4 py-2.5">
-        <div className="flex items-center gap-3">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-[var(--border-default)] px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-3">
           {buildStatus === "building" && <BuildingIndicator />}
           {buildStatus === "live" && <ReadyIndicator label="Ready" />}
           {buildStatus === "failed" && <FailedIndicator reason={buildFailureReason} />}
+          {!featureFlags.useRealLLM && (
+            <span
+              className="rounded bg-[var(--background-tertiary)] px-2 py-0.5 text-xs text-[var(--text-tertiary)]"
+              title="Set NEXT_PUBLIC_USE_REAL_LLM=true in .env.local and restart the dev server for real AI responses."
+            >
+              Mock
+            </span>
+          )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <DropdownSelect
             options={PROJECT_TYPE_OPTIONS}
             value={projectType}
@@ -234,13 +318,81 @@ export function ChatPanel({
             aria-label="Select LLM for app design"
           />
         </div>
+        <div className="min-w-0" aria-hidden />
       </div>
+
+      {/* Run on iPhone readiness — inline on page when Pro (Swift) */}
+      {projectType === "pro" && (
+        <div className="border-b border-[var(--border-default)] bg-[var(--background-secondary)]/50 px-4 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-medium text-[var(--text-tertiary)]">Run on iPhone</span>
+            <button
+              type="button"
+              onClick={runPreflight}
+              disabled={preflightLoading}
+              className="text-xs text-[var(--link-default)] hover:underline disabled:opacity-50"
+            >
+              {preflightLoading ? "Checking…" : "Re-check"}
+            </button>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs">
+            <span className="flex items-center gap-1">
+              {preflightLoading && !preflightChecks ? (
+                <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-[var(--border-default)] border-t-[var(--button-primary-bg)]" />
+              ) : preflightChecks?.runner.ok ? (
+                <span className="text-green-400">✓</span>
+              ) : (
+                <span className="text-red-400">✗</span>
+              )}
+              <span className="text-[var(--text-secondary)]">Mac runner</span>
+            </span>
+            <span className="flex items-center gap-1">
+              {preflightChecks?.device.ok ? (
+                <span className="text-green-400">✓</span>
+              ) : (
+                <span className="text-red-400">✗</span>
+              )}
+              <span className="text-[var(--text-secondary)]">iPhone</span>
+            </span>
+            <span className="flex items-center gap-1">
+              {preflightChecks?.teamId.ok ? (
+                <span className="text-green-400">✓</span>
+              ) : (
+                <span className="text-red-400">✗</span>
+              )}
+              <span className="text-[var(--text-secondary)]">Team ID</span>
+            </span>
+          </div>
+          {blockSendUntilPreflight && preflightChecks != null && !preflightLoading && (
+            <p className="mt-2 text-xs text-[var(--semantic-warning)]">
+              Complete the checks above (Mac runner, iPhone, Team ID) to send a message.
+            </p>
+          )}
+          {preflightChecks && !preflightLoading && (!preflightChecks.runner.ok || !preflightChecks.device.ok || !preflightChecks.teamId.ok) && (
+            <div className="mt-2 rounded border border-[var(--border-default)] bg-[var(--background-primary)] px-3 py-2 text-xs">
+              <p className="mb-1.5 font-medium text-[var(--text-primary)]">Missing — fix to run on device:</p>
+              <ul className="list-inside list-disc space-y-0.5 text-[var(--text-secondary)]">
+                {!preflightChecks.runner.ok && (
+                  <li>Mac runner: run <code className="rounded bg-[var(--background-tertiary)] px-1">npm run mac-runner</code> in a terminal</li>
+                )}
+                {!preflightChecks.device.ok && (
+                  <li>iPhone: connect via USB or same WiFi</li>
+                )}
+                {!preflightChecks.teamId.ok && (
+                  <li>Team ID: set in Run on device or in .env (<code className="rounded bg-[var(--background-tertiary)] px-1">DEFAULT_DEVELOPMENT_TEAM</code>)</li>
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {showGuidedWizard ? (
         <GuidedModeWizard
           projectType={projectType}
           onComplete={handleGuidedComplete}
           onSkip={() => handleGuidedModeToggle(false)}
+          submitDisabled={blockSendUntilPreflight}
         />
       ) : (
         <ChatMessageList
@@ -262,30 +414,35 @@ export function ChatPanel({
         </label>
         <div className="min-w-0 flex flex-col">
           <div
-            className="flex min-h-[44px] items-center rounded-[26px] border-2 border-[var(--input-border)] bg-[var(--input-bg)] py-1 pr-1 pl-4 ring-0 transition-colors duration-[var(--transition-fast)] focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/30"
+            className={`flex min-h-[44px] items-center rounded-[26px] border-2 py-1 pr-1 pl-4 ring-0 transition-colors duration-[var(--transition-fast)] ${
+              blockSendUntilPreflight
+                ? "border-[var(--border-subtle)] bg-[var(--background-tertiary)]/50 opacity-90"
+                : "border-[var(--input-border)] bg-[var(--input-bg)] focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/30"
+            }`}
           >
             <Textarea
               ref={textareaRef}
               id="chat-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={placeholderText}
-              autoFocus={messages.length === 0}
-              className="!border-0 !min-h-[38px] max-h-[112px] w-full resize-none bg-transparent pt-2 pb-3 pr-2 text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none"
+              placeholder={blockSendUntilPreflight ? "Complete the Run on iPhone checks above to type and send…" : placeholderText}
+              autoFocus={messages.length === 0 && !blockSendUntilPreflight}
+              disabled={blockSendUntilPreflight}
+              className="!border-0 !min-h-[38px] max-h-[112px] w-full resize-none bg-transparent pt-2 pb-3 pr-2 text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none disabled:cursor-not-allowed disabled:opacity-90"
               style={{ resize: "none" }}
               rows={1}
               maxLength={maxMessageLength + 500}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSubmit(e);
+                  if (!blockSendUntilPreflight) handleSubmit(e);
                 }
               }}
             />
             <Button
               type={busy ? "button" : "submit"}
               variant={busy ? "secondary" : "primary"}
-              disabled={busy ? false : (!canSendWithCredits || !input.trim() || input.length > maxMessageLength)}
+              disabled={blockSendUntilPreflight || (busy ? false : (!canSendWithCredits || !input.trim() || input.length > maxMessageLength))}
               onClick={busy ? cancelCurrent : undefined}
               className={`!flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 transition-transform duration-75 ${justSent ? "scale-95" : "scale-100"}`}
               aria-label={sendButtonTitle}

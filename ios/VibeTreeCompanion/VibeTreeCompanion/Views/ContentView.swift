@@ -53,7 +53,7 @@ struct ContentView: View {
     private func sectionHeader(_ title: String) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: Forest.textSm, weight: .semibold))
+                .font(Forest.font(size: Forest.textSm, weight: .semibold))
                 .foregroundColor(Forest.textTertiary)
                 .textCase(.uppercase)
                 .tracking(0.8)
@@ -69,7 +69,7 @@ struct ContentView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(Forest.warning)
             Text(message)
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textSecondary)
                 .lineLimit(2)
             Spacer()
@@ -87,13 +87,13 @@ struct ContentView: View {
         VStack(spacing: Forest.space4) {
             Spacer().frame(height: 80)
             Image(systemName: "hammer.fill")
-                .font(.system(size: 48))
+                .font(Forest.font(size: 48))
                 .foregroundColor(Forest.accent.opacity(0.3))
             Text("No active builds")
-                .font(.system(size: Forest.textLg, weight: .semibold))
+                .font(Forest.font(size: Forest.textLg, weight: .semibold))
                 .foregroundColor(Forest.textSecondary)
             Text("Start a build in the web app and it will appear here")
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textTertiary)
                 .multilineTextAlignment(.center)
             Spacer()
@@ -115,14 +115,14 @@ struct ActiveBuildCard: View {
             HStack {
                 Image(systemName: statusIcon)
                     .foregroundColor(statusColor)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(Forest.font(size: 16, weight: .semibold))
                 Text(job.projectName)
-                    .font(.system(size: Forest.textBase, weight: .bold))
+                    .font(Forest.font(size: Forest.textBase, weight: .bold))
                     .foregroundColor(Forest.textPrimary)
                     .lineLimit(1)
                 Spacer()
                 Text(job.elapsedFormatted)
-                    .font(.system(size: Forest.textSm, weight: .medium, design: .monospaced))
+                    .font(Forest.fontMono(size: Forest.textSm, weight: .medium))
                     .foregroundColor(Forest.textSecondary)
             }
 
@@ -131,7 +131,7 @@ struct ActiveBuildCard: View {
 
             HStack {
                 Text(job.stepLabel)
-                    .font(.system(size: Forest.textSm, weight: .medium))
+                    .font(Forest.font(size: Forest.textSm, weight: .medium))
                     .foregroundColor(Forest.textSecondary)
                     .lineLimit(1)
                 Spacer()
@@ -141,7 +141,7 @@ struct ActiveBuildCard: View {
                     let remaining = max(0, Int(est) - job.elapsedSeconds)
                     if remaining > 0 {
                         Text("~\(formatTime(remaining)) left")
-                            .font(.system(size: Forest.textXs))
+                            .font(Forest.font(size: Forest.textXs))
                             .foregroundColor(Forest.textTertiary)
                     }
                 }
@@ -150,7 +150,7 @@ struct ActiveBuildCard: View {
             if job.attempt > 1 {
                 HStack {
                     Text("Attempt \(job.attempt)/\(job.maxAttempts)")
-                        .font(.system(size: Forest.textXs, weight: .medium))
+                        .font(Forest.font(size: Forest.textXs, weight: .medium))
                         .foregroundColor(Forest.warning)
                     Spacer()
                 }
@@ -194,24 +194,24 @@ struct RecentBuildRow: View {
         HStack(spacing: Forest.space3) {
             Image(systemName: job.status == .succeeded ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundColor(job.status == .succeeded ? Forest.success : Forest.error)
-                .font(.system(size: 20))
+                .font(Forest.font(size: 20))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(job.projectName)
-                    .font(.system(size: Forest.textBase, weight: .semibold))
+                    .font(Forest.font(size: Forest.textBase, weight: .semibold))
                     .foregroundColor(Forest.textPrimary)
                     .lineLimit(1)
                 HStack(spacing: Forest.space2) {
                     Text(job.elapsedFormatted)
-                        .font(.system(size: Forest.textXs, design: .monospaced))
+                        .font(Forest.fontMono(size: Forest.textXs))
                         .foregroundColor(Forest.textTertiary)
                     if job.attempt > 1 {
                         Text("(\(job.attempt) attempts)")
-                            .font(.system(size: Forest.textXs))
+                            .font(Forest.font(size: Forest.textXs))
                             .foregroundColor(Forest.warning)
                     }
                     Text(formattedDate)
-                        .font(.system(size: Forest.textXs))
+                        .font(Forest.font(size: Forest.textXs))
                         .foregroundColor(Forest.textTertiary)
                 }
             }
@@ -219,7 +219,7 @@ struct RecentBuildRow: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 12))
+                .font(Forest.font(size: 12))
                 .foregroundColor(Forest.textTertiary)
         }
         .padding(Forest.space3)

@@ -48,13 +48,13 @@ struct ProBuildPreviewView: View {
     private var idleState: some View {
         VStack(spacing: Forest.space4) {
             Image(systemName: "swift")
-                .font(.system(size: 48))
+                .font(Forest.font(size: 48))
                 .foregroundColor(Forest.accent.opacity(0.3))
             Text("Pro (Swift)")
-                .font(.system(size: Forest.textXl, weight: .bold))
+                .font(Forest.font(size: Forest.textXl, weight: .bold))
                 .foregroundColor(Forest.textPrimary)
             Text("Send a message to generate your Swift app. Once ready, build and install directly to your device.")
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Forest.space8)
@@ -76,14 +76,14 @@ struct ProBuildPreviewView: View {
                     .frame(width: 64, height: 64)
                     .rotationEffect(.degrees(-90))
                 Image(systemName: "hammer.fill")
-                    .font(.system(size: 24))
+                    .font(Forest.font(size: 24))
                     .foregroundColor(Forest.accent)
             }
             Text("Building…")
-                .font(.system(size: Forest.textLg, weight: .semibold))
+                .font(Forest.font(size: Forest.textLg, weight: .semibold))
                 .foregroundColor(Forest.textPrimary)
             Text("Your app is being compiled. You'll get a notification when it's ready.")
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textTertiary)
                 .multilineTextAlignment(.center)
         }
@@ -92,13 +92,13 @@ struct ProBuildPreviewView: View {
     private var readyState: some View {
         VStack(spacing: Forest.space4) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 48))
+                .font(Forest.font(size: 48))
                 .foregroundColor(Forest.success)
             Text("Build Ready")
-                .font(.system(size: Forest.textXl, weight: .bold))
+                .font(Forest.font(size: Forest.textXl, weight: .bold))
                 .foregroundColor(Forest.textPrimary)
             Text("Your app has been built successfully. Install it on your device or open in Xcode for further development.")
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Forest.space4)
@@ -108,13 +108,13 @@ struct ProBuildPreviewView: View {
     private func failedState(_ message: String) -> some View {
         VStack(spacing: Forest.space4) {
             Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 48))
+                .font(Forest.font(size: 48))
                 .foregroundColor(Forest.error)
             Text("Build Failed")
-                .font(.system(size: Forest.textXl, weight: .bold))
+                .font(Forest.font(size: Forest.textXl, weight: .bold))
                 .foregroundColor(Forest.textPrimary)
             Text(message)
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.error.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .lineLimit(4)
@@ -138,10 +138,10 @@ struct ProBuildPreviewView: View {
                                 .scaleEffect(0.8)
                         } else {
                             Image(systemName: "iphone.and.arrow.forward")
-                                .font(.system(size: 16))
+                                .font(Forest.font(size: 16))
                         }
                         Text(installButtonLabel)
-                            .font(.system(size: Forest.textBase, weight: .semibold))
+                            .font(Forest.font(size: Forest.textBase, weight: .semibold))
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -154,23 +154,23 @@ struct ProBuildPreviewView: View {
                             if status == "succeeded" {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundColor(Forest.success)
-                                    .font(.system(size: 14))
+                                    .font(Forest.font(size: 14))
                                 Text("Installed & launched on your iPhone!")
-                                    .font(.system(size: Forest.textSm, weight: .medium))
+                                    .font(Forest.font(size: Forest.textSm, weight: .medium))
                                     .foregroundColor(Forest.success)
                             } else if status == "failed" {
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack(spacing: Forest.space2) {
                                         Image(systemName: "xmark.circle.fill")
                                             .foregroundColor(Forest.error)
-                                            .font(.system(size: 14))
+                                            .font(Forest.font(size: 14))
                                         Text("Install failed")
-                                            .font(.system(size: Forest.textSm, weight: .medium))
+                                            .font(Forest.font(size: Forest.textSm, weight: .medium))
                                             .foregroundColor(Forest.error)
                                     }
                                     if let err = buildError {
                                         Text(err)
-                                            .font(.system(size: Forest.textXs))
+                                            .font(Forest.font(size: Forest.textXs))
                                             .foregroundColor(Forest.textSecondary)
                                             .fixedSize(horizontal: false, vertical: true)
                                     }
@@ -180,14 +180,14 @@ struct ProBuildPreviewView: View {
                                     .tint(Forest.accent)
                                     .scaleEffect(0.6)
                                 Text(status == "queued" ? "Waiting for build runner…" : "Building & installing…")
-                                    .font(.system(size: Forest.textSm))
+                                    .font(Forest.font(size: Forest.textSm))
                                     .foregroundColor(Forest.textSecondary)
                             }
                         }
 
                         if !installLogTail.isEmpty {
                             Text(installLogTail.suffix(3).joined(separator: "\n"))
-                                .font(.system(size: 10, design: .monospaced))
+                                .font(Forest.fontMono(size: 10))
                                 .foregroundColor(Forest.textTertiary)
                                 .lineLimit(3)
                         }
@@ -207,9 +207,9 @@ struct ProBuildPreviewView: View {
                 } label: {
                     HStack(spacing: Forest.space2) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 14))
+                            .font(Forest.font(size: 14))
                         Text("Rebuild")
-                            .font(.system(size: Forest.textSm, weight: .medium))
+                            .font(Forest.font(size: Forest.textSm, weight: .medium))
                     }
                 }
                 .buttonStyle(ForestSecondaryButtonStyle())
@@ -221,9 +221,9 @@ struct ProBuildPreviewView: View {
             } label: {
                 HStack(spacing: Forest.space2) {
                     Image(systemName: "hammer.fill")
-                        .font(.system(size: 14))
+                        .font(Forest.font(size: 14))
                     Text("Build App")
-                        .font(.system(size: Forest.textBase, weight: .semibold))
+                        .font(Forest.font(size: Forest.textBase, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -247,14 +247,14 @@ struct ProBuildPreviewView: View {
             } label: {
                 HStack(spacing: Forest.space2) {
                     Image(systemName: "arrow.up.doc")
-                        .font(.system(size: 14))
+                        .font(Forest.font(size: 14))
                     Text("Open in Xcode")
-                        .font(.system(size: Forest.textSm, weight: .medium))
+                        .font(Forest.font(size: Forest.textSm, weight: .medium))
                 }
                 .foregroundColor(Forest.accent)
             }
             Text("Download .xcodeproj and open on your Mac")
-                .font(.system(size: Forest.textXs))
+                .font(Forest.font(size: Forest.textXs))
                 .foregroundColor(Forest.textTertiary)
         }
         .padding(.bottom, Forest.space4)

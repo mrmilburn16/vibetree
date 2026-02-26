@@ -47,12 +47,12 @@ struct ShareSheet: View {
     private var shareLinkSection: some View {
         VStack(alignment: .leading, spacing: Forest.space3) {
             Label("Share link", systemImage: "link")
-                .font(.system(size: Forest.textSm, weight: .semibold))
+                .font(Forest.font(size: Forest.textSm, weight: .semibold))
                 .foregroundColor(Forest.textPrimary)
 
             HStack {
                 Text(shareURL)
-                    .font(.system(size: Forest.textXs, design: .monospaced))
+                    .font(Forest.fontMono(size: Forest.textXs))
                     .foregroundColor(Forest.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -68,9 +68,9 @@ struct ShareSheet: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 12))
+                            .font(Forest.font(size: 12))
                         Text(copied ? "Copied" : "Copy")
-                            .font(.system(size: Forest.textXs, weight: .medium))
+                            .font(Forest.font(size: Forest.textXs, weight: .medium))
                     }
                     .foregroundColor(copied ? Forest.success : Forest.accent)
                     .padding(.horizontal, Forest.space2)
@@ -88,16 +88,16 @@ struct ShareSheet: View {
     private var inviteTestersSection: some View {
         VStack(alignment: .leading, spacing: Forest.space3) {
             Label("Invite testers", systemImage: "person.badge.plus")
-                .font(.system(size: Forest.textSm, weight: .semibold))
+                .font(Forest.font(size: Forest.textSm, weight: .semibold))
                 .foregroundColor(Forest.textPrimary)
 
             Text("Send an invite to test your app via email.")
-                .font(.system(size: Forest.textXs))
+                .font(Forest.font(size: Forest.textXs))
                 .foregroundColor(Forest.textTertiary)
 
             HStack(spacing: Forest.space2) {
                 TextField("email@example.com", text: $inviteEmail)
-                    .font(.system(size: Forest.textSm))
+                    .font(Forest.font(size: Forest.textSm))
                     .foregroundColor(Forest.inputText)
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
@@ -113,7 +113,7 @@ struct ShareSheet: View {
                             .scaleEffect(0.7)
                     } else {
                         Text("Send")
-                            .font(.system(size: Forest.textSm, weight: .semibold))
+                            .font(Forest.font(size: Forest.textSm, weight: .semibold))
                     }
                 }
                 .buttonStyle(ForestPrimaryButtonStyle(isDisabled: inviteEmail.isEmpty))
@@ -131,7 +131,7 @@ struct ShareSheet: View {
                         Text(msg)
                             .foregroundColor(Forest.success)
                     }
-                    .font(.system(size: Forest.textXs))
+                    .font(Forest.font(size: Forest.textXs))
                 case .error(let msg):
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.circle.fill")
@@ -139,7 +139,7 @@ struct ShareSheet: View {
                         Text(msg)
                             .foregroundColor(Forest.error)
                     }
-                    .font(.system(size: Forest.textXs))
+                    .font(Forest.font(size: Forest.textXs))
                 }
             }
         }
@@ -152,13 +152,13 @@ struct ShareSheet: View {
         VStack(alignment: .leading, spacing: Forest.space3) {
             HStack {
                 Label("Publish to App Store", systemImage: "shippingbox")
-                    .font(.system(size: Forest.textSm, weight: .semibold))
+                    .font(Forest.font(size: Forest.textSm, weight: .semibold))
                     .foregroundColor(Forest.textPrimary)
 
                 Spacer()
 
                 Text("Coming soon")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(Forest.font(size: 10, weight: .bold))
                     .foregroundColor(Forest.accent)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
@@ -167,7 +167,7 @@ struct ShareSheet: View {
             }
 
             Text("Submit your app to the App Store directly from VibeTree. We handle code signing, screenshots, and metadata.")
-                .font(.system(size: Forest.textXs))
+                .font(Forest.font(size: Forest.textXs))
                 .foregroundColor(Forest.textTertiary)
         }
         .forestCard()

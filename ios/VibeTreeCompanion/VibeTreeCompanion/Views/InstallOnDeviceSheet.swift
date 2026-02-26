@@ -21,34 +21,34 @@ struct InstallOnDeviceSheet: View {
                 if installStatus == "succeeded" {
                     VStack(spacing: Forest.space3) {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 48))
+                            .font(Forest.font(size: 48))
                             .foregroundColor(Forest.success)
                         Text("Installed & launched on your iPhone!")
-                            .font(.system(size: Forest.textLg, weight: .semibold))
+                            .font(Forest.font(size: Forest.textLg, weight: .semibold))
                             .foregroundColor(Forest.textPrimary)
                             .multilineTextAlignment(.center)
                         Text("Check your phone — the app should be open.")
-                            .font(.system(size: Forest.textSm))
+                            .font(Forest.font(size: Forest.textSm))
                             .foregroundColor(Forest.textSecondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if installStatus == "failed" {
                     VStack(spacing: Forest.space3) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 48))
+                            .font(Forest.font(size: 48))
                             .foregroundColor(Forest.error)
                         Text("Install failed")
-                            .font(.system(size: Forest.textLg, weight: .semibold))
+                            .font(Forest.font(size: Forest.textLg, weight: .semibold))
                             .foregroundColor(Forest.textPrimary)
                         if let err = errorMessage {
                             Text(err)
-                                .font(.system(size: Forest.textSm))
+                                .font(Forest.font(size: Forest.textSm))
                                 .foregroundColor(Forest.textSecondary)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
                         }
                         Text("Connect your iPhone to your Mac with a cable and try again.")
-                            .font(.system(size: Forest.textXs))
+                            .font(Forest.font(size: Forest.textXs))
                             .foregroundColor(Forest.textTertiary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
@@ -57,15 +57,15 @@ struct InstallOnDeviceSheet: View {
                 } else {
                     VStack(spacing: Forest.space5) {
                         Image(systemName: "iphone.and.arrow.forward")
-                            .font(.system(size: 44))
+                            .font(Forest.font(size: 44))
                             .foregroundColor(Forest.accent)
 
                         Text("Install on iPhone")
-                            .font(.system(size: Forest.textXl, weight: .bold))
+                            .font(Forest.font(size: Forest.textXl, weight: .bold))
                             .foregroundColor(Forest.textPrimary)
 
                         Text("Your Mac will build the app and install it on your connected iPhone. Make sure your phone is plugged in via USB.")
-                            .font(.system(size: Forest.textSm))
+                            .font(Forest.font(size: Forest.textSm))
                             .foregroundColor(Forest.textSecondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
@@ -76,11 +76,11 @@ struct InstallOnDeviceSheet: View {
                                     .tint(Forest.accent)
                                     .scaleEffect(1.2)
                                 Text(installStatus == "queued" ? "Waiting for build runner…" : "Building & installing…")
-                                    .font(.system(size: Forest.textSm))
+                                    .font(Forest.font(size: Forest.textSm))
                                     .foregroundColor(Forest.textSecondary)
                                 if !installLogTail.isEmpty {
                                     Text(installLogTail.suffix(3).joined(separator: "\n"))
-                                        .font(.system(size: 10, design: .monospaced))
+                                        .font(Forest.fontMono(size: 10))
                                         .foregroundColor(Forest.textTertiary)
                                         .lineLimit(5)
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -96,9 +96,9 @@ struct InstallOnDeviceSheet: View {
                             } label: {
                                 HStack(spacing: Forest.space2) {
                                     Image(systemName: "iphone.and.arrow.forward")
-                                        .font(.system(size: 18))
+                                        .font(Forest.font(size: 18))
                                     Text("Install on iPhone")
-                                        .font(.system(size: Forest.textBase, weight: .semibold))
+                                        .font(Forest.font(size: Forest.textBase, weight: .semibold))
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, Forest.space4)

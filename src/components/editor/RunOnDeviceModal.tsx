@@ -473,6 +473,23 @@ export function RunOnDeviceModal({
             Build and install your app directly to your iPhone.
           </p>
 
+          {checks && !preflightLoading && (!checks.runner.ok || !checks.device.ok || !checks.teamId.ok) && (
+            <div className="rounded border border-[var(--semantic-warning)]/50 bg-[var(--semantic-warning)]/10 px-3 py-2.5 text-sm">
+              <p className="mb-1.5 font-medium text-[var(--text-primary)]">To run on your iPhone, fix the following:</p>
+              <ul className="list-inside list-disc space-y-0.5 text-[var(--text-secondary)]">
+                {!checks.runner.ok && (
+                  <li>Mac runner: run <code className="rounded bg-[var(--background-tertiary)] px-1">npm run mac-runner</code> in a terminal</li>
+                )}
+                {!checks.device.ok && (
+                  <li>iPhone: connect via USB or same WiFi</li>
+                )}
+                {!checks.teamId.ok && (
+                  <li>Team ID: enter above or set in .env (<code className="rounded bg-[var(--background-tertiary)] px-1">DEFAULT_DEVELOPMENT_TEAM</code>)</li>
+                )}
+              </ul>
+            </div>
+          )}
+
           {error && (
             <div className="rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-2">
               <p className="text-sm text-red-400">{error}</p>
@@ -577,24 +594,7 @@ export function RunOnDeviceModal({
                 ) : undefined
               }
             />
-            <CheckRow
-              ok={checks?.files.ok ?? null}
-              loading={preflightLoading && !checks}
-              label="Project files"
-              detail={
-                checks?.files.ok
-                  ? `${checks.files.count} Swift file${(checks.files.count ?? 0) !== 1 ? "s" : ""}`
-                  : checks && !checks.files.ok
-                    ? "Build your app in the editor first"
-                    : undefined
-              }
-            />
           </div>
-          {checks && !checks.files.ok && (
-            <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-              Each prompt creates a new project. Make sure you’re in the project you just built, then click Re-check above.
-            </p>
-          )}
 
           {/* ── Install button ── */}
           <Button

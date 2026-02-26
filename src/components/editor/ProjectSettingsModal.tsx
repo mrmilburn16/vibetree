@@ -114,12 +114,12 @@ function loadSettings(projectId: string, universalDefaults: UniversalDefaults): 
   if (typeof window === "undefined") return settings;
   try {
     const teamIdStored = localStorage.getItem(`${XCODE_TEAM_ID_PREFIX}${projectId}`);
-    if (teamIdStored !== null && teamIdStored !== "") {
+    if (teamIdStored !== null) {
       settings.teamId = teamIdStored;
       settings.overrides.teamId = true;
     }
     const preferredDeviceStored = localStorage.getItem(`${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`);
-    if (preferredDeviceStored !== null && preferredDeviceStored !== "") {
+    if (preferredDeviceStored !== null) {
       settings.preferredRunDevice = preferredDeviceStored;
       settings.overrides.preferredRunDevice = true;
     }

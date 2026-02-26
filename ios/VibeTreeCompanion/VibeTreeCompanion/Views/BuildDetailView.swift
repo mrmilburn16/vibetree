@@ -38,7 +38,7 @@ struct BuildDetailView: View {
                         ProgressView()
                             .tint(Forest.accent)
                         Text("Loading build…")
-                            .font(.system(size: Forest.textSm))
+                            .font(Forest.font(size: Forest.textSm))
                             .foregroundColor(Forest.textSecondary)
                     }
                 }
@@ -69,19 +69,19 @@ struct BuildDetailView: View {
         HStack(spacing: Forest.space3) {
             Image(systemName: statusIcon(job.status))
                 .foregroundColor(statusColor(job.status))
-                .font(.system(size: 28))
+                .font(Forest.font(size: 28))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(job.stepLabel)
-                    .font(.system(size: Forest.textLg, weight: .bold))
+                    .font(Forest.font(size: Forest.textLg, weight: .bold))
                     .foregroundColor(Forest.textPrimary)
                 HStack(spacing: Forest.space2) {
                     Label(job.elapsedFormatted, systemImage: "clock")
-                        .font(.system(size: Forest.textSm, design: .monospaced))
+                        .font(Forest.fontMono(size: Forest.textSm))
                         .foregroundColor(Forest.textSecondary)
                     if job.attempt > 1 {
                         Text("Attempt \(job.attempt)/\(job.maxAttempts)")
-                            .font(.system(size: Forest.textXs, weight: .medium))
+                            .font(Forest.font(size: Forest.textXs, weight: .medium))
                             .foregroundColor(Forest.warning)
                     }
                 }
@@ -98,11 +98,11 @@ struct BuildDetailView: View {
         VStack(spacing: Forest.space2) {
             HStack {
                 Text("Progress")
-                    .font(.system(size: Forest.textSm, weight: .semibold))
+                    .font(Forest.font(size: Forest.textSm, weight: .semibold))
                     .foregroundColor(Forest.textTertiary)
                 Spacer()
                 Text("\(Int(job.estimatedProgress() * 100))%")
-                    .font(.system(size: Forest.textSm, weight: .bold, design: .monospaced))
+                    .font(Forest.fontMono(size: Forest.textSm, weight: .bold))
                     .foregroundColor(Forest.accent)
             }
             ProgressView(value: job.estimatedProgress())
@@ -118,11 +118,11 @@ struct BuildDetailView: View {
         VStack(alignment: .leading, spacing: Forest.space2) {
             HStack {
                 Text("Build Logs")
-                    .font(.system(size: Forest.textSm, weight: .semibold))
+                    .font(Forest.font(size: Forest.textSm, weight: .semibold))
                     .foregroundColor(Forest.textTertiary)
                 Spacer()
                 Text("\(job.logs.count) lines")
-                    .font(.system(size: Forest.textXs))
+                    .font(Forest.font(size: Forest.textXs))
                     .foregroundColor(Forest.textTertiary)
             }
 
@@ -130,7 +130,7 @@ struct BuildDetailView: View {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(Array(job.logs.suffix(200).enumerated()), id: \.offset) { _, line in
                         Text(line)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(Forest.fontMono(size: 11))
                             .foregroundColor(logLineColor(line))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -167,14 +167,14 @@ struct BuildDetailView: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(Forest.error)
                 Text("Compiler Errors (\(errors.count))")
-                    .font(.system(size: Forest.textSm, weight: .semibold))
+                    .font(Forest.font(size: Forest.textSm, weight: .semibold))
                     .foregroundColor(Forest.error)
                 Spacer()
             }
 
             ForEach(Array(errors.enumerated()), id: \.offset) { _, err in
                 Text(err)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(Forest.fontMono(size: 11))
                     .foregroundColor(Forest.error.opacity(0.9))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(Forest.space2)
@@ -193,7 +193,7 @@ struct BuildDetailView: View {
             Image(systemName: "xmark.circle.fill")
                 .foregroundColor(Forest.error)
             Text(error)
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.error.opacity(0.9))
                 .lineLimit(5)
             Spacer()

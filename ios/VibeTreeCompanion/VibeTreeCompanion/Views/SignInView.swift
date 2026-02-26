@@ -26,7 +26,7 @@ struct SignInView: View {
 
             if let error = auth.error {
                 Text(error)
-                    .font(.system(size: Forest.textSm))
+                    .font(Forest.font(size: Forest.textSm))
                     .foregroundColor(Forest.error)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, Forest.space6)
@@ -44,7 +44,7 @@ struct SignInView: View {
     private var branding: some View {
         VStack(spacing: Forest.space3) {
             Image(systemName: "tree.fill")
-                .font(.system(size: 56))
+                .font(Forest.font(size: 56))
                 .foregroundStyle(
                     LinearGradient(
                         colors: [Forest.accent, Forest.accentLight],
@@ -52,11 +52,24 @@ struct SignInView: View {
                         endPoint: .top
                     )
                 )
-            Text("VibeTree")
-                .font(.system(size: Forest.text3Xl, weight: .bold))
-                .foregroundColor(Forest.textPrimary)
+            HStack(spacing: 10) {
+                Text("Vibetree")
+                    .font(Forest.font(size: Forest.text3Xl, weight: .bold))
+                    .foregroundColor(Forest.textPrimary)
+                Text("BETA")
+                    .font(Forest.font(size: 10, weight: .medium))
+                    .tracking(1)
+                    .textCase(.uppercase)
+                    .foregroundColor(Forest.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Forest.radiusSm)
+                            .stroke(Forest.border, lineWidth: 1)
+                    )
+            }
             Text("Build apps from your phone")
-                .font(.system(size: Forest.textBase))
+                .font(Forest.font(size: Forest.textBase))
                 .foregroundColor(Forest.textTertiary)
         }
     }
@@ -66,7 +79,7 @@ struct SignInView: View {
     private var emailField: some View {
         VStack(alignment: .leading, spacing: Forest.space1) {
             Text("Email")
-                .font(.system(size: Forest.textXs, weight: .medium))
+                .font(Forest.font(size: Forest.textXs, weight: .medium))
                 .foregroundColor(Forest.textTertiary)
             TextField("you@example.com", text: $email)
                 .textFieldStyle(.plain)
@@ -81,7 +94,7 @@ struct SignInView: View {
     private var passwordField: some View {
         VStack(alignment: .leading, spacing: Forest.space1) {
             Text("Password")
-                .font(.system(size: Forest.textXs, weight: .medium))
+                .font(Forest.font(size: Forest.textXs, weight: .medium))
                 .foregroundColor(Forest.textTertiary)
             SecureField("••••••••", text: $password)
                 .textFieldStyle(.plain)
@@ -101,7 +114,7 @@ struct SignInView: View {
                         .scaleEffect(0.8)
                 } else {
                     Text("Sign In")
-                        .font(.system(size: Forest.textBase, weight: .semibold))
+                        .font(Forest.font(size: Forest.textBase, weight: .semibold))
                 }
             }
             .frame(maxWidth: .infinity)
@@ -126,7 +139,7 @@ struct SignInView: View {
                 .fill(Forest.border)
                 .frame(height: 1)
             Text("or")
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textTertiary)
                 .padding(.horizontal, Forest.space2)
             Rectangle()

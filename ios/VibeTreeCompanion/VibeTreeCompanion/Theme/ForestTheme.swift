@@ -1,5 +1,22 @@
 import SwiftUI
 
+// MARK: - Geist fonts (match web app)
+
+private let geistSansName = "Geist"
+private let geistMonoName = "Geist Mono"
+
+extension Forest {
+    /// Geist sans (variable font), matches web app body/UI.
+    static func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .custom(geistSansName, size: size).weight(weight)
+    }
+
+    /// Geist Mono for code/labels, matches web app.
+    static func fontMono(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .custom(geistMonoName, size: size).weight(weight)
+    }
+}
+
 enum Forest {
     // MARK: - Backgrounds
     static let backgroundPrimary   = Color(hex: "0A0A0B")
@@ -38,6 +55,9 @@ enum Forest {
     static let inputBorder         = Color(hex: "27272A")
     static let inputText           = Color(hex: "FAFAFA")
     static let inputPlaceholder    = Color(hex: "71717A")
+
+    // MARK: - LLM icons (match web: Claude orange starburst, etc.)
+    static let llmClaudeOrange     = Color(hex: "E87900")
 
     // MARK: - Chat bubbles
     static let chatBubbleUserBg    = Color(hex: "10B981").opacity(0.14)
@@ -128,7 +148,7 @@ extension View {
 struct ForestInputModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .font(.system(size: Forest.textBase))
+            .font(Forest.font(size: Forest.textBase))
             .foregroundColor(Forest.inputText)
             .padding(Forest.space3)
             .background(Forest.inputBg)
@@ -147,7 +167,7 @@ struct ForestPrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: Forest.textBase, weight: .semibold))
+            .font(Forest.font(size: Forest.textBase, weight: .semibold))
             .foregroundColor(Forest.buttonPrimaryText)
             .padding(.horizontal, Forest.space5)
             .padding(.vertical, Forest.space3)
@@ -161,7 +181,7 @@ struct ForestPrimaryButtonStyle: ButtonStyle {
 struct ForestSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: Forest.textBase, weight: .medium))
+            .font(Forest.font(size: Forest.textBase, weight: .medium))
             .foregroundColor(Forest.textPrimary)
             .padding(.horizontal, Forest.space5)
             .padding(.vertical, Forest.space3)

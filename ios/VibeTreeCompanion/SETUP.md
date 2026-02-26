@@ -90,6 +90,12 @@ The app should open and show the main screen (title “VibeTree”, possibly “
   - You get a **notification**: “Your app is ready!” (success) or “Build failed” (failure).  
   - The build moves to “Recent Builds”; the Live Activity ends after a short time.
 
+- **Using other apps while waiting**
+  - Generation and builds run on your Mac, not on the phone. You can switch to another app (e.g. Instagram) and the work continues.
+  - When the agent finishes writing code, you get a local notification: "Your app is ready! Open Vibetree to view your app."
+  - When a Pro (Swift) build completes on the Mac, you get a notification and the Live Activity updates.
+  - When you return to Vibetree, the app refreshes build state so you see the latest.
+
 ---
 
 ## 8. Troubleshooting

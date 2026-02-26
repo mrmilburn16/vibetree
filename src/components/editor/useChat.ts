@@ -254,6 +254,8 @@ export function useChat(
     onProjectRenamed?: (name: string) => void;
     /** Called when the message API returns 200 (real LLM path only). Use for deduct-on-success. */
     onMessageSuccess?: () => void;
+    /** Called when the agent finishes and returns built app files (so we can show a toast). */
+    onAppBuilt?: () => void;
     /** When a Pro (Swift) build completes, run validate on Mac and return result. Used to auto-validate and post result in chat. */
     onProBuildComplete?: (
       projectId: string,
@@ -268,7 +270,7 @@ export function useChat(
     }>;
   }
 ) {
-  const { onError, projectName, onProjectRenamed, onMessageSuccess, onProBuildComplete } = options ?? {};
+  const { onError, projectName, onProjectRenamed, onMessageSuccess, onAppBuilt, onProBuildComplete } = options ?? {};
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -910,6 +912,7 @@ export function useChat(
                   )
                 );
                 setBuildStatus(result.status === "succeeded" ? (queueRef.current.length > 0 ? "building" : "live") : "failed");
+                if (result.status === "succeeded") onAppBuilt?.();
               })
               .catch(() => {
                 if (cancelValidationRef.current) {
@@ -953,6 +956,7 @@ export function useChat(
               ...prev.filter((m) => m.id !== progressMessageId),
               realMessage,
             ]);
+            if (editedFiles.length > 0) onAppBuilt?.();
           }
         }
         finish({ success: true, deferLive });
@@ -972,7 +976,7 @@ export function useChat(
           finish({ error: err?.message ?? "Something went wrong. Please try again." });
         }
       });
-  }, [projectId, projectName, onProjectRenamed, onError, onMessageSuccess, onProBuildComplete]);
+  }, [projectId, projectName, onProjectRenamed, onError, onMessageSuccess, onAppBuilt, onProBuildComplete]);
 
   const sendMessage = useCallback(
     (text: string, model?: string, projectType: "standard" | "pro" = "standard") => {

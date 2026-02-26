@@ -88,6 +88,15 @@ actor APIService {
         return try decoder.decode(Project.self, from: data)
     }
 
+    func updateProject(id: String, name: String?, bundleId: String?) async throws -> Project {
+        var body: [String: Any] = [:]
+        if let name { body["name"] = name }
+        if let bundleId { body["bundleId"] = bundleId }
+        let data = try JSONSerialization.data(withJSONObject: body)
+        let responseData = try await request("/api/projects/\(id)", method: "PATCH", body: data)
+        return try decoder.decode(Project.self, from: responseData)
+    }
+
     // MARK: - Chat / Messaging
 
     func streamMessageRequest(projectId: String, message: String, model: String, projectType: String) async throws -> URLRequest {
@@ -110,6 +119,17 @@ actor APIService {
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
         return req
+    }
+
+    // MARK: - Preflight (Run on iPhone readiness)
+
+    func fetchPreflight(projectId: String, teamId: String = "") async throws -> PreflightResponse {
+        var path = "/api/macos/preflight?projectId=\(projectId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? projectId)"
+        if !teamId.isEmpty {
+            path += "&teamId=\(teamId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? teamId)"
+        }
+        let data = try await request(path)
+        return try decoder.decode(PreflightResponse.self, from: data)
     }
 
     // MARK: - Build / Install

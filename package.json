@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "mac-runner": "node scripts/mac-runner.mjs",
-    "test:build-results": "node scripts/test-build-results-log.mjs"
+    "test:build-results": "node scripts/test-build-results-log.mjs",
+    "ios:install": "bash scripts/ios-companion-install.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -32,6 +33,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "geist": "^1.7.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

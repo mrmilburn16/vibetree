@@ -61,13 +61,13 @@ struct GuidedModeView: View {
 
             VStack(spacing: Forest.space3) {
                 Image(systemName: "text.bubble.fill")
-                    .font(.system(size: 40))
+                    .font(Forest.font(size: 40))
                     .foregroundColor(Forest.accent)
                 Text("Describe Your App")
-                    .font(.system(size: Forest.textXl, weight: .bold))
+                    .font(Forest.font(size: Forest.textXl, weight: .bold))
                     .foregroundColor(Forest.textPrimary)
                 Text("What kind of app do you want to build? Be as specific or general as you like.")
-                    .font(.system(size: Forest.textSm))
+                    .font(Forest.font(size: Forest.textSm))
                     .foregroundColor(Forest.textTertiary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, Forest.space4)
@@ -75,7 +75,7 @@ struct GuidedModeView: View {
 
             TextField("A habit tracker with streak cards and daily reminders…", text: $appDescription, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(.system(size: Forest.textBase))
+                .font(Forest.font(size: Forest.textBase))
                 .foregroundColor(Forest.inputText)
                 .lineLimit(3...6)
                 .padding(Forest.space4)
@@ -99,13 +99,13 @@ struct GuidedModeView: View {
 
             VStack(spacing: Forest.space3) {
                 Image(systemName: "square.grid.2x2.fill")
-                    .font(.system(size: 40))
+                    .font(Forest.font(size: 40))
                     .foregroundColor(Forest.accent)
                 Text("Select Features")
-                    .font(.system(size: Forest.textXl, weight: .bold))
+                    .font(Forest.font(size: Forest.textXl, weight: .bold))
                     .foregroundColor(Forest.textPrimary)
                 Text("Pick any features you'd like included. You can always add more later.")
-                    .font(.system(size: Forest.textSm))
+                    .font(Forest.font(size: Forest.textSm))
                     .foregroundColor(Forest.textTertiary)
                     .multilineTextAlignment(.center)
             }
@@ -129,9 +129,9 @@ struct GuidedModeView: View {
         } label: {
             HStack(spacing: Forest.space2) {
                 Image(systemName: icon)
-                    .font(.system(size: 14))
+                    .font(Forest.font(size: 14))
                 Text(label)
-                    .font(.system(size: Forest.textSm, weight: .medium))
+                    .font(Forest.font(size: Forest.textSm, weight: .medium))
                     .lineLimit(1)
             }
             .foregroundColor(isSelected ? Forest.accent : Forest.textSecondary)
@@ -155,10 +155,10 @@ struct GuidedModeView: View {
 
             VStack(spacing: Forest.space3) {
                 Image(systemName: "hammer.fill")
-                    .font(.system(size: 40))
+                    .font(Forest.font(size: 40))
                     .foregroundColor(Forest.accent)
                 Text("Choose Build Type")
-                    .font(.system(size: Forest.textXl, weight: .bold))
+                    .font(Forest.font(size: Forest.textXl, weight: .bold))
                     .foregroundColor(Forest.textPrimary)
             }
 
@@ -187,16 +187,16 @@ struct GuidedModeView: View {
         return Button { selectedProjectType = type } label: {
             HStack(spacing: Forest.space3) {
                 Image(systemName: icon)
-                    .font(.system(size: 24))
+                    .font(Forest.font(size: 24))
                     .foregroundColor(isSelected ? Forest.accent : Forest.textTertiary)
                     .frame(width: 40)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.system(size: Forest.textBase, weight: .semibold))
+                        .font(Forest.font(size: Forest.textBase, weight: .semibold))
                         .foregroundColor(Forest.textPrimary)
                     Text(description)
-                        .font(.system(size: Forest.textXs))
+                        .font(Forest.font(size: Forest.textXs))
                         .foregroundColor(Forest.textTertiary)
                         .multilineTextAlignment(.leading)
                 }
@@ -206,7 +206,7 @@ struct GuidedModeView: View {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(Forest.accent)
-                        .font(.system(size: 22))
+                        .font(Forest.font(size: 22))
                 }
             }
             .padding(Forest.space4)

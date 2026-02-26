@@ -54,29 +54,29 @@ struct SettingsView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(auth.userEmail ?? "Signed in")
-                            .font(.system(size: Forest.textBase, weight: .medium))
+                            .font(Forest.font(size: Forest.textBase, weight: .medium))
                             .foregroundColor(Forest.textPrimary)
                         Text("Active session")
-                            .font(.system(size: Forest.textXs))
+                            .font(Forest.font(size: Forest.textXs))
                             .foregroundColor(Forest.success)
                     }
                     Spacer()
                     Button("Sign Out") {
                         auth.signOut()
                     }
-                    .font(.system(size: Forest.textSm, weight: .medium))
+                    .font(Forest.font(size: Forest.textSm, weight: .medium))
                     .foregroundColor(Forest.destructiveText)
                 }
             } else {
                 HStack {
                     Text("Not signed in")
-                        .font(.system(size: Forest.textBase))
+                        .font(Forest.font(size: Forest.textBase))
                         .foregroundColor(Forest.textSecondary)
                     Spacer()
                     NavigationLink("Sign In") {
                         SignInView()
                     }
-                    .font(.system(size: Forest.textSm, weight: .semibold))
+                    .font(Forest.font(size: Forest.textSm, weight: .semibold))
                     .foregroundColor(Forest.accent)
                 }
             }
@@ -93,14 +93,14 @@ struct SettingsView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Balance")
-                        .font(.system(size: Forest.textXs, weight: .medium))
+                        .font(Forest.font(size: Forest.textXs, weight: .medium))
                         .foregroundColor(Forest.textTertiary)
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text("\(credits.balance)")
-                            .font(.system(size: Forest.textXl, weight: .bold, design: .rounded))
+                            .font(Forest.font(size: Forest.textXl, weight: .bold))
                             .foregroundColor(credits.isLow ? Forest.warning : Forest.accent)
                         Text("credits")
-                            .font(.system(size: Forest.textSm))
+                            .font(Forest.font(size: Forest.textSm))
                             .foregroundColor(Forest.textTertiary)
                     }
                 }
@@ -109,7 +109,7 @@ struct SettingsView: View {
                     CreditsView()
                 } label: {
                     Text("Buy More")
-                        .font(.system(size: Forest.textSm, weight: .semibold))
+                        .font(Forest.font(size: Forest.textSm, weight: .semibold))
                         .foregroundColor(Forest.backgroundPrimary)
                         .padding(.horizontal, Forest.space4)
                         .padding(.vertical, Forest.space2)
@@ -127,12 +127,12 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: Forest.space3) {
             sectionLabel("Universal Defaults")
             Text("These values apply to all new projects unless overridden.")
-                .font(.system(size: Forest.textXs))
+                .font(Forest.font(size: Forest.textXs))
                 .foregroundColor(Forest.textTertiary)
 
             VStack(alignment: .leading, spacing: Forest.space1) {
                 Text("Team ID")
-                    .font(.system(size: Forest.textXs, weight: .medium))
+                    .font(Forest.font(size: Forest.textXs, weight: .medium))
                     .foregroundColor(Forest.textTertiary)
                 TextField("ABCDE12345", text: $universalTeamId)
                     .textFieldStyle(.plain)
@@ -143,7 +143,7 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: Forest.space1) {
                 Text("Minimum iOS Version")
-                    .font(.system(size: Forest.textXs, weight: .medium))
+                    .font(Forest.font(size: Forest.textXs, weight: .medium))
                     .foregroundColor(Forest.textTertiary)
                 Menu {
                     ForEach(["17.0", "17.2", "17.4", "18.0", "18.2", "26.0"], id: \.self) { version in
@@ -152,11 +152,11 @@ struct SettingsView: View {
                 } label: {
                     HStack {
                         Text(universalMinIOS)
-                            .font(.system(size: Forest.textBase))
+                            .font(Forest.font(size: Forest.textBase))
                             .foregroundColor(Forest.inputText)
                         Spacer()
                         Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 12))
+                            .font(Forest.font(size: 12))
                             .foregroundColor(Forest.textTertiary)
                     }
                     .padding(Forest.space3)
@@ -180,11 +180,11 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: Forest.space1) {
                 Text("Server URL")
-                    .font(.system(size: Forest.textXs, weight: .medium))
+                    .font(Forest.font(size: Forest.textXs, weight: .medium))
                     .foregroundColor(Forest.textTertiary)
                 TextField("https://your-server.com", text: $serverURL)
                     .textFieldStyle(.plain)
-                    .font(.system(size: Forest.textBase))
+                    .font(Forest.font(size: Forest.textBase))
                     .foregroundColor(Forest.textPrimary)
                     .padding(Forest.space3)
                     .background(Forest.backgroundPrimary)
@@ -200,11 +200,11 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: Forest.space1) {
                 Text("API Token")
-                    .font(.system(size: Forest.textXs, weight: .medium))
+                    .font(Forest.font(size: Forest.textXs, weight: .medium))
                     .foregroundColor(Forest.textTertiary)
                 SecureField("MAC_RUNNER_TOKEN value", text: $apiToken)
                     .textFieldStyle(.plain)
-                    .font(.system(size: Forest.textBase))
+                    .font(Forest.font(size: Forest.textBase))
                     .foregroundColor(Forest.textPrimary)
                     .padding(Forest.space3)
                     .background(Forest.backgroundPrimary)
@@ -229,22 +229,22 @@ struct SettingsView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Push Notifications")
-                        .font(.system(size: Forest.textBase, weight: .medium))
+                        .font(Forest.font(size: Forest.textBase, weight: .medium))
                         .foregroundColor(Forest.textPrimary)
                     Text(notifications.isAuthorized ? "Enabled" : "Tap to enable")
-                        .font(.system(size: Forest.textXs))
+                        .font(Forest.font(size: Forest.textXs))
                         .foregroundColor(notifications.isAuthorized ? Forest.success : Forest.textTertiary)
                 }
                 Spacer()
                 if notifications.isAuthorized {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(Forest.success)
-                        .font(.system(size: 20))
+                        .font(Forest.font(size: 20))
                 } else {
                     Button("Enable") {
                         Task { await notifications.requestPermission() }
                     }
-                    .font(.system(size: Forest.textSm, weight: .semibold))
+                    .font(Forest.font(size: Forest.textSm, weight: .semibold))
                     .foregroundColor(Forest.backgroundPrimary)
                     .padding(.horizontal, Forest.space4)
                     .padding(.vertical, Forest.space2)
@@ -263,24 +263,24 @@ struct SettingsView: View {
             sectionLabel("Live Activities")
 
             Text("Simulate a build so you can see the Live Activity on the lock screen or Dynamic Island without running a real build.")
-                .font(.system(size: Forest.textXs))
+                .font(Forest.font(size: Forest.textXs))
                 .foregroundColor(Forest.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Lock Screen & Dynamic Island")
-                        .font(.system(size: Forest.textBase, weight: .medium))
+                        .font(Forest.font(size: Forest.textBase, weight: .medium))
                         .foregroundColor(Forest.textPrimary)
                     Text(ActivityAuthorizationInfo().areActivitiesEnabled ? "Enabled" : "Disabled in iOS Settings")
-                        .font(.system(size: Forest.textXs))
+                        .font(Forest.font(size: Forest.textXs))
                         .foregroundColor(ActivityAuthorizationInfo().areActivitiesEnabled ? Forest.success : Forest.textTertiary)
                 }
                 Spacer()
                 Button("Start Test") {
                     startTestLiveActivity()
                 }
-                .font(.system(size: Forest.textSm, weight: .semibold))
+                .font(Forest.font(size: Forest.textSm, weight: .semibold))
                 .foregroundColor(Forest.backgroundPrimary)
                 .padding(.horizontal, Forest.space4)
                 .padding(.vertical, Forest.space2)
@@ -292,7 +292,7 @@ struct SettingsView: View {
                 Button("End Test") {
                     Task { await endTestLiveActivity() }
                 }
-                .font(.system(size: Forest.textSm, weight: .semibold))
+                .font(Forest.font(size: Forest.textSm, weight: .semibold))
                 .foregroundColor(Forest.textSecondary)
                 .padding(.horizontal, Forest.space4)
                 .padding(.vertical, Forest.space2)
@@ -303,7 +303,7 @@ struct SettingsView: View {
                 Button("Refresh Status") {
                     refreshLiveActivityDebugInfo()
                 }
-                .font(.system(size: Forest.textSm, weight: .semibold))
+                .font(Forest.font(size: Forest.textSm, weight: .semibold))
                 .foregroundColor(Forest.textSecondary)
                 .padding(.horizontal, Forest.space4)
                 .padding(.vertical, Forest.space2)
@@ -315,14 +315,14 @@ struct SettingsView: View {
 
             if let msg = liveActivityTestMessage {
                 Text(msg)
-                    .font(.system(size: Forest.textXs))
+                    .font(Forest.font(size: Forest.textXs))
                     .foregroundColor(Forest.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if let info = liveActivityDebugInfo {
                 Text(info)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(Forest.fontMono(size: 11))
                     .foregroundColor(Forest.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -353,7 +353,7 @@ struct SettingsView: View {
                     }
                     Spacer()
                 }
-                .font(.system(size: Forest.textBase, weight: .semibold))
+                .font(Forest.font(size: Forest.textBase, weight: .semibold))
                 .foregroundColor(testForeground)
                 .padding(Forest.space3)
                 .background(testBackground)
@@ -497,21 +497,21 @@ struct SettingsView: View {
 
             HStack {
                 Text("VibeTree Companion")
-                    .font(.system(size: Forest.textSm))
+                    .font(Forest.font(size: Forest.textSm))
                     .foregroundColor(Forest.textSecondary)
                 Spacer()
                 Text("v1.0")
-                    .font(.system(size: Forest.textSm, design: .monospaced))
+                    .font(Forest.fontMono(size: Forest.textSm))
                     .foregroundColor(Forest.textTertiary)
             }
 
             if let token = notifications.deviceToken {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Device Token")
-                        .font(.system(size: Forest.textXs, weight: .medium))
+                        .font(Forest.font(size: Forest.textXs, weight: .medium))
                         .foregroundColor(Forest.textTertiary)
                     Text(token.prefix(20) + "…")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(Forest.fontMono(size: 11))
                         .foregroundColor(Forest.textTertiary)
                 }
             }
@@ -522,7 +522,7 @@ struct SettingsView: View {
     @ViewBuilder
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: Forest.textXs, weight: .semibold))
+            .font(Forest.font(size: Forest.textXs, weight: .semibold))
             .foregroundColor(Forest.textTertiary)
             .textCase(.uppercase)
             .tracking(0.8)

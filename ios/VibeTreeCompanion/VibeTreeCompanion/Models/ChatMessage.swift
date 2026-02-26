@@ -57,11 +57,12 @@ struct LLMOption: Identifiable {
     let modelValue: String
     let disabled: Bool
 
+    /// Order must match web app: Auto, Claude Opus 4.6, Claude Sonnet 4.6, GPT 5.2.
     static let options: [LLMOption] = [
         LLMOption(id: "auto", label: "Auto", modelValue: "auto", disabled: true),
-        LLMOption(id: "opus", label: "Claude Opus 4.6", modelValue: "claude-opus-4-6-20250515", disabled: false),
-        LLMOption(id: "sonnet", label: "Claude Sonnet 4.6", modelValue: "claude-sonnet-4-6-20250514", disabled: false),
-        LLMOption(id: "gpt", label: "GPT 5.2", modelValue: "gpt-5.2", disabled: true)
+        LLMOption(id: "opus-4.6", label: "Claude Opus 4.6", modelValue: "claude-opus-4-6-20250515", disabled: false),
+        LLMOption(id: "sonnet-4.6", label: "Claude Sonnet 4.6", modelValue: "claude-sonnet-4-6-20250514", disabled: false),
+        LLMOption(id: "gpt-5.2", label: "GPT 5.2", modelValue: "gpt-5.2", disabled: true),
     ]
 
     static var defaultOption: LLMOption { options[2] }

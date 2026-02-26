@@ -11,15 +11,15 @@ struct OutOfCreditsSheet: View {
 
                 VStack(spacing: Forest.space4) {
                     Image(systemName: "circle.hexagongrid.fill")
-                        .font(.system(size: 56))
+                        .font(Forest.font(size: 56))
                         .foregroundColor(Forest.error.opacity(0.6))
 
                     Text("Out of Credits")
-                        .font(.system(size: Forest.text2Xl, weight: .bold))
+                        .font(Forest.font(size: Forest.text2Xl, weight: .bold))
                         .foregroundColor(Forest.textPrimary)
 
                     Text("You need credits to send messages and build apps. Buy a credit pack or upgrade your plan to continue.")
-                        .font(.system(size: Forest.textBase))
+                        .font(Forest.font(size: Forest.textBase))
                         .foregroundColor(Forest.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, Forest.space4)
@@ -31,7 +31,7 @@ struct OutOfCreditsSheet: View {
                             Image(systemName: "plus.circle.fill")
                             Text("Buy Credits")
                         }
-                        .font(.system(size: Forest.textBase, weight: .semibold))
+                        .font(Forest.font(size: Forest.textBase, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(Forest.space3)
@@ -43,7 +43,7 @@ struct OutOfCreditsSheet: View {
                         dismiss()
                     } label: {
                         Text("Maybe Later")
-                            .font(.system(size: Forest.textBase, weight: .medium))
+                            .font(Forest.font(size: Forest.textBase, weight: .medium))
                             .foregroundColor(Forest.textTertiary)
                     }
                 }

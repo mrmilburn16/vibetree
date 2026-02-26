@@ -148,6 +148,13 @@ final class ChatService: ObservableObject {
             }
 
             buildStatus = .ready
+            let files = doneEditedFiles ?? editedFiles
+            if !files.isEmpty {
+                NotificationService.shared.showLocalNotification(
+                    title: "Your app is ready!",
+                    body: "Open Vibetree to view your app."
+                )
+            }
         } catch {
             if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
                 messages[idx].text = "Error: \(error.localizedDescription)"

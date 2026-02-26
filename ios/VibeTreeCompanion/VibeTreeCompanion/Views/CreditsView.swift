@@ -30,30 +30,30 @@ struct CreditsView: View {
     private var balanceCard: some View {
         VStack(spacing: Forest.space3) {
             Text("Current Balance")
-                .font(.system(size: Forest.textSm, weight: .medium))
+                .font(Forest.font(size: Forest.textSm, weight: .medium))
                 .foregroundColor(Forest.textTertiary)
 
             HStack(alignment: .firstTextBaseline, spacing: Forest.space2) {
                 Text("\(credits.balance)")
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .font(Forest.font(size: 48, weight: .bold))
                     .foregroundColor(balanceColor)
                 Text("credits")
-                    .font(.system(size: Forest.textLg, weight: .medium))
+                    .font(Forest.font(size: Forest.textLg, weight: .medium))
                     .foregroundColor(Forest.textTertiary)
             }
 
             if credits.isLow && !credits.isEmpty {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12))
+                        .font(Forest.font(size: 12))
                     Text("Running low")
-                        .font(.system(size: Forest.textXs, weight: .medium))
+                        .font(Forest.font(size: Forest.textXs, weight: .medium))
                 }
                 .foregroundColor(Forest.warning)
             }
 
             Text("\(credits.monthlyAllowance) included monthly")
-                .font(.system(size: Forest.textXs))
+                .font(Forest.font(size: Forest.textXs))
                 .foregroundColor(Forest.textTertiary)
         }
         .frame(maxWidth: .infinity)
@@ -71,7 +71,7 @@ struct CreditsView: View {
     private var packsGrid: some View {
         VStack(alignment: .leading, spacing: Forest.space3) {
             Text("Buy Credits")
-                .font(.system(size: Forest.textSm, weight: .semibold))
+                .font(Forest.font(size: Forest.textSm, weight: .semibold))
                 .foregroundColor(Forest.textTertiary)
                 .textCase(.uppercase)
                 .tracking(0.8)
@@ -91,7 +91,7 @@ struct CreditsView: View {
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: Forest.space2) {
             Text("How credits work")
-                .font(.system(size: Forest.textSm, weight: .semibold))
+                .font(Forest.font(size: Forest.textSm, weight: .semibold))
                 .foregroundColor(Forest.textTertiary)
                 .textCase(.uppercase)
                 .tracking(0.8)
@@ -110,11 +110,11 @@ struct CreditsView: View {
     private func creditRow(_ action: String, cost: String) -> some View {
         HStack {
             Text(action)
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textSecondary)
             Spacer()
             Text(cost)
-                .font(.system(size: Forest.textSm, weight: .medium, design: .monospaced))
+                .font(Forest.fontMono(size: Forest.textSm, weight: .medium))
                 .foregroundColor(Forest.accent)
         }
     }
@@ -130,13 +130,13 @@ struct PackCard: View {
         Button(action: onPurchase) {
             VStack(spacing: Forest.space2) {
                 Text("\(pack.credits)")
-                    .font(.system(size: Forest.text2Xl, weight: .bold, design: .rounded))
+                    .font(Forest.font(size: Forest.text2Xl, weight: .bold))
                     .foregroundColor(Forest.textPrimary)
                 Text("credits")
-                    .font(.system(size: Forest.textXs))
+                    .font(Forest.font(size: Forest.textXs))
                     .foregroundColor(Forest.textTertiary)
                 Text(pack.price)
-                    .font(.system(size: Forest.textBase, weight: .semibold))
+                    .font(Forest.font(size: Forest.textBase, weight: .semibold))
                     .foregroundColor(Forest.accent)
             }
             .frame(maxWidth: .infinity)

@@ -14,6 +14,8 @@ interface GuidedModeWizardProps {
   projectType: "standard" | "pro";
   onComplete: (enrichedPrompt: string) => void;
   onSkip: () => void;
+  /** When true (e.g. Pro mode and Run on iPhone checks not ready), disable the Build button. */
+  submitDisabled?: boolean;
 }
 
 function ProgressDots({
@@ -91,6 +93,7 @@ export function GuidedModeWizard({
   projectType,
   onComplete,
   onSkip,
+  submitDisabled = false,
 }: GuidedModeWizardProps) {
   const questions = GUIDED_QUESTIONS.filter(
     (q) => !q.projectTypeFilter || q.projectTypeFilter === projectType
@@ -266,6 +269,8 @@ export function GuidedModeWizard({
             <Button
               variant="primary"
               onClick={handleBuild}
+              disabled={submitDisabled}
+              title={submitDisabled ? "Complete Run on iPhone checks above to build" : undefined}
               className="!px-5 !py-2 !min-h-[36px] text-sm"
             >
               Build

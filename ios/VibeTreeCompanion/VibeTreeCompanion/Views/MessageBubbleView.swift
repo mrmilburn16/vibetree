@@ -41,7 +41,7 @@ struct MessageBubbleView: View {
         HStack {
             Spacer(minLength: 44)
             Text(message.text)
-                .font(.system(size: Forest.textSm, weight: .medium))
+                .font(Forest.font(size: Forest.textSm, weight: .medium))
                 .foregroundColor(Forest.textPrimary)
                 .lineSpacing(3)
                 .multilineTextAlignment(.trailing)
@@ -77,7 +77,7 @@ struct MessageBubbleView: View {
                             .tint(Forest.accent)
                             .scaleEffect(0.65)
                         Text(phaseLabel(phase))
-                            .font(.system(size: Forest.textXs, weight: .medium))
+                            .font(Forest.font(size: Forest.textXs, weight: .medium))
                             .foregroundColor(Forest.textTertiary)
                     }
                 }
@@ -121,7 +121,7 @@ struct MessageBubbleView: View {
     private var reasoningBubble: some View {
         HStack {
             Text(message.text)
-                .font(.system(size: Forest.textXs))
+                .font(Forest.font(size: Forest.textXs))
                 .foregroundColor(Forest.textTertiary)
                 .lineSpacing(2)
                 .padding(.vertical, 1)
@@ -144,7 +144,7 @@ struct MessageBubbleView: View {
 
         if message.isStreaming && !hasAnimated && !isBuildLog {
             Text(words.prefix(visibleWordCount).joined(separator: " "))
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textPrimary)
                 .lineSpacing(3)
                 .textSelection(.enabled)
@@ -155,7 +155,7 @@ struct MessageBubbleView: View {
                 }
         } else {
             Text(message.text)
-                .font(.system(size: Forest.textSm))
+                .font(Forest.font(size: Forest.textSm))
                 .foregroundColor(Forest.textPrimary)
                 .lineSpacing(3)
                 .textSelection(.enabled)
@@ -180,7 +180,7 @@ struct MessageBubbleView: View {
 
     private func fileList(_ files: [String]) -> some View {
         Text(files.joined(separator: ", "))
-            .font(.system(size: Forest.textXs, design: .monospaced))
+            .font(Forest.fontMono(size: Forest.textXs))
             .foregroundColor(Forest.textSecondary)
             .lineLimit(3)
             .padding(.top, message.text.isEmpty ? 0 : Forest.space2)
@@ -193,7 +193,7 @@ struct MessageBubbleView: View {
         let parts = metadataParts
         if !parts.isEmpty {
             Text(parts.joined(separator: " · "))
-                .font(.system(size: Forest.textXs))
+                .font(Forest.font(size: Forest.textXs))
                 .foregroundColor(Forest.textTertiary)
                 .padding(.top, 2)
         }
@@ -249,7 +249,7 @@ struct MessageBubbleView: View {
         HStack {
             Spacer()
             Text(message.text)
-                .font(.system(size: Forest.textXs, weight: .medium))
+                .font(Forest.font(size: Forest.textXs, weight: .medium))
                 .foregroundColor(Forest.textTertiary)
                 .padding(.vertical, 2)
             Spacer()
