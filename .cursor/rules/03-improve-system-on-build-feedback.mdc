@@ -1,0 +1,19 @@
+---
+description: When user reports build failures or wrong app behavior, improve the system for future builds
+alwaysApply: true
+---
+
+# Improve the system when builds fail or behave wrong
+
+When the user tells you that an app **didn’t build**, **failed after N attempts**, **didn’t do what they wanted**, or **behaved incorrectly** (e.g. wrong integration, zoomed layout, missing feature), treat it as a **system improvement** task, not only a one-off fix.
+
+**Do this automatically:**
+1. **Diagnose** why it failed or misbehaved (errors, prompts, missing guidance).
+2. **Improve the system** so future builds handle this case:
+   - **Master prompts:** `src/lib/llm/claudeAdapter.ts`, `src/lib/llm/structuredOutput.ts` — add or tighten rules, anti-patterns, or capability notes.
+   - **Skills:** `data/skills/*.json` — add a new skill or extend an existing one (keywords + `promptInjection`) so the model gets the right guidance when similar prompts are used.
+   - **Auto-fix:** `src/app/api/projects/[id]/auto-fix-build/route.ts` — add to `AUTO_FIX_SYSTEM_PROMPT` so the repair LLM knows how to fix this error class.
+   - **fixSwift / preBuildLint:** `src/lib/llm/fixSwift.ts`, `src/lib/preBuildLint.ts` — add automatic fixes or warnings where applicable.
+3. **Summarize** for the user what you changed so they know future builds will behave better.
+
+The user does **not** need to say “improve the system” or “for future builds” — you should infer it from them describing why an app didn’t build or didn’t do what they wanted.

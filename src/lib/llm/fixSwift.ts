@@ -51,6 +51,11 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       /\bTheme\.accentColor\b/g,
       "Color.accentColor"
     );
+    // ShapeStyle has no member 'accentColor' — use Color.accentColor (e.g. in .foregroundStyle, .tint, .fill)
+    content = content.replace(
+      /(?<!Color\.)\.accentColor\b/g,
+      "Color.accentColor"
+    );
 
     const usesCharts = /\b(Chart|BarMark|LineMark|AreaMark|PointMark|RuleMark|SectorMark)\b/.test(content);
     if (usesCharts && !content.includes("import Charts")) {
@@ -275,6 +280,15 @@ export function applyRuleBasedFixesFromBuild(
     for (const file of result) {
       if (!hasImport(file.content, "WidgetKit") && /\b(TimelineProvider|TimelineEntry|WidgetConfiguration|StaticConfiguration)\b/.test(file.content)) {
         result = result.map((f) => f.path === file.path ? addImportToFile(f, "WidgetKit") : f);
+        changed = true;
+      }
+    }
+  }
+
+  if (/Cannot find type '.*Intent' in scope/i.test(combined)) {
+    for (const file of result) {
+      if (file.path.startsWith("WidgetExtension/") && !hasImport(file.content, "AppIntents") && /\b(AppIntent|WidgetConfigurationIntent|AppIntentConfiguration|AppIntentTimelineProvider)\b/.test(file.content)) {
+        result = result.map((f) => f.path === file.path ? addImportToFile(f, "AppIntents") : f);
         changed = true;
       }
     }

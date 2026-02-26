@@ -38,9 +38,9 @@
     "NSFaceIDUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 5,
+    "totalBuilds": 6,
     "firstAttemptCompile": 2,
-    "compileRate": 40,
+    "compileRate": 33,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],

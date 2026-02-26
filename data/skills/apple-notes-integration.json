@@ -1,0 +1,48 @@
+{
+  "id": "apple-notes-integration",
+  "name": "Apple Notes app integration (limitations + workarounds)",
+  "frameworks": [
+    "UIKit",
+    "EventKit"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "apple note",
+      "apple notes",
+      "log to note",
+      "log to notes",
+      "save to note",
+      "save to notes",
+      "into notes",
+      "to apple note",
+      "Notes app",
+      "system notes",
+      "add to note"
+    ],
+    "excludeKeywords": [
+      "build a notes app",
+      "notes app with",
+      "my notes app",
+      "custom notes app",
+      "own notes"
+    ]
+  },
+  "promptInjection": "CAPABILITY: Apple Notes app integration\n\nIMPORTANT LIMITATION: Apple does NOT provide a public API for third-party apps to create or edit notes inside the built-in Notes app. You cannot programmatically \"write to Apple Notes\" or \"append to a Note\" from your app.\n\nWHAT TO BUILD INSTEAD:\n1. In-app storage: Store the user's content (e.g. voice transcripts) in your app using UserDefaults, a local store, or files. Each item can have a title and body.\n2. Share to Notes: Add a prominent \"Share\" or \"Save to Notes\" action that uses ShareLink(item: text) or UIActivityViewController with the note text (and optional title). The user taps Share and chooses \"Notes\" from the system share sheet to save into the real Apple Notes app. Describe this in your app summary (e.g. \"Share to Notes to save into the Apple Notes app\").\n3. Optional — Reminders (EventKit): If \"quick log\" or \"reminder\" style entries are acceptable, use EventKit (EKEventStore, EKReminder) so items appear in the system Reminders app. This is the only system \"notes-like\" app that has a public API. Only use this if it fits the user's intent (e.g. \"log as a reminder\").\n\nIMPLEMENTATION:\n- For \"save to Notes\": Store content in-app, then offer ShareLink(item: fullText) or ActivityView(items: [title + \"\\n\\n\" + body]). The user selects Notes from the share sheet.\n- For each saved note in the list, include a visible Share button (e.g. ShareLink(item: noteText) { Label(\"Share to Notes\", systemImage: \"square.and.arrow.up\") } or a Button that presents ActivityView(items: [noteText])). Without this, the user cannot get the note into the real Notes app.\n- Use a clear label: \"Share to Notes\" or \"Save to Notes\" so the user knows they can add the content to the real Notes app.\n- Do NOT claim your app \"writes to Apple Notes\" automatically — it enables saving via Share → Notes.\n\nANTI-PATTERNS:\n- Do NOT try to use a non-existent Notes framework or API.\n- Do NOT build only in-app notes without a Share action when the user asked to use Apple Notes.\n- Do NOT skip explaining in the summary that saving to Apple Notes is done via Share.",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Claiming the app writes to Apple Notes via API (no such API exists)",
+    "Building in-app notes only with no Share to Notes option when user asked for Apple Notes",
+    "Using a non-existent Notes framework"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 1,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

@@ -53,16 +53,6 @@ struct MessageBubbleView: View {
                     RoundedRectangle(cornerRadius: Forest.radiusLg)
                         .stroke(Forest.border, lineWidth: 1)
                 )
-                .overlay(alignment: .leading) {
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: Forest.radiusLg,
-                        bottomLeadingRadius: Forest.radiusLg,
-                        bottomTrailingRadius: 0,
-                        topTrailingRadius: 0
-                    )
-                    .fill(Forest.accent.opacity(0.5))
-                    .frame(width: 3)
-                }
         }
     }
 
@@ -116,13 +106,13 @@ struct MessageBubbleView: View {
         }
     }
 
-    // MARK: - Reasoning (small muted inline text, no bubble)
+    // MARK: - Reasoning (agent updates: Creating X.swift, Receiving code… — white so they read clearly)
 
     private var reasoningBubble: some View {
         HStack {
             Text(message.text)
                 .font(Forest.font(size: Forest.textXs))
-                .foregroundColor(Forest.textTertiary)
+                .foregroundColor(Forest.textPrimary)
                 .lineSpacing(2)
                 .padding(.vertical, 1)
 

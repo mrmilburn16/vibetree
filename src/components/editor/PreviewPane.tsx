@@ -221,9 +221,13 @@ function CSSDeviceFrame({
           "0 25px 50px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
       }}
     >
+      {/* Inner screen: clip all content to device rounded shape (iPhone isn't a perfect rectangle) */}
       <div
         className="relative h-full w-full overflow-hidden rounded-[2.25rem] bg-[var(--background-tertiary)]"
-        style={{ boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.25)" }}
+        style={{
+          boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.25)",
+          clipPath: "inset(0 round 2.25rem)",
+        }}
       >
         <div
           className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-black"
@@ -254,12 +258,18 @@ function CSSDeviceFrame({
                 aria-hidden
               />
               {isPro && simulatorPreviewUrl ? (
-                <img
-                  src={simulatorPreviewUrl}
-                  alt="Simulator preview"
-                  className="absolute inset-0 h-full w-full object-contain object-top rounded-[2.25rem]"
-                  style={{ paddingTop: 40, paddingLeft: 12, paddingRight: 12, paddingBottom: 12 }}
-                />
+                <div
+                  className="absolute inset-0 overflow-hidden rounded-[2.25rem]"
+                  style={{ clipPath: "inset(0 round 2.25rem)" }}
+                  aria-hidden
+                >
+                  <img
+                    src={simulatorPreviewUrl}
+                    alt="Simulator preview"
+                    className="h-full w-full object-contain object-top"
+                    style={{ paddingTop: 40, paddingLeft: 12, paddingRight: 12, paddingBottom: 12 }}
+                  />
+                </div>
               ) : (
                 <p className="text-body-muted relative text-center text-sm max-w-[200px] leading-relaxed">
                   {isPro

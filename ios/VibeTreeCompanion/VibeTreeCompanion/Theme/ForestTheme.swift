@@ -59,8 +59,8 @@ enum Forest {
     // MARK: - LLM icons (match web: Claude orange starburst, etc.)
     static let llmClaudeOrange     = Color(hex: "E87900")
 
-    // MARK: - Chat bubbles
-    static let chatBubbleUserBg    = Color(hex: "10B981").opacity(0.14)
+    // MARK: - Chat bubbles (user = grey so agent updates read as the “white” / primary content)
+    static let chatBubbleUserBg    = Color(hex: "1C1C1E")
     static let chatBubbleAssistantBg = Color(hex: "141416")
 
     // MARK: - Tab bar

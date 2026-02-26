@@ -5,6 +5,7 @@ struct BuildDetailView: View {
     @StateObject private var monitor = BuildMonitorService.shared
     @State private var job: BuildJob?
     @State private var isLoading = true
+    @State private var compilerErrorsCopied = false
 
     private var displayJob: BuildJob? {
         job ?? monitor.activeBuilds.first(where: { $0.id == jobId })
@@ -24,7 +25,7 @@ struct BuildDetailView: View {
                         }
 
                         if let errors = job.compilerErrors, !errors.isEmpty {
-                            errorsSection(errors)
+                            errorsSection(errors, copied: $compilerErrorsCopied)
                         }
 
                         if let error = job.error {
@@ -161,7 +162,7 @@ struct BuildDetailView: View {
     // MARK: - Compiler Errors
 
     @ViewBuilder
-    private func errorsSection(_ errors: [String]) -> some View {
+    private func errorsSection(_ errors: [String], copied: Binding<Bool>) -> some View {
         VStack(alignment: .leading, spacing: Forest.space2) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -170,6 +171,25 @@ struct BuildDetailView: View {
                     .font(Forest.font(size: Forest.textSm, weight: .semibold))
                     .foregroundColor(Forest.error)
                 Spacer()
+                Button {
+                    let text = errors.joined(separator: "\n\n")
+                    UIPasteboard.general.string = text
+                    copied.wrappedValue = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        copied.wrappedValue = false
+                    }
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(Forest.font(size: 14))
+                        .foregroundColor(Forest.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Copy all errors")
+                if copied.wrappedValue {
+                    Text("Copied!")
+                        .font(Forest.font(size: Forest.textXs))
+                        .foregroundColor(Forest.textTertiary)
+                }
             }
 
             ForEach(Array(errors.enumerated()), id: \.offset) { _, err in

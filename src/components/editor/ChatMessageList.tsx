@@ -30,7 +30,7 @@ function getStreamTokens(text: string): string[] {
   return text.split(/(\s+)/).filter(Boolean);
 }
 
-/** Short status phrases from useChat step messages — rendered muted (same as "Generating...", "Validating structured output") */
+/** Short status phrases from useChat step messages — rendered muted (same as "Writing...", "Validating structured output") */
 const REASONING_PHRASES = new Set([
   "Reading files.",
   "Explored.",
@@ -60,7 +60,7 @@ function StreamProgressBar({ messages }: { messages: ChatMessage[] }) {
   const countMatch = lastFile.content.match(/\(file (\d+)\)/);
   const currentCount = countMatch ? parseInt(countMatch[1], 10) : fileMessages.length;
   const fileNames = fileMessages.map((m) => {
-    const match = m.content.match(/^Generating (.+?)(?:\s+\(file|$| ·)/);
+    const match = m.content.match(/^Writing (.+?)(?:\s+\(file|$| ·)/);
     return match?.[1] ?? m.content;
   });
 

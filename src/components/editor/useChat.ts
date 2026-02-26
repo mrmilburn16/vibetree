@@ -482,6 +482,7 @@ export function useChat(
     let lastCostUsd: number | undefined;
     let lastProgressElapsedMs: number | undefined;
     let discoveredFilesCount = 0;
+    const discoveredFilePaths: string[] = [];
     const emittedPhases = new Set<string>();
 
     setMessages((prev) => [
@@ -515,7 +516,13 @@ export function useChat(
       const elapsedStr = ` · ${formatDurationShort(elapsedSec)}`;
       const tokenStr = formatTokens(receivedChars);
       const costStr = formatCost(costUsd);
-      const filesStr = discoveredFilesCount > 0 ? ` · ${discoveredFilesCount} files` : "";
+      const fileCount = discoveredFilePaths.length || discoveredFilesCount;
+      const basenames = discoveredFilePaths.map((p) => p.split("/").pop() ?? p);
+      const maxNames = 6;
+      const filesStr =
+        fileCount > 0
+          ? ` · ${basenames.length > 0 ? basenames.slice(0, maxNames).join(", ") + (basenames.length > maxNames ? ` +${basenames.length - maxNames} more` : "") : `${fileCount} file${fileCount === 1 ? "" : "s"}`}`
+          : "";
 
       const idleSecs = Math.max(0, Math.round((Date.now() - lastIncreaseAt) / 1000));
       const showThinking =
@@ -687,17 +694,22 @@ export function useChat(
               }
               if (event.type === "file" && typeof event.path === "string") {
                 sawServerProgress = true;
+                if (!discoveredFilePaths.includes(event.path)) discoveredFilePaths.push(event.path);
                 if (typeof event.count === "number") discoveredFilesCount = event.count;
                 const fileMsg: ChatMessage = {
                   id: `stream-file-${streamRunId}-${typeof event.count === "number" ? event.count : Date.now()}`,
                   role: "assistant",
-                  content: `Generating ${event.path.split("/").pop() ?? event.path}${typeof event.count === "number" ? ` (file ${event.count})` : ""} · ${event.path}`,
+                  content: `Writing ${event.path.split("/").pop() ?? event.path}${typeof event.count === "number" ? ` (file ${event.count})` : ""} · ${event.path}`,
                 };
                 setMessages((prev) => {
                   const idx = prev.findIndex((m) => m.id === progressMessageId);
                   if (idx === -1) return [...prev, fileMsg];
                   const next = prev.slice();
                   next.splice(idx, 0, fileMsg);
+                  // Update progress line immediately so user sees the new file name
+                  const progressIdx = next.findIndex((m) => m.id === progressMessageId);
+                  if (progressIdx !== -1)
+                    next[progressIdx] = { ...next[progressIdx], content: renderProgressLine() };
                   return next;
                 });
               }
@@ -862,20 +874,10 @@ export function useChat(
             onProBuildComplete(
               projectId,
               (status) => {
-                // Do not trust status-provided timers; keep a single local stopwatch.
+                // Only update the ref; the 1s interval tick is the single source of setMessages for this line (avoids glitching from multiple update sources).
                 const formatted = formatStatusDurations(status);
                 const base = formatted.replace(/\s*\([^)]*\)\s*$/, "").trim();
                 if (validateTickRef.current) validateTickRef.current.base = base;
-                const elapsed = validateTickRef.current
-                  ? Math.floor((Date.now() - validateTickRef.current.startTime) / 1000)
-                  : 0;
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === validateMessageId
-                      ? { ...m, content: `${base} (${formatDurationShort(elapsed)})` }
-                      : m
-                  )
-                );
               }
             )
               .then((result) => {

@@ -1,0 +1,40 @@
+{
+  "id": "social-cross-posting",
+  "name": "Social cross-posting / multi-platform posting",
+  "frameworks": [
+    "SwiftUI",
+    "Foundation"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "cross post",
+      "cross-post",
+      "multiple social",
+      "post to multiple",
+      "bulk post",
+      "social media platforms",
+      "post to several",
+      "share to multiple platforms",
+      "X Twitter Facebook Instagram",
+      "LinkedIn Mastodon Bluesky"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "CAPABILITY: Social cross-posting / multi-platform posting\n\nCONNECTING PLATFORMS (REQUIRED):\nThe app MUST include a way for users to \"connect\" or \"link\" each platform before they can post. Do not only show platform selection toggles—add one of:\n1. A **Settings** or **Connected accounts** screen (e.g. from a gear or profile icon) where each platform has a row: platform name, connection status (\"Not connected\" / \"Connected\"), and a \"Connect\" or \"Add account\" button. Tapping it can show an alert or sheet explaining \"In a full app you would sign in with [platform] here; this demo saves your choice.\" and then mark the platform as connected for the session.\n2. On the main compose screen, make each platform row tappable: first tap = \"Connect\" flow (alert/sheet), second tap = toggle selected for this post. Show a small indicator (checkmark or \"Connected\") so users see which accounts are linked.\n\nReal APIs (Twitter/X, Facebook, Instagram, LinkedIn, Mastodon, Bluesky) each require OAuth or API keys; you cannot implement real posting without backend and app registration. So:\n- Implement **connection UI** (Connect / Add account) and **connection state** (connected vs not) so the flow is clear.\n- For the actual \"Post\" action, either simulate success (e.g. \"Posted to 3 platforms\" alert) or show \"Would post to X, Y, Z (demo mode)\".\n- Optionally add a short in-app note: \"Connect your accounts in Settings. Real posting requires API setup per platform.\"\n\nANTI-PATTERNS:\n- Do NOT only offer platform toggles with no way to \"connect\" or \"add account\".\n- Do NOT claim the app actually posts to live APIs without implementing OAuth/API keys (use demo/simulated posting).",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Only platform selection toggles with no Connect / Add account flow",
+    "Claiming real posting to live APIs without OAuth/backend"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 1,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}
