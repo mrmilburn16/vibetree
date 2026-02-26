@@ -11,6 +11,7 @@ struct EditorView: View {
     @State private var showKeyboardHelp = false
     @State private var showInstallSheet = false
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.scenePhase) private var scenePhase
 
     init(project: Project, pendingPrompt: String? = nil) {
         self.project = project
@@ -47,6 +48,11 @@ struct EditorView: View {
         .onAppear { projectDisplayName = project.name }
         .onChange(of: chatService.suggestedProjectName) { _, new in
             if let n = new { projectDisplayName = n }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                chatService.checkRecoveryOnForeground()
+            }
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)

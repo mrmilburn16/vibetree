@@ -30,10 +30,17 @@ final class ChatService: ObservableObject {
     }
 
     private var streamTask: Task<Void, Never>?
+    private var recoveryTask: Task<Void, Never>?
     private let projectId: String
     private let initialProjectName: String
     /// When we auto-derive a title and PATCH the server, set this so the UI can show the new name.
     @Published var suggestedProjectName: String?
+    /// Tracks the last prompt so foreground recovery can derive a title.
+    private var lastPrompt: String?
+    /// The assistant message ID to update if recovery succeeds later.
+    private var pendingRecoveryMessageId: String?
+    /// Whether we're waiting for the server to finish after losing the stream.
+    @Published var isAwaitingRecovery = false
 
     init(projectId: String, projectName: String = "Untitled app") {
         self.projectId = projectId
@@ -96,8 +103,8 @@ final class ChatService: ObservableObject {
         assistantMessageId: String
     ) async {
         let streamStart = Date()
+        lastPrompt = text
 
-        // Keep the app alive in background so long generations aren't killed by iOS.
         let bgTaskId = await beginBackgroundTask()
 
         do {
@@ -152,59 +159,37 @@ final class ChatService: ObservableObject {
                 }
             }
 
-            // Fallback: stream ended without done event (iOS killed the connection).
-            // Check if the server actually finished and has files.
-            if !receivedDoneEvent && !discoveredFiles.isEmpty {
-                logger.warning("Stream ended without done event after \(discoveredFiles.count) files — checking server for recovery")
-                let recovered = await recoverFromServer(
-                    prompt: text,
-                    editedFiles: &editedFiles,
-                    doneContent: &doneContent,
-                    assistantMessageId: assistantMessageId
+            if receivedDoneEvent {
+                finalizeSuccess(
+                    assistantMessageId: assistantMessageId,
+                    editedFiles: doneEditedFiles ?? editedFiles,
+                    discoveredFiles: discoveredFiles,
+                    doneContent: doneContent,
+                    elapsed: Date().timeIntervalSince(streamStart) * 1000,
+                    prompt: text
                 )
-                if recovered {
-                    receivedDoneEvent = true
-                    logger.info("Recovery succeeded — server has files")
-                }
-            }
-
-            let elapsed = Date().timeIntervalSince(streamStart) * 1000
-
-            if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
-                let finalText = doneContent ?? (buildLog.isEmpty ? "Build complete." : buildLog.joined(separator: "\n"))
-                messages[idx].text = finalText.isEmpty ? "Build complete." : finalText
-                messages[idx].editedFiles = (doneEditedFiles ?? editedFiles).isEmpty ? nil : (doneEditedFiles ?? editedFiles)
-                messages[idx].discoveredFiles = discoveredFiles.isEmpty ? nil : discoveredFiles
-                messages[idx].isStreaming = false
-                messages[idx].elapsedMs = elapsed
-                messages[idx].createdAt = Date()
-            }
-
-            buildStatus = .ready
-            let files = doneEditedFiles ?? editedFiles
-            if !files.isEmpty {
-                NotificationService.shared.showLocalNotification(
-                    title: "Your app is ready!",
-                    body: "Open Vibetree to view your app."
-                )
-                if Self.isUntitledName(initialProjectName) {
-                    let rawContent = doneContent ?? ""
-                    let autoTitle = Self.deriveTitleFromPrompt(text) ?? Self.deriveTitleFromSummary(rawContent)
-                    if let autoTitle, !Self.isUntitledName(autoTitle) {
-                        suggestedProjectName = autoTitle
-                        try? await APIService.shared.updateProject(id: projectId, name: autoTitle, bundleId: nil)
-                    }
-                }
+            } else {
+                // Stream ended cleanly but no done event — connection was dropped.
+                logger.warning("Stream ended without done event — entering recovery mode")
+                enterRecoveryMode(assistantMessageId: assistantMessageId)
             }
         } catch {
-            if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
-                messages[idx].text = "Error: \(error.localizedDescription)"
-                messages[idx].isStreaming = false
-                messages[idx].createdAt = Date()
+            // Connection error (iOS killed the socket, network dropped, etc.)
+            // The server is likely still generating — don't show an error, enter recovery.
+            let isConnectionError = Self.isNetworkOrBackgroundError(error)
+            if isConnectionError {
+                logger.warning("Stream connection lost (\(error.localizedDescription)) — entering recovery mode")
+                enterRecoveryMode(assistantMessageId: assistantMessageId)
+            } else {
+                if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
+                    messages[idx].text = "Error: \(error.localizedDescription)"
+                    messages[idx].isStreaming = false
+                    messages[idx].createdAt = Date()
+                }
+                buildStatus = .failed(error.localizedDescription)
+                self.error = error.localizedDescription
+                logger.error("performStream failed: \(error.localizedDescription)")
             }
-            buildStatus = .failed(error.localizedDescription)
-            self.error = error.localizedDescription
-            logger.error("performStream failed: \(error.localizedDescription)")
         }
 
         isStreaming = false
@@ -213,12 +198,153 @@ final class ChatService: ObservableObject {
         await endBackgroundTask(bgTaskId)
     }
 
+    /// Transition to recovery mode: keep status as "building", poll server when foregrounded.
+    private func enterRecoveryMode(assistantMessageId: String) {
+        pendingRecoveryMessageId = assistantMessageId
+        isAwaitingRecovery = true
+        buildStatus = .building
+
+        if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
+            messages[idx].text = "Still building on server… come back shortly."
+            messages[idx].isStreaming = true
+        }
+
+        startRecoveryPolling()
+    }
+
+    /// Poll the server periodically until files appear or we give up (10 min max).
+    private func startRecoveryPolling() {
+        recoveryTask?.cancel()
+        recoveryTask = Task { [weak self] in
+            guard let self else { return }
+
+            let maxWait: TimeInterval = 600
+            let start = Date()
+            var interval: UInt64 = 5_000_000_000  // start at 5s
+
+            while !Task.isCancelled && Date().timeIntervalSince(start) < maxWait {
+                try? await Task.sleep(nanoseconds: interval)
+                if Task.isCancelled { break }
+
+                let recovered = await self.checkServerForFiles()
+                if recovered { return }
+
+                // Back off: 5s → 10s → 15s → 20s (cap)
+                interval = min(interval + 5_000_000_000, 20_000_000_000)
+            }
+
+            // Gave up — server never finished.
+            await self.recoveryTimedOut()
+        }
+    }
+
+    /// Called when the app returns to the foreground — immediately check if the server finished.
+    func checkRecoveryOnForeground() {
+        guard isAwaitingRecovery else { return }
+        Task {
+            let recovered = await checkServerForFiles()
+            if !recovered {
+                logger.info("Foreground check: server not done yet, polling continues")
+            }
+        }
+    }
+
+    private func checkServerForFiles() async -> Bool {
+        do {
+            let data = try await APIService.shared.fetchProjectRaw(id: projectId)
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let fileCount = json["fileCount"] as? Int,
+                  fileCount > 0,
+                  let filePaths = json["filePaths"] as? [String] else {
+                return false
+            }
+
+            logger.info("Recovery: server has \(fileCount) files")
+
+            let prompt = lastPrompt ?? ""
+            let doneContent = "App built. \(fileCount) files generated."
+
+            if let msgId = pendingRecoveryMessageId {
+                finalizeSuccess(
+                    assistantMessageId: msgId,
+                    editedFiles: filePaths,
+                    discoveredFiles: filePaths,
+                    doneContent: doneContent,
+                    elapsed: nil,
+                    prompt: prompt
+                )
+            }
+
+            isAwaitingRecovery = false
+            pendingRecoveryMessageId = nil
+            recoveryTask?.cancel()
+            return true
+        } catch {
+            logger.error("Recovery poll failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func recoveryTimedOut() {
+        guard isAwaitingRecovery else { return }
+        isAwaitingRecovery = false
+
+        if let msgId = pendingRecoveryMessageId {
+            if let idx = messages.firstIndex(where: { $0.id == msgId }) {
+                messages[idx].text = "Build timed out. The server may still be processing — try refreshing."
+                messages[idx].isStreaming = false
+                messages[idx].createdAt = Date()
+            }
+        }
+        pendingRecoveryMessageId = nil
+        buildStatus = .failed("Connection lost and recovery timed out")
+    }
+
+    /// Finalize a successful build — update message, notify, auto-title.
+    private func finalizeSuccess(
+        assistantMessageId: String,
+        editedFiles: [String],
+        discoveredFiles: [String],
+        doneContent: String?,
+        elapsed: Double?,
+        prompt: String
+    ) {
+        if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
+            let finalText = doneContent ?? "Build complete."
+            messages[idx].text = finalText.isEmpty ? "Build complete." : finalText
+            messages[idx].editedFiles = editedFiles.isEmpty ? nil : editedFiles
+            messages[idx].discoveredFiles = discoveredFiles.isEmpty ? nil : discoveredFiles
+            messages[idx].isStreaming = false
+            if let elapsed { messages[idx].elapsedMs = elapsed }
+            messages[idx].createdAt = Date()
+        }
+
+        buildStatus = .ready
+
+        if !editedFiles.isEmpty {
+            NotificationService.shared.showLocalNotification(
+                title: "Your app is ready!",
+                body: "Open Vibetree to view your app."
+            )
+            if Self.isUntitledName(initialProjectName) {
+                let rawContent = doneContent ?? ""
+                let autoTitle = Self.deriveTitleFromPrompt(prompt) ?? Self.deriveTitleFromSummary(rawContent)
+                if let autoTitle, !Self.isUntitledName(autoTitle) {
+                    suggestedProjectName = autoTitle
+                    Task {
+                        try? await APIService.shared.updateProject(id: projectId, name: autoTitle, bundleId: nil)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Background task helpers
 
     private func beginBackgroundTask() async -> UIBackgroundTaskIdentifier {
         await MainActor.run {
             UIApplication.shared.beginBackgroundTask {
-                // Expiration handler — iOS is about to kill us; nothing to do.
+                // Expiration handler — iOS is about to kill us.
             }
         }
     }
@@ -230,51 +356,13 @@ final class ChatService: ObservableObject {
         }
     }
 
-    // MARK: - Fallback recovery
-
-    /// If the stream was interrupted, ask the server if it finished and has files.
-    /// Uses GET /api/projects/:id which now returns fileCount and filePaths.
-    private func recoverFromServer(
-        prompt: String,
-        editedFiles: inout [String],
-        doneContent: inout String?,
-        assistantMessageId: String
-    ) async -> Bool {
-        // Wait briefly — server may still be finishing up.
-        try? await Task.sleep(nanoseconds: 3_000_000_000)
-
-        do {
-            let project = try await APIService.shared.fetchProject(id: projectId)
-            // fetchProject now returns fileCount / filePaths from the server.
-            // We decode those from the raw JSON since the Project model may not have them.
-            let data = try await APIService.shared.fetchProjectRaw(id: projectId)
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let fileCount = json["fileCount"] as? Int,
-                  fileCount > 0,
-                  let filePaths = json["filePaths"] as? [String] else {
-                return false
-            }
-
-            editedFiles = filePaths
-            if doneContent == nil {
-                doneContent = "App built. \(fileCount) files generated."
-            }
-
-            // Also update the project name if still untitled
-            if Self.isUntitledName(project.name) {
-                if let autoTitle = Self.deriveTitleFromPrompt(prompt) {
-                    suggestedProjectName = autoTitle
-                    try? await APIService.shared.updateProject(id: projectId, name: autoTitle, bundleId: nil)
-                }
-            } else if Self.isUntitledName(initialProjectName) && !Self.isUntitledName(project.name) {
-                suggestedProjectName = project.name
-            }
-
-            return true
-        } catch {
-            logger.error("Recovery check failed: \(error.localizedDescription)")
-            return false
-        }
+    /// Returns true for errors caused by network/backgrounding (not server-side logic errors).
+    private static func isNetworkOrBackgroundError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain { return true }
+        let desc = error.localizedDescription.lowercased()
+        return desc.contains("connection") || desc.contains("network")
+            || desc.contains("timed out") || desc.contains("cancelled")
     }
 
     private static func isUntitledName(_ name: String?) -> Bool {
