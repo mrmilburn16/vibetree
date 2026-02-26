@@ -277,7 +277,9 @@ struct ProjectListView: View {
 
                 LazyVStack(spacing: 0) {
                     ForEach(Array(service.projects.enumerated()), id: \.element.id) { index, project in
-                        NavigationLink(destination: EditorView(project: project)) {
+                        Button {
+                            navigateToProject = project
+                        } label: {
                             projectRow(project)
                                 .opacity(heroAppeared ? 1 : 0)
                                 .offset(y: heroAppeared ? 0 : 10)
@@ -287,6 +289,7 @@ struct ProjectListView: View {
                                 )
                         }
                         .buttonStyle(.plain)
+                        .contentShape(Rectangle())
                         .contextMenu {
                             Button(role: .destructive) {
                                 Task { await service.deleteProject(id: project.id) }

@@ -786,10 +786,10 @@ export function useChat(
           if (autoTitle && !isUntitledName(autoTitle)) {
             updateProjectNameInLocalStorage(projectId, autoTitle);
             onProjectRenamed?.(autoTitle);
-            fetch("/api/projects", {
-              method: "POST",
+            fetch(`/api/projects/${projectId}`, {
+              method: "PATCH",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: projectId, name: autoTitle }),
+              body: JSON.stringify({ name: autoTitle }),
             }).catch(() => {});
           }
           const projectNameForLogs = autoTitle ?? projectName ?? "Unknown";

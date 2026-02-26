@@ -88,6 +88,11 @@ actor APIService {
         return try decoder.decode(Project.self, from: data)
     }
 
+    /// Returns raw JSON data from the project endpoint (includes fileCount/filePaths not in Project model).
+    func fetchProjectRaw(id: String) async throws -> Data {
+        return try await request("/api/projects/\(id)")
+    }
+
     func updateProject(id: String, name: String?, bundleId: String?) async throws -> Project {
         var body: [String: Any] = [:]
         if let name { body["name"] = name }
@@ -110,7 +115,7 @@ actor APIService {
         if !token.isEmpty {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        req.timeoutInterval = 300
+        req.timeoutInterval = 600
         let payload: [String: Any] = [
             "message": message,
             "model": model,

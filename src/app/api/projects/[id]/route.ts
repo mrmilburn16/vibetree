@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getProject, updateProject } from "@/lib/projectStore";
+import { getProjectFilePaths } from "@/lib/projectFileStore";
 
 export async function GET(
   _request: Request,
@@ -10,7 +11,8 @@ export async function GET(
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
-  return NextResponse.json(project);
+  const filePaths = getProjectFilePaths(id);
+  return NextResponse.json({ ...project, fileCount: filePaths.length, filePaths });
 }
 
 export async function PATCH(

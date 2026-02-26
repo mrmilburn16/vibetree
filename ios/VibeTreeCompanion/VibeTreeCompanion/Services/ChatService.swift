@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import os.log
 
 private let logger = Logger(subsystem: "com.vibetree.companion", category: "ChatService")
@@ -30,9 +31,13 @@ final class ChatService: ObservableObject {
 
     private var streamTask: Task<Void, Never>?
     private let projectId: String
+    private let initialProjectName: String
+    /// When we auto-derive a title and PATCH the server, set this so the UI can show the new name.
+    @Published var suggestedProjectName: String?
 
-    init(projectId: String) {
+    init(projectId: String, projectName: String = "Untitled app") {
         self.projectId = projectId
+        self.initialProjectName = projectName
     }
 
     func sendMessage(_ text: String, model: String, projectType: ProjectType) {
@@ -92,6 +97,9 @@ final class ChatService: ObservableObject {
     ) async {
         let streamStart = Date()
 
+        // Keep the app alive in background so long generations aren't killed by iOS.
+        let bgTaskId = await beginBackgroundTask()
+
         do {
             let request = try await APIService.shared.streamMessageRequest(
                 projectId: projectId,
@@ -101,7 +109,14 @@ final class ChatService: ObservableObject {
             )
 
             logger.info("performStream: sending to \(request.url?.absoluteString ?? "nil")")
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = 600
+            config.timeoutIntervalForResource = 600
+            config.shouldUseExtendedBackgroundIdleMode = true
+            let session = URLSession(configuration: config)
+
+            let (bytes, response) = try await session.bytes(for: request)
 
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -115,6 +130,7 @@ final class ChatService: ObservableObject {
             var buildLog: [String] = []
             var doneContent: String?
             var doneEditedFiles: [String]?
+            var receivedDoneEvent = false
 
             for try await line in bytes.lines {
                 if Task.isCancelled { break }
@@ -123,6 +139,7 @@ final class ChatService: ObservableObject {
 
                 if let data = line.data(using: .utf8),
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    if (json["type"] as? String) == "done" { receivedDoneEvent = true }
                     await processStreamChunk(
                         json,
                         buildLog: &buildLog,
@@ -132,6 +149,22 @@ final class ChatService: ObservableObject {
                         doneEditedFiles: &doneEditedFiles,
                         assistantMessageId: assistantMessageId
                     )
+                }
+            }
+
+            // Fallback: stream ended without done event (iOS killed the connection).
+            // Check if the server actually finished and has files.
+            if !receivedDoneEvent && !discoveredFiles.isEmpty {
+                logger.warning("Stream ended without done event after \(discoveredFiles.count) files — checking server for recovery")
+                let recovered = await recoverFromServer(
+                    prompt: text,
+                    editedFiles: &editedFiles,
+                    doneContent: &doneContent,
+                    assistantMessageId: assistantMessageId
+                )
+                if recovered {
+                    receivedDoneEvent = true
+                    logger.info("Recovery succeeded — server has files")
                 }
             }
 
@@ -154,6 +187,14 @@ final class ChatService: ObservableObject {
                     title: "Your app is ready!",
                     body: "Open Vibetree to view your app."
                 )
+                if Self.isUntitledName(initialProjectName) {
+                    let rawContent = doneContent ?? ""
+                    let autoTitle = Self.deriveTitleFromPrompt(text) ?? Self.deriveTitleFromSummary(rawContent)
+                    if let autoTitle, !Self.isUntitledName(autoTitle) {
+                        suggestedProjectName = autoTitle
+                        try? await APIService.shared.updateProject(id: projectId, name: autoTitle, bundleId: nil)
+                    }
+                }
             }
         } catch {
             if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
@@ -169,6 +210,106 @@ final class ChatService: ObservableObject {
         isStreaming = false
         streamingFileCount = 0
         recentFiles = []
+        await endBackgroundTask(bgTaskId)
+    }
+
+    // MARK: - Background task helpers
+
+    private func beginBackgroundTask() async -> UIBackgroundTaskIdentifier {
+        await MainActor.run {
+            UIApplication.shared.beginBackgroundTask {
+                // Expiration handler — iOS is about to kill us; nothing to do.
+            }
+        }
+    }
+
+    private func endBackgroundTask(_ id: UIBackgroundTaskIdentifier) async {
+        guard id != .invalid else { return }
+        await MainActor.run {
+            UIApplication.shared.endBackgroundTask(id)
+        }
+    }
+
+    // MARK: - Fallback recovery
+
+    /// If the stream was interrupted, ask the server if it finished and has files.
+    /// Uses GET /api/projects/:id which now returns fileCount and filePaths.
+    private func recoverFromServer(
+        prompt: String,
+        editedFiles: inout [String],
+        doneContent: inout String?,
+        assistantMessageId: String
+    ) async -> Bool {
+        // Wait briefly — server may still be finishing up.
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+
+        do {
+            let project = try await APIService.shared.fetchProject(id: projectId)
+            // fetchProject now returns fileCount / filePaths from the server.
+            // We decode those from the raw JSON since the Project model may not have them.
+            let data = try await APIService.shared.fetchProjectRaw(id: projectId)
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let fileCount = json["fileCount"] as? Int,
+                  fileCount > 0,
+                  let filePaths = json["filePaths"] as? [String] else {
+                return false
+            }
+
+            editedFiles = filePaths
+            if doneContent == nil {
+                doneContent = "App built. \(fileCount) files generated."
+            }
+
+            // Also update the project name if still untitled
+            if Self.isUntitledName(project.name) {
+                if let autoTitle = Self.deriveTitleFromPrompt(prompt) {
+                    suggestedProjectName = autoTitle
+                    try? await APIService.shared.updateProject(id: projectId, name: autoTitle, bundleId: nil)
+                }
+            } else if Self.isUntitledName(initialProjectName) && !Self.isUntitledName(project.name) {
+                suggestedProjectName = project.name
+            }
+
+            return true
+        } catch {
+            logger.error("Recovery check failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private static func isUntitledName(_ name: String?) -> Bool {
+        let n = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return n.isEmpty || n == "untitled app" || n == "untitled"
+    }
+
+    /// e.g. "Build an Airbnb clone" -> "Airbnb Clone"
+    private static func deriveTitleFromPrompt(_ prompt: String) -> String? {
+        let p = prompt.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "  ", with: " ")
+        guard !p.isEmpty else { return nil }
+        let pattern = #"(?i)^(?:build|create|make|design)\s+(?:an?|the)\s+(.+?)(?:[.\n,]|\s+with\s+|\s+that\s+|\s+which\s+|\s+where\s+|$)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: p, range: NSRange(p.startIndex..., in: p)),
+              let range = Range(match.range(at: 1), in: p) else { return nil }
+        var raw = String(p[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        raw = raw.replacingOccurrences(of: #"\b(app|application)\b"#, with: "", options: .regularExpression)
+        raw = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard raw.count >= 3 else { return nil }
+        return String(raw.prefix(42)).capitalized
+    }
+
+    /// e.g. "Built a fitness tracker" -> "Fitness Tracker"
+    private static func deriveTitleFromSummary(_ summary: String) -> String? {
+        let s = summary.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "  ", with: " ")
+        guard !s.isEmpty else { return nil }
+        let pattern = #"(?i)^(?:built|created|made)\s+(?:an?|the)\s+(.+?)(?:[.\n,]|\s+with\s+|\s+that\s+|\s+which\s+|\s+where\s+|$)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)),
+              let range = Range(match.range(at: 1), in: s) else { return nil }
+        var raw = String(s[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        raw = raw.replacingOccurrences(of: #"\b(app|application)\b"#, with: "", options: .regularExpression)
+        raw = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard raw.count >= 3 else { return nil }
+        return String(raw.prefix(42)).capitalized
     }
 
     private static func phaseLabel(_ phase: String) -> String {

@@ -15,7 +15,7 @@ struct EditorView: View {
     init(project: Project, pendingPrompt: String? = nil) {
         self.project = project
         self.pendingPrompt = pendingPrompt
-        _chatService = StateObject(wrappedValue: ChatService(projectId: project.id))
+        _chatService = StateObject(wrappedValue: ChatService(projectId: project.id, projectName: project.name))
     }
 
     private var canInstall: Bool {
@@ -45,6 +45,9 @@ struct EditorView: View {
         )
         .navigationTitle(projectDisplayName.isEmpty ? project.name : projectDisplayName)
         .onAppear { projectDisplayName = project.name }
+        .onChange(of: chatService.suggestedProjectName) { _, new in
+            if let n = new { projectDisplayName = n }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
