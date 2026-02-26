@@ -594,6 +594,18 @@ export function RunOnDeviceModal({
                 ) : undefined
               }
             />
+            <CheckRow
+              ok={checks?.files?.ok ?? null}
+              loading={preflightLoading && !checks}
+              label="Project files"
+              detail={
+                checks?.files?.ok
+                  ? `${checks.files.count ?? 0} Swift file(s) ready`
+                  : checks && checks.files && !checks.files.ok
+                    ? "No app files — build the app in chat first"
+                    : undefined
+              }
+            />
           </div>
 
           {/* ── Install button ── */}

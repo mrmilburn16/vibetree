@@ -91,8 +91,20 @@ export function ChatPanel({
   onProjectRenamed?: (name: string) => void;
 }) {
   const [llm, setLlm] = useState(DEFAULT_LLM);
-  const [projectType, setProjectType] = useState<"standard" | "pro">("standard");
-  const [guidedMode, setGuidedMode] = useState(true);
+  const [projectType, setProjectType] = useState<"standard" | "pro">(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(PROJECT_TYPE_STORAGE_KEY);
+      if (stored === "pro" || stored === "standard") return stored;
+    }
+    return "standard";
+  });
+  const [guidedMode, setGuidedMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(GUIDED_MODE_STORAGE_KEY);
+      if (stored === "false") return false;
+    }
+    return true;
+  });
   const { hasCreditsForMessage, deduct } = useCredits();
 
   useEffect(() => {
@@ -100,21 +112,6 @@ export function ChatPanel({
       const stored = localStorage.getItem(LLM_STORAGE_KEY);
       const option = LLM_OPTIONS.find((o) => o.value === stored);
       if (option && !option.disabled && stored != null) setLlm(stored);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(PROJECT_TYPE_STORAGE_KEY);
-      if (stored === "pro" || stored === "standard") setProjectType(stored);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(GUIDED_MODE_STORAGE_KEY);
-      if (stored === "false") setGuidedMode(false);
-      else if (stored === "true") setGuidedMode(true);
     }
   }, []);
 

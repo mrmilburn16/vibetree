@@ -51,8 +51,13 @@ export function parseStructuredResponse(raw: string): StructuredResponse {
   let data: unknown;
   try {
     data = JSON.parse(trimmed);
-  } catch {
-    throw new Error("Invalid structured response");
+  } catch (parseErr) {
+    // Claude may have hit max_tokens and truncated the JSON mid-string.
+    // Try to salvage completed files from the partial output.
+    const salvaged = salvageTruncatedJSON(trimmed);
+    if (salvaged) return salvaged;
+    const detail = parseErr instanceof Error ? parseErr.message : String(parseErr);
+    throw new Error(`Failed to parse structured output: ${detail}`);
   }
 
   if (data === null || typeof data !== "object" || Array.isArray(data)) {
@@ -94,4 +99,43 @@ export function parseStructuredResponse(raw: string): StructuredResponse {
   }
 
   return { summary: obj.summary, files };
+}
+
+/**
+ * When Claude hits max_tokens the JSON is truncated mid-string.
+ * Extract every fully-formed { "path": "…", "content": "…" } object
+ * that appears before the cutoff so the build can still succeed with
+ * whatever files were completed.
+ */
+function salvageTruncatedJSON(raw: string): StructuredResponse | null {
+  // Try to extract the summary
+  let summary = "App built (output was truncated).";
+  const summaryMatch = raw.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (summaryMatch?.[1]) {
+    try {
+      summary = JSON.parse(`"${summaryMatch[1]}"`);
+    } catch { /* keep default */ }
+  }
+
+  // Match complete file objects: {"path":"…","content":"…"}
+  // Content can contain escaped characters, so we match conservatively.
+  const files: ParsedFile[] = [];
+  const filePattern = /\{\s*"path"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"content"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = filePattern.exec(raw)) !== null) {
+    try {
+      const path = JSON.parse(`"${match[1]}"`);
+      const content = JSON.parse(`"${match[2]}"`);
+      if (path && typeof content === "string") {
+        files.push({ path, content });
+      }
+    } catch {
+      // Skip malformed entries
+    }
+  }
+
+  if (files.length === 0) return null;
+
+  console.log(`[parseStructuredResponse] Salvaged ${files.length} files from truncated output (${raw.length} chars)`);
+  return { summary, files };
 }

@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "dev:full": "node scripts/run-dev-with-runner.mjs",
     "mac-runner": "node scripts/mac-runner.mjs",
     "test:build-results": "node scripts/test-build-results-log.mjs",
     "ios:install": "bash scripts/ios-companion-install.sh"

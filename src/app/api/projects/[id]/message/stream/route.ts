@@ -48,6 +48,7 @@ export async function POST(
   const model = typeof body.model === "string" ? body.model : undefined;
   const projectType =
     body.projectType === "pro" ? "pro" : ("standard" as const);
+  console.log("[message/stream] start", { projectId, projectType, model: body.model, msgLen: message.length });
   const { message: enrichedMessage, skillIds } = enrichWithSkills(projectType, message);
   const skillMatches = projectType === "pro" ? detectSkills(message) : [];
   const skillPromptBlock = buildSkillPromptBlock(skillMatches);
@@ -181,7 +182,6 @@ export async function POST(
         let editedFiles: string[];
         enqueuePhase("saving_files");
         updateGenerationPhase(generation.id, "saving");
-        let projectFilesForClient: Array<{ path: string; content: string }> | undefined;
         if (result.parsedFiles?.length) {
           let filesToStore = result.parsedFiles;
           if (projectType === "pro") {
@@ -194,7 +194,6 @@ export async function POST(
           if (filesToStore.length > 0) {
             setProjectFiles(projectId, filesToStore);
             editedFiles = filesToStore.map((f) => f.path);
-            projectFilesForClient = filesToStore;
           } else {
             editedFiles = result.editedFiles;
           }
@@ -202,11 +201,8 @@ export async function POST(
           editedFiles = result.editedFiles;
         }
 
-        // For Pro: always send project files so the client can verify the build before showing "done".
-        if (!projectFilesForClient && projectType === "pro" && currentFiles?.length) {
-          projectFilesForClient = currentFiles;
-        }
-
+        // Send a small "done" payload (no projectFiles) so iOS and slow clients don't
+        // fail to parse a multi‑MB line. Web/iOS can fetch GET /api/projects/:id/files if needed.
         enqueuePhase("done_preview_updating");
         safeEnqueue({
           type: "done",
@@ -218,11 +214,11 @@ export async function POST(
             ...(usage && { usage }),
             ...(estimatedCostUsd !== undefined && { estimatedCostUsd }),
           },
-          ...(projectFilesForClient && { projectFiles: projectFilesForClient }),
           buildStatus: "live",
           generationId: generation.id,
           ...(skillIds.length > 0 && { skillIds }),
         });
+        console.log("[message/stream] done sent", { projectId, editedFilesCount: editedFiles.length });
 
         try {
           logLLMAnalytics({
@@ -240,7 +236,7 @@ export async function POST(
       } catch (err) {
         const errorMessage =
           err instanceof Error ? err.message : "AI request failed";
-        console.error("[message/stream] error", errorMessage);
+        console.error("[message/stream] error", errorMessage, err);
         safeEnqueue({ type: "error", error: errorMessage });
       } finally {
         clearInterval(heartbeat);

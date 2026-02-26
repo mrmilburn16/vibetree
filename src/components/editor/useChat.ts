@@ -749,8 +749,20 @@ export function useChat(
           onMessageSuccess?.();
           // Stop status updates immediately so the final assistant message can stream/render without being interrupted.
           clearInterval(localTick);
-          if (Array.isArray(doneEvent.projectFiles) && doneEvent.projectFiles.length > 0) {
-            saveProjectFilesToLocalStorage(projectId, doneEvent.projectFiles);
+          let projectFiles = Array.isArray(doneEvent.projectFiles) ? doneEvent.projectFiles : [];
+          if (projectFiles.length === 0) {
+            try {
+              const filesRes = await fetch(`/api/projects/${projectId}/files`);
+              if (filesRes.ok) {
+                const data = (await filesRes.json()) as { files?: Array<{ path: string; content: string }> };
+                projectFiles = data.files ?? [];
+              }
+            } catch {
+              // non-fatal
+            }
+          }
+          if (projectFiles.length > 0) {
+            saveProjectFilesToLocalStorage(projectId, projectFiles);
           }
           const am = doneEvent.assistantMessage as {
             id?: string;
@@ -794,8 +806,8 @@ export function useChat(
           }
           const projectNameForLogs = autoTitle ?? projectName ?? "Unknown";
           const isProBuild =
-            Array.isArray(doneEvent.projectFiles) &&
-            doneEvent.projectFiles.some((f: { path: string }) => f.path.endsWith(".swift"));
+            projectFiles.length > 0 &&
+            projectFiles.some((f: { path: string }) => f.path.endsWith(".swift"));
           const validateMessageId = `validate-${Date.now()}`;
           const generationElapsedMs = Date.now() - localStartedAt;
           const realMessage: ChatMessage = {
@@ -812,14 +824,18 @@ export function useChat(
           if (isProBuild && onProBuildComplete) {
             deferLive = true;
             setIsValidating(true);
-            // Don't show "App built" yet; show one message after validation with app description + result.
-            // Placeholder has no editedFiles/usage so it renders as progress (muted, same as "Generating..." / "Validating structured output").
+            // Remove progress + stream-file messages, show validation with file list.
             setMessages((prev) => [
-              ...prev.filter((m) => m.id !== progressMessageId),
+              ...prev.filter((m) => m.id !== progressMessageId && !m.id.startsWith("stream-file-")),
               {
                 id: validateMessageId,
                 role: "assistant",
                 content: `Validating build on Mac… Waiting for runner… (${formatDurationShort(0)})`,
+                editedFiles,
+                ...(usage && { usage }),
+                ...(estimatedCostUsd !== undefined && { estimatedCostUsd }),
+                elapsedMs: generationElapsedMs,
+                createdAt: Date.now(),
               },
             ]);
             const progressBase = "Validating build on Mac… Waiting for runner…";
@@ -953,7 +969,7 @@ export function useChat(
               });
           } else {
             setMessages((prev) => [
-              ...prev.filter((m) => m.id !== progressMessageId),
+              ...prev.filter((m) => m.id !== progressMessageId && !m.id.startsWith("stream-file-")),
               realMessage,
             ]);
             if (editedFiles.length > 0) onAppBuilt?.();

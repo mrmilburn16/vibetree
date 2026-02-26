@@ -23,7 +23,7 @@ const MODEL_MAP: Record<string, string> = {
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 // Sonnet 4.6 max output is 64K tokens; Opus 4.6 max output is 128K tokens.
 // 32K handles complex multi-file apps (13+ files) without truncation.
-const MAX_TOKENS = 32000;
+const MAX_TOKENS = 64000;
 
 const CACHE_CONTROL: { type: "ephemeral"; ttl?: "1h" } | undefined =
   process.env.CACHE_TTL === "off"
@@ -236,6 +236,11 @@ export async function getClaudeResponse(
     messages: [{ role: "user", content: userContent }],
   });
 
+  const stopReason = (response as any)?.stop_reason ?? null;
+  if (stopReason === "max_tokens") {
+    console.warn(`[claudeAdapter] Claude hit max_tokens (${MAX_TOKENS}). Output was truncated.`);
+  }
+
   try {
     const parsedOutput = (response as unknown as { parsed_output?: unknown }).parsed_output;
     const parsed: StructuredResponse = isStructuredResponse(parsedOutput)
@@ -263,9 +268,8 @@ export async function getClaudeResponse(
     };
   } catch (err) {
     const raw = previewText(extractTextFromContent((response as any).content ?? []));
-    const reason = (response as any)?.stop_reason ?? null;
     const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`Invalid structured response (stop_reason=${String(reason)}): ${detail}. raw="${raw}"`);
+    throw new Error(`Failed to parse structured output: ${detail}`);
   }
 }
 
@@ -357,6 +361,10 @@ async function getClaudeResponseStream(
     });
 
   const finalMessage = await stream.finalMessage();
+  const stopReason = (finalMessage as any)?.stop_reason ?? null;
+  if (stopReason === "max_tokens") {
+    console.warn(`[claudeAdapter] Claude hit max_tokens (${MAX_TOKENS}). Output was truncated.`);
+  }
 
   try {
     const parsedOutput = (finalMessage as unknown as { parsed_output?: unknown }).parsed_output;
@@ -391,9 +399,8 @@ async function getClaudeResponseStream(
         Array.isArray((finalMessage as any).content) ? (finalMessage as any).content : []
       )
     );
-    const reason = (finalMessage as any)?.stop_reason ?? null;
     const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`Invalid structured response (stop_reason=${String(reason)}): ${detail}. raw="${raw}"`);
+    throw new Error(`Failed to parse structured output: ${detail}`);
   }
 }
 

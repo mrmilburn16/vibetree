@@ -144,18 +144,24 @@ final class ChatService: ObservableObject {
 
                 guard !line.isEmpty else { continue }
 
-                if let data = line.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    if (json["type"] as? String) == "done" { receivedDoneEvent = true }
-                    await processStreamChunk(
-                        json,
-                        buildLog: &buildLog,
-                        editedFiles: &editedFiles,
-                        discoveredFiles: &discoveredFiles,
-                        doneContent: &doneContent,
-                        doneEditedFiles: &doneEditedFiles,
-                        assistantMessageId: assistantMessageId
-                    )
+                if let data = line.data(using: .utf8) {
+                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                    if let json {
+                        if (json["type"] as? String) == "done" { receivedDoneEvent = true }
+                        await processStreamChunk(
+                            json,
+                            buildLog: &buildLog,
+                            editedFiles: &editedFiles,
+                            discoveredFiles: &discoveredFiles,
+                            doneContent: &doneContent,
+                            doneEditedFiles: &doneEditedFiles,
+                            assistantMessageId: assistantMessageId
+                        )
+                    } else if line.hasPrefix("{\"type\":\"done\"") {
+                        // Payload was too large or malformed; still treat as done so we don't enter recovery.
+                        receivedDoneEvent = true
+                        logger.info("Stream: treated line as done (parse skipped)")
+                    }
                 }
             }
 
@@ -438,7 +444,6 @@ final class ChatService: ObservableObject {
         if eventType == "file", let path = json["path"] as? String {
             let count = (json["count"] as? NSNumber)?.intValue ?? (discoveredFiles.count + 1)
             let fileName = (path as NSString).lastPathComponent
-            let line = "Generating \(fileName) (file \(count))"
             if !discoveredFiles.contains(path) {
                 discoveredFiles.append(path)
                 streamingFileCount = discoveredFiles.count
@@ -447,9 +452,15 @@ final class ChatService: ObservableObject {
             if !editedFiles.contains(path) {
                 editedFiles.append(path)
             }
-            buildLog.append(line)
+            let fileMsg = ChatMessage(
+                id: "stream-file-\(count)-\(Int(Date().timeIntervalSince1970 * 1000))",
+                role: .assistant,
+                text: "Creating \(fileName) · \(path)"
+            )
             if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
-                messages[idx].text = buildLog.joined(separator: "\n")
+                messages.insert(fileMsg, at: idx)
+            } else {
+                messages.append(fileMsg)
             }
         }
 

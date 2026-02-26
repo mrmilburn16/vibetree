@@ -207,6 +207,9 @@ async function runSimulatorStream(projectId, appPath, bundleId) {
     await run("xcrun", ["simctl", "boot", deviceName], { onLine: () => {} }).catch(() => {});
   } catch (_) {}
   try {
+    await run("xcrun", ["simctl", "ui", "booted", "appearance", "dark"], { onLine: () => {} });
+  } catch (_) {}
+  try {
     const installRes = await run("xcrun", ["simctl", "install", "booted", appPath], { onLine: () => {} });
     if (installRes.code !== 0) {
       console.warn("[simulator-stream] install failed:", installRes.err?.slice(0, 200));

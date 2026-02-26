@@ -15,7 +15,11 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Sign up or sign in (mock session), create a project, and use the editor: send a message to see mock assistant replies and build status.
+Open [http://localhost:3001](http://localhost:3001).
+
+**Run on iPhone (Companion app):** To get "Mac runner" and "iPhone" green in the iOS Companion app, run `npm run dev:full` on your Mac instead of `npm run dev`. That starts both the Next.js server and the Mac runner; add `MAC_RUNNER_TOKEN` to `.env.local` (same value as the API Token in the app’s Settings). See `ios/VibeTreeCompanion/SETUP.md` for full setup.
+
+Sign up or sign in (mock session), create a project, and use the editor: send a message to see mock assistant replies and build status.
 
 ## Project layout
 

@@ -320,49 +320,17 @@ struct ChatPanelView: View {
         let fileCount = chatService.streamingFileCount
         return Group {
             if fileCount > 0 {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: Forest.space2) {
-                        Text("Building app…")
-                            .font(Forest.font(size: Forest.textXs))
-                            .foregroundColor(Forest.textTertiary)
-                        Spacer()
-                        Text("\(fileCount) \(fileCount == 1 ? "file" : "files")")
-                            .font(Forest.fontMono(size: Forest.textXs))
-                            .foregroundColor(Forest.textTertiary)
-                    }
-
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Forest.border.opacity(0.4))
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Forest.accent)
-                                .frame(width: geo.size.width)
-                        }
-                    }
-                    .frame(height: 4)
-
-                    if !chatService.recentFiles.isEmpty {
-                        HStack(spacing: Forest.space2) {
-                            ForEach(chatService.recentFiles.suffix(3), id: \.self) { file in
-                                Text(file.components(separatedBy: "/").last ?? file)
-                                    .font(Forest.fontMono(size: 10))
-                                    .foregroundColor(Forest.textTertiary.opacity(0.7))
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
+                HStack(spacing: Forest.space2) {
+                    ProgressView()
+                        .tint(Forest.accent)
+                        .scaleEffect(0.6)
+                    Text("Building app… \(fileCount) \(fileCount == 1 ? "file" : "files")")
+                        .font(Forest.font(size: Forest.textXs, weight: .medium))
+                        .foregroundColor(Forest.textTertiary)
+                    Spacer()
                 }
-                .padding(.horizontal, Forest.space3)
-                .padding(.vertical, Forest.space2)
-                .background(Forest.backgroundSecondary.opacity(0.5))
-                .cornerRadius(Forest.radiusSm)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Forest.radiusSm)
-                        .stroke(Forest.border.opacity(0.5), lineWidth: 1)
-                )
                 .padding(.horizontal, Forest.space5)
-                .padding(.top, Forest.space2)
+                .padding(.vertical, Forest.space2)
             }
         }
     }
@@ -497,6 +465,11 @@ struct ChatPanelView: View {
                 Text("Complete the checks above to send and run on your iPhone.")
                     .font(Forest.font(size: Forest.textXs))
                     .foregroundColor(Forest.warning)
+                if checks?.runner.ok == false {
+                    Text("On your Mac: run `npm run mac-runner` in the project folder so this phone can build and install.")
+                        .font(Forest.font(size: Forest.textXs - 1))
+                        .foregroundColor(Forest.textTertiary)
+                }
             }
         }
         .padding(.horizontal, Forest.space3)
