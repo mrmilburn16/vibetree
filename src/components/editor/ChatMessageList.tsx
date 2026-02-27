@@ -263,6 +263,13 @@ export function ChatMessageList({
     if (streamedContent === full) return;
     if (streamStartedKeyRef.current === streamKey) return;
 
+    // Validation status updates every second — show immediately so it doesn't retype on each tick
+    if (last.content.startsWith("Validating build on Mac…")) {
+      setStreamedContent(full);
+      streamStartedKeyRef.current = streamKey;
+      return;
+    }
+
     // Don't stream or show cursor for short reasoning steps — show them immediately
     if (isReasoningMessage(last)) {
       setStreamedContent(full);

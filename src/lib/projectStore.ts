@@ -2,6 +2,7 @@ export interface ProjectRecord {
   id: string;
   name: string;
   bundleId: string;
+  projectType?: "standard" | "pro";
   createdAt: number;
   updatedAt: number;
 }
@@ -20,12 +21,16 @@ export function getProject(id: string): ProjectRecord | undefined {
 }
 
 /** Ensure a project exists in the store (e.g. client created it in localStorage only). Returns the project. */
-export function ensureProject(id: string, name = "Untitled app"): ProjectRecord {
+export function ensureProject(
+  id: string,
+  name = "Untitled app",
+  projectType: "standard" | "pro" = "pro"
+): ProjectRecord {
   const existing = store.get(id);
   if (existing) return existing;
   const bundleId = makeDefaultBundleId(id);
   const now = Date.now();
-  const project: ProjectRecord = { id, name, bundleId, createdAt: now, updatedAt: now };
+  const project: ProjectRecord = { id, name, bundleId, projectType, createdAt: now, updatedAt: now };
   store.set(id, project);
   return project;
 }
@@ -34,22 +39,36 @@ export function listProjects(): ProjectRecord[] {
   return Array.from(store.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function createProject(name: string): ProjectRecord {
+export function createProject(name: string, projectType: "standard" | "pro" = "pro"): ProjectRecord {
   const id = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const bundleId = makeDefaultBundleId(id);
   const now = Date.now();
-  const project: ProjectRecord = { id, name, bundleId, createdAt: now, updatedAt: now };
+  const project: ProjectRecord = { id, name, bundleId, projectType, createdAt: now, updatedAt: now };
   store.set(id, project);
   return project;
 }
 
 export function updateProject(
   id: string,
-  updates: Partial<Pick<ProjectRecord, "name" | "bundleId">>
+  updates: Partial<Pick<ProjectRecord, "name" | "bundleId" | "projectType">>
 ): ProjectRecord | undefined {
   const project = store.get(id);
   if (!project) return undefined;
   Object.assign(project, updates, { updatedAt: Date.now() });
   store.set(id, project);
   return project;
+}
+
+export function deleteProject(id: string): boolean {
+  if (!store.has(id)) return false;
+  store.delete(id);
+  return true;
+}
+
+/** Replace in-memory store with these records (e.g. after loading from Firestore). */
+export function setProjects(records: ProjectRecord[]): void {
+  store.clear();
+  for (const r of records) {
+    store.set(r.id, { ...r });
+  }
 }

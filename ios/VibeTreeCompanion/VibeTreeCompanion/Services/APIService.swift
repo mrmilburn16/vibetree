@@ -104,6 +104,43 @@ actor APIService {
 
     // MARK: - Chat / Messaging
 
+    /// Load conversation history from server so iOS and web stay in sync.
+    func fetchChat(projectId: String) async throws -> [ChatMessage] {
+        let data = try await request("/api/projects/\(projectId)/chat")
+        let response = try decoder.decode(ChatHistoryResponse.self, from: data)
+        return response.messages.compactMap { api -> ChatMessage? in
+            let role: ChatMessage.Role
+            switch api.role.lowercased() {
+            case "user": role = .user
+            case "assistant": role = .assistant
+            case "system": role = .system
+            default: return nil
+            }
+            return ChatMessage(
+                id: api.id,
+                role: role,
+                text: api.content,
+                editedFiles: api.editedFiles,
+                isStreaming: false,
+                createdAt: Date()
+            )
+        }
+    }
+
+    /// Persist conversation to server so web and other devices see the same history.
+    func saveChat(projectId: String, messages: [ChatMessage]) async throws {
+        let payloads = messages.map { msg in
+            APIChatMessagePayload(
+                id: msg.id,
+                role: msg.role.rawValue,
+                content: msg.text,
+                editedFiles: msg.editedFiles
+            )
+        }
+        let body = try JSONEncoder().encode(SaveChatRequest(messages: payloads))
+        _ = try await request("/api/projects/\(projectId)/chat", method: "POST", body: body)
+    }
+
     func streamMessageRequest(projectId: String, message: String, model: String, projectType: String) async throws -> URLRequest {
         guard let url = URL(string: "\(baseURL)/api/projects/\(projectId)/message/stream") else {
             throw APIError.invalidURL

@@ -8,11 +8,12 @@ import { Button, BetaBadge, Textarea, DropdownSelect } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
-import { getProjects, createProject, deleteProject, duplicateProject, type Project } from "@/lib/projects";
+import { getProjects, saveProjects, deleteProject, type Project } from "@/lib/projects";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
 import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
 import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
 import { LLM_OPTIONS, DEFAULT_LLM } from "@/lib/llm-options";
+import { useRefetchOnVisible } from "@/hooks/useRefetchOnVisible";
 
 const PENDING_PROMPT_KEY = "vibetree-pending-prompt";
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
@@ -83,6 +84,7 @@ export default function DashboardPage() {
   const [preflightLoading, setPreflightLoading] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [projectsLoading, setProjectsLoading] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -95,6 +97,38 @@ export default function DashboardPage() {
     setProjects(getProjects());
     setMounted(true);
   }, [router]);
+
+  const fetchProjectsFromApi = useCallback(() => {
+    if (typeof window === "undefined") return;
+    setProjectsLoading(true);
+    fetch("/api/projects")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to fetch"))))
+      .then((data: { projects?: Array<Project & { projectType?: string }> }) => {
+        const list = Array.isArray(data.projects) ? data.projects : [];
+        const normalized: Project[] = list.map((p) => ({
+          id: p.id,
+          name: p.name,
+          bundleId: p.bundleId ?? "",
+          createdAt: typeof p.createdAt === "number" ? p.createdAt : Date.now(),
+          updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : Date.now(),
+        }));
+        setProjects(normalized);
+        saveProjects(normalized);
+      })
+      .catch(() => {
+        setProjects(getProjects());
+      })
+      .finally(() => {
+        setProjectsLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    fetchProjectsFromApi();
+  }, [mounted, fetchProjectsFromApi]);
+
+  useRefetchOnVisible(fetchProjectsFromApi, mounted);
 
   useEffect(() => {
     if (!mounted || typeof window === "undefined") return;
@@ -155,13 +189,39 @@ export default function DashboardPage() {
   }, [prompt]);
 
   const doSubmitPrompt = useCallback(
-    (trimmed: string) => {
+    async (trimmed: string) => {
       localStorage.setItem(PENDING_PROMPT_KEY, trimmed);
-      const project = createProject();
-      setProjects(getProjects());
-      router.push(`/editor/${project.id}`);
+      try {
+        const res = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Untitled app", projectType }),
+        });
+        if (!res.ok) throw new Error("Create failed");
+        const data: { project: Project } = await res.json();
+        const project = data.project;
+        const next = [{ ...project, bundleId: project.bundleId ?? "" }, ...projects];
+        setProjects(next);
+        saveProjects(next);
+        router.push(`/editor/${project.id}`);
+      } catch {
+        const fallback = getProjects();
+        setProjects(fallback);
+        const id = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        const now = Date.now();
+        const project: Project = {
+          id,
+          name: "Untitled app",
+          bundleId: `com.vibetree.${id.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 40) || "app"}`,
+          createdAt: now,
+          updatedAt: now,
+        };
+        saveProjects([project, ...fallback]);
+        setProjects(getProjects());
+        router.push(`/editor/${project.id}`);
+      }
     },
-    [router]
+    [router, projectType, projects]
   );
 
   const blockStartUntilPreflight = projectType === "pro" && !proPreflightReady;
@@ -176,10 +236,36 @@ export default function DashboardPage() {
     [prompt, blockStartUntilPreflight, doSubmitPrompt]
   );
 
-  function handleNewApp() {
-    const project = createProject();
-    setProjects(getProjects());
-    router.push(`/editor/${project.id}`);
+  async function handleNewApp() {
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Untitled app", projectType }),
+      });
+      if (!res.ok) throw new Error("Create failed");
+      const data: { project: Project } = await res.json();
+      const project = data.project;
+      const next = [{ ...project, bundleId: project.bundleId ?? "" }, ...projects];
+      setProjects(next);
+      saveProjects(next);
+      router.push(`/editor/${project.id}`);
+    } catch {
+      const fallback = getProjects();
+      setProjects(fallback);
+      const id = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const now = Date.now();
+      const project: Project = {
+        id,
+        name: "Untitled app",
+        bundleId: `com.vibetree.${id.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 40) || "app"}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+      saveProjects([project, ...fallback]);
+      setProjects(getProjects());
+      router.push(`/editor/${project.id}`);
+    }
   }
 
   function handleDeleteClick(e: React.MouseEvent, id: string) {
@@ -194,21 +280,55 @@ export default function DashboardPage() {
     setDeleteConfirmInput("");
   }
 
-  function handleDeleteConfirm() {
-    if (deleteTargetId && deleteConfirmInput === CONFIRM_DELETE_TEXT) {
+  async function handleDeleteConfirm() {
+    if (!deleteTargetId || deleteConfirmInput !== CONFIRM_DELETE_TEXT) return;
+    try {
+      const res = await fetch(`/api/projects/${deleteTargetId}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) throw new Error("Delete failed");
+      const next = projects.filter((p) => p.id !== deleteTargetId);
+      setProjects(next);
+      saveProjects(next);
+      closeDeleteModal();
+    } catch {
       deleteProject(deleteTargetId);
       setProjects(getProjects());
       closeDeleteModal();
     }
   }
 
-  function handleDuplicate(e: React.MouseEvent, id: string) {
+  async function handleDuplicate(e: React.MouseEvent, id: string) {
     e.preventDefault();
     e.stopPropagation();
-    const copy = duplicateProject(id);
-    if (copy) {
+    const source = projects.find((p) => p.id === id);
+    if (!source) return;
+    const name = `${source.name} (copy)`;
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, projectType }),
+      });
+      if (!res.ok) throw new Error("Create failed");
+      const data: { project: Project } = await res.json();
+      const project = data.project;
+      const next = [{ ...project, bundleId: project.bundleId ?? "" }, ...projects];
+      setProjects(next);
+      saveProjects(next);
+      router.push(`/editor/${project.id}`);
+    } catch {
+      const fallback = getProjects();
+      const copyId = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const now = Date.now();
+      const project: Project = {
+        id: copyId,
+        name,
+        bundleId: `com.vibetree.${copyId.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 40) || "app"}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+      saveProjects([project, ...fallback]);
       setProjects(getProjects());
-      router.push(`/editor/${copy.id}`);
+      router.push(`/editor/${project.id}`);
     }
   }
 

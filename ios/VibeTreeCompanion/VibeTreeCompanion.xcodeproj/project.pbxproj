@@ -32,6 +32,7 @@
 		912B6A99EE08CCF089B40119 /* VibeTreeCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87D36B420412F0C0ED6F5E2B /* VibeTreeCompanionApp.swift */; };
 		9DBBB3DD854AD95E4913D5A5 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51394EED4FD473DE5363C6C7 /* ChatMessage.swift */; };
 		9ED423DB9D5BF11453A6EE0C /* ChatPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2413CF1E00CD87249E5D958E /* ChatPanelView.swift */; };
+		A1B2C3D4E5F6789012345678 /* ChatHistoryAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6789012345678A1 /* ChatHistoryAPI.swift */; };
 		A0A396FD92E018051A3F0E06 /* BuildMonitorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65F466220D236593D2C720CB /* BuildMonitorService.swift */; };
 		A6D9BBB7F7728A6A6BC787C2 /* BuildActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C44A2D16F0A761667BFA1383 /* BuildActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B2099CD892849D5ABFD65B1C /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0ED858E18B1F05FD393CBCF /* NotificationService.swift */; };
@@ -89,6 +90,7 @@
 		4D0504AF9B88680980739A32 /* DeviceRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
 		51394EED4FD473DE5363C6C7 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		51FF0DD21A113B0673EA1D19 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B2C3D4E5F6789012345678A1 /* ChatHistoryAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryAPI.swift; sourceTree = "<group>"; };
 		5A94C98DB0ED32D8F97A47C7 /* BuildActivityLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildActivityLiveActivity.swift; sourceTree = "<group>"; };
 		5DE76CBEEC68DB33BFC80ABC /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
 		63F4D22F66D3D3D000B0399E /* CreditBalanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditBalanceView.swift; sourceTree = "<group>"; };
@@ -125,6 +127,7 @@
 			isa = PBXGroup;
 			children = (
 				755DAB791D8480380F840223 /* BuildJob.swift */,
+				B2C3D4E5F6789012345678A1 /* ChatHistoryAPI.swift */,
 				51394EED4FD473DE5363C6C7 /* ChatMessage.swift */,
 				9E1A7228514CE21D41B0F459 /* CreditBalance.swift */,
 				4D0504AF9B88680980739A32 /* DeviceRegistration.swift */,
@@ -335,6 +338,7 @@
 				F7461FF552C4BC918FC1E09E /* BuildJob.swift in Sources */,
 				A0A396FD92E018051A3F0E06 /* BuildMonitorService.swift in Sources */,
 				9DBBB3DD854AD95E4913D5A5 /* ChatMessage.swift in Sources */,
+				A1B2C3D4E5F6789012345678 /* ChatHistoryAPI.swift in Sources */,
 				9ED423DB9D5BF11453A6EE0C /* ChatPanelView.swift in Sources */,
 				8C460CA5AC9EF401F0DB210C /* ChatService.swift in Sources */,
 				3D14218531098A075A5A96D9 /* ContentView.swift in Sources */,

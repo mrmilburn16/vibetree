@@ -78,7 +78,8 @@ struct ProjectListView: View {
             }
             .refreshable { await service.fetchProjects() }
             .task {
-                if service.projects.isEmpty { await service.fetchProjects() }
+                // Always fetch when Projects tab appears so list stays in sync with web (same GET /api/projects).
+                await service.fetchProjects()
                 await credits.fetchBalance()
             }
             .navigationDestination(item: $navigateToProject) { project in

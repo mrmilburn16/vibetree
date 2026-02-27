@@ -878,16 +878,24 @@ function ResultRow({
                       const ud = JSON.parse(localStorage.getItem("vibetree-universal-defaults") || "{}");
                       teamId = ud.teamId || undefined;
                     } catch {}
-                    if (result.projectFiles?.length) {
+                    let files = result.projectFiles?.length ? result.projectFiles : undefined;
+                    if (!files?.length) {
+                      const filesRes = await fetch(`/api/projects/${result.projectId}/files`);
+                      if (filesRes.ok) {
+                        const filesData = (await filesRes.json()) as { files?: Array<{ path: string; content: string }> };
+                        if (filesData.files?.length) files = filesData.files;
+                      }
+                    }
+                    if (files?.length) {
                       await fetch(`/api/projects/${result.projectId}/files`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ files: result.projectFiles }),
+                        body: JSON.stringify({ files }),
                       }).catch(() => {});
                       await downloadXcodeZip(
                         result.projectId!,
                         result.idea.title,
-                        result.projectFiles,
+                        files,
                         teamId,
                       );
                     } else {
@@ -1460,7 +1468,12 @@ function savePersistedState(
 ): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(storageKey, JSON.stringify(state));
+    const resultsWithoutFiles = state.results.map((r) => {
+      const { projectFiles: _, ...rest } = r;
+      return rest;
+    });
+    const stateToSave = { ...state, results: resultsWithoutFiles };
+    localStorage.setItem(storageKey, JSON.stringify(stateToSave));
   } catch {
     // quota or disabled localStorage
   }
@@ -1637,6 +1650,27 @@ export default function TestSuitePage() {
       return next;
     });
   }, [syncToBuildLog]);
+
+  useEffect(() => {
+    if (!hydratedRef.current || !results.length) return;
+    results.forEach((r, i) => {
+      if (r.status !== "succeeded" || !r.projectId || (r.projectFiles?.length ?? 0) > 0) return;
+      fetch(`/api/projects/${r.projectId}/files`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data: { files?: Array<{ path: string; content: string }> } | null) => {
+          if (data?.files?.length) {
+            setResults((prev) => {
+              const next = [...prev];
+              if (next[i]?.projectId === r.projectId && !(next[i].projectFiles?.length)) {
+                next[i] = { ...next[i], projectFiles: data.files };
+              }
+              return next;
+            });
+          }
+        })
+        .catch(() => {});
+    });
+  }, [results]);
 
   const pushLiveEvent = useCallback((index: number, msg: string) => {
     setResults((prev) => {

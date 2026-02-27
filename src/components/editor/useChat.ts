@@ -355,28 +355,44 @@ export function useChat(
   }, []);
 
   // Restore chat history when returning to the editor for the same project.
+  // Prefer server when it has messages so web and iOS stay in sync; else fall back to localStorage.
   useEffect(() => {
     hydratedRef.current = false;
-    const restored = loadChatMessagesFromLocalStorage(projectId);
-    if (restored && restored.length > 0) {
-      setMessages(restored);
-      // If we have history, default to ready.
-      setBuildStatus("live");
-    } else {
-      setMessages([]);
-      // Fallback: restore from server-side persisted chat (survives reboots + cleared localStorage).
-      fetch(`/api/projects/${projectId}/chat`, { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          const msgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
-          if (msgs.length > 0) {
-            setMessages(msgs);
+    let cancelled = false;
+    setMessages([]);
+
+    fetch(`/api/projects/${projectId}/chat`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const serverMsgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
+        if (serverMsgs.length > 0) {
+          setMessages(serverMsgs);
+          setBuildStatus("live");
+          saveChatMessagesToLocalStorage(projectId, serverMsgs);
+        } else {
+          const local = loadChatMessagesFromLocalStorage(projectId);
+          if (local && local.length > 0) {
+            setMessages(local);
             setBuildStatus("live");
           }
-        })
-        .catch(() => {});
-    }
-    hydratedRef.current = true;
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        const local = loadChatMessagesFromLocalStorage(projectId);
+        if (local && local.length > 0) {
+          setMessages(local);
+          setBuildStatus("live");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) hydratedRef.current = true;
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
 
   // Persist chat history per project id.

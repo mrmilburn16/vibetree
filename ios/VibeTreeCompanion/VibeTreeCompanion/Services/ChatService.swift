@@ -41,10 +41,41 @@ final class ChatService: ObservableObject {
     private var pendingRecoveryMessageId: String?
     /// Whether we're waiting for the server to finish after losing the stream.
     @Published var isAwaitingRecovery = false
+    /// So we only load from server once per editor session.
+    private var hasLoadedHistory = false
 
     init(projectId: String, projectName: String = "Untitled app") {
         self.projectId = projectId
         self.initialProjectName = projectName
+    }
+
+    /// Load conversation history from server so web and iOS stay in sync. Call from view .onAppear.
+    func loadHistory() async {
+        guard !hasLoadedHistory else { return }
+        hasLoadedHistory = true
+        do {
+            let history = try await APIService.shared.fetchChat(projectId: projectId)
+            if !history.isEmpty {
+                messages = history
+                buildStatus = .ready
+            }
+        } catch {
+            hasLoadedHistory = false
+            logger.error("loadHistory failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Persist current conversation to server (stable messages only). Call after stream completes.
+    func persistChat() {
+        let stable = messages.filter { !$0.isStreaming }
+        guard !stable.isEmpty else { return }
+        Task {
+            do {
+                try await APIService.shared.saveChat(projectId: projectId, messages: stable)
+            } catch {
+                logger.error("persistChat failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     func sendMessage(_ text: String, model: String, projectType: ProjectType) {
@@ -343,6 +374,8 @@ final class ChatService: ObservableObject {
                 }
             }
         }
+
+        persistChat()
     }
 
     // MARK: - Background task helpers

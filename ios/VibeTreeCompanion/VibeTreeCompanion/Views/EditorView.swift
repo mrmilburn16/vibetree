@@ -45,7 +45,10 @@ struct EditorView: View {
             }
         )
         .navigationTitle(projectDisplayName.isEmpty ? project.name : projectDisplayName)
-        .onAppear { projectDisplayName = project.name }
+        .onAppear {
+            projectDisplayName = project.name
+            Task { await chatService.loadHistory() }
+        }
         .onChange(of: chatService.suggestedProjectName) { _, new in
             if let n = new { projectDisplayName = n }
         }
