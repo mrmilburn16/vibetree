@@ -22,12 +22,50 @@ interface CreditsContextValue {
 
 const CreditsContext = createContext<CreditsContextValue | null>(null);
 
+function getSessionEmail(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("vibetree-session");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.email ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function CreditsProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<CreditState | null>(null);
 
   const refresh = useCallback(() => {
     if (typeof window === "undefined") return;
+
+    // Always hydrate from localStorage first for instant UI
     setState(getCreditState());
+
+    // Then sync from server if a session exists
+    const email = getSessionEmail();
+    if (email) {
+      fetch("/api/credits", {
+        headers: { "x-user-email": email },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && typeof data.balance === "number") {
+            const serverState: CreditState = {
+              balance: data.balance,
+              includedPerPeriod: data.monthlyAllowance ?? 50,
+              periodStart:
+                data.resetDate ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
+            };
+            storeSetBalance(serverState.balance);
+            setState(serverState);
+          }
+        })
+        .catch(() => {
+          // Server unavailable — localStorage value stands
+        });
+    }
   }, []);
 
   useEffect(() => {
@@ -37,26 +75,45 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
   const deduct = useCallback(
     (amount: number): boolean => {
       const ok = storeDeduct(amount);
-      if (ok) refresh();
+      if (ok) {
+        setState(getCreditState());
+        // Fire-and-forget server deduction
+        const email = getSessionEmail();
+        if (email) {
+          fetch("/api/credits", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-user-email": email },
+            body: JSON.stringify({ action: "deduct", amount }),
+          }).catch(() => {});
+        }
+      }
       return ok;
     },
-    [refresh]
+    []
   );
 
   const add = useCallback(
     (amount: number) => {
       storeAdd(amount);
-      refresh();
+      setState(getCreditState());
+      const email = getSessionEmail();
+      if (email) {
+        fetch("/api/credits", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-user-email": email },
+          body: JSON.stringify({ action: "add", amount }),
+        }).catch(() => {});
+      }
     },
-    [refresh]
+    []
   );
 
   const setBalance = useCallback(
     (amount: number) => {
       storeSetBalance(amount);
-      refresh();
+      setState(getCreditState());
     },
-    [refresh]
+    []
   );
 
   const value: CreditsContextValue =
