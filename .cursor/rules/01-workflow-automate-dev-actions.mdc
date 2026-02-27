@@ -10,8 +10,11 @@ When code or config changes require it, **you** must perform the action — do n
 - **Restart the Next.js dev server**  
   When API routes, server code, or env changes need a restart to take effect: stop any running `next dev` (e.g. `pkill -f "next dev"`), then start it again (`npm run dev` in the project root). Run the start in the background so the server stays up.
 
-- **Push to GitHub**  
-  When the user or the task implies that changes should be pushed (e.g. "push this", "save to github", or after finishing a feature): run `git add`, `git commit` with a clear message, and `git push` yourself. Do not say "you can push to GitHub" or "remember to push"; do the push.
+- **Push to GitHub and verify Vercel build**  
+  When the user or the task implies that changes should be pushed (e.g. "push this", "save to github", or after finishing a feature):
+  1. Run `npm run build` in the project root. If the build fails, fix the code (e.g. type errors, lint), then run `npm run build` again. Do not push until the build succeeds.
+  2. Run `git add`, `git commit` with a clear message, and `git push` yourself. Do not say "you can push to GitHub" or "remember to push"; do the push.
+  3. After pushing, run `npm run vercel:status` to verify the Vercel deployment built successfully. If `VERCEL_TOKEN` is not set, skip this step (the local build already validated the code). If `vercel:status` exits with failure (Vercel build failed or timed out), fix the issues, push again, and run `vercel:status` again until the deployment succeeds.
 
 - **Build / install iOS app yourself**  
   Never tell the user to "rebuild the iOS app" or "confirm on device" — **you** run the build. After any change that touches the iOS companion (e.g. `ios/` or Swift), run the build yourself: use `xcodebuild -scheme VibeTreeCompanion -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' build` from `ios/VibeTreeCompanion` to confirm it compiles, or `npm run ios:install` to build, install, and launch on a connected iPhone. Do not say "rebuild to confirm" or similar without having already run the build in that response.

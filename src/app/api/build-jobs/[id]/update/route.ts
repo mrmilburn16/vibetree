@@ -100,14 +100,14 @@ export async function POST(
   const maxAttempts = freshJob?.request.maxAttempts ?? 5;
 
   if (freshJob && freshJob.status === "succeeded") {
-    sendBackgroundRefreshPush(`build_succeeded:${id}`).catch((err) =>
-      console.error("[apns] Error sending background refresh push:", err)
-    );
     const displayName = getProject(freshJob.request.projectId)?.name?.trim() || freshJob.request.projectName;
-    sendBuildNotification(
-      displayName,
-      "succeeded"
-    ).catch((err) => console.error("[apns] Error sending success notification:", err));
+    console.log(`[build-jobs] Job ${id} succeeded, sending push notification for "${displayName}"…`);
+    try {
+      await sendBackgroundRefreshPush(`build_succeeded:${id}`);
+      await sendBuildNotification(displayName, "succeeded");
+    } catch (err) {
+      console.error("[apns] Error sending build success push:", err);
+    }
   }
 
   if (freshJob && freshJob.status === "failed") {
@@ -134,15 +134,17 @@ export async function POST(
       `attempt=${attempt} < maxAttempts=${maxAttempts} = ${attempt < maxAttempts}, ` +
       `hasErrors||hasLogs=${hasErrors || hasLogs}`
     );
-    sendBackgroundRefreshPush(`build_failed:${id}`).catch((err) =>
-      console.error("[apns] Error sending background refresh push:", err)
-    );
     const displayName = getProject(freshJob.request.projectId)?.name?.trim() || freshJob.request.projectName;
-    sendBuildNotification(
-      displayName,
-      "failed",
-      freshJob.error ?? "Build failed after all attempts"
-    ).catch((err) => console.error("[apns] Error sending failure notification:", err));
+    try {
+      await sendBackgroundRefreshPush(`build_failed:${id}`);
+      await sendBuildNotification(
+        displayName,
+        "failed",
+        freshJob.error ?? "Build failed after all attempts"
+      );
+    } catch (err) {
+      console.error("[apns] Error sending build failure push:", err);
+    }
   }
 
   return Response.json({ ok: true });

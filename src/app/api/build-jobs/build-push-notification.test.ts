@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 import { createBuildJob } from "@/lib/buildJobs";
-import { ensureProject } from "@/lib/projectStore";
+import { ensureProject, updateProject } from "@/lib/projectStore";
 
 const sendBuildNotification = vi.fn().mockResolvedValue(undefined);
 const sendBackgroundRefreshPush = vi.fn().mockResolvedValue(undefined);
@@ -58,6 +58,44 @@ describe("Build completion push notifications", () => {
     expect(res.status).toBe(200);
     expect(sendBackgroundRefreshPush).toHaveBeenCalledWith(`build_succeeded:${job.id}`);
     expect(sendBuildNotification).toHaveBeenCalledWith(projectName, "succeeded");
+  });
+
+  it("awaits push before responding so notification is sent instantly when build succeeds", async () => {
+    const job = createBuildJob({
+      projectId,
+      projectName,
+      bundleId: "com.test.app",
+    });
+    let resolvePush: () => void;
+    const pushPromise = new Promise<void>((r) => {
+      resolvePush = r;
+    });
+    sendBackgroundRefreshPush.mockResolvedValueOnce(undefined);
+    sendBuildNotification.mockReturnValueOnce(pushPromise);
+
+    const responsePromise = POST(
+      new Request("http://test/api/build-jobs/" + job.id, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${RUNNER_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "succeeded" }),
+      }),
+      { params: Promise.resolve({ id: job.id }) }
+    );
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sendBuildNotification).toHaveBeenCalledWith(projectName, "succeeded");
+    let responded = false;
+    responsePromise.then(() => {
+      responded = true;
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(responded).toBe(false);
+    resolvePush!();
+    const res = await responsePromise;
+    expect(res.status).toBe(200);
   });
 
   it("sends build failure notification when job update has status failed", async () => {
@@ -161,5 +199,41 @@ describe("Web build success triggers iOS push (full chain)", () => {
     expect(content).toContain("sendBuildNotification");
     expect(content).toMatch(/freshJob\.status\s*===\s*["']succeeded["']/);
     expect(content).toMatch(/sendBuildNotification\s*\(\s*displayName\s*,\s*["']succeeded["']\s*\)/);
+  });
+});
+
+describe("Push notification uses current project title (not Untitled app)", () => {
+  const projectId = "proj_title_test_456";
+  const RUNNER_TOKEN = "test-runner-token";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.MAC_RUNNER_TOKEN = RUNNER_TOKEN;
+  });
+
+  it("when project name is updated via PATCH before build completes, push uses updated title", async () => {
+    ensureProject(projectId, "Untitled app", "pro");
+    const job = createBuildJob({
+      projectId,
+      projectName: "Untitled app",
+      bundleId: "com.test.app",
+    });
+    updateProject(projectId, { name: "My Cool App" });
+
+    const res = await POST(
+      new Request("http://test/api/build-jobs/" + job.id, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${RUNNER_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "succeeded" }),
+      }),
+      { params: Promise.resolve({ id: job.id }) }
+    );
+
+    expect(res.status).toBe(200);
+    expect(sendBuildNotification).toHaveBeenCalledWith("My Cool App", "succeeded");
+    expect(sendBuildNotification).not.toHaveBeenCalledWith("Untitled app", expect.anything());
   });
 });

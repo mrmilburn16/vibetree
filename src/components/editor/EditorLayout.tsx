@@ -53,6 +53,9 @@ function getStoredChatWidth(): number {
 
 export function EditorLayout({ project }: { project: Project }) {
   const [projectName, setProjectName] = useState(project.name);
+  useEffect(() => {
+    if (project?.name) setProjectName(project.name);
+  }, [project?.name]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [runOnDeviceOpen, setRunOnDeviceOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);

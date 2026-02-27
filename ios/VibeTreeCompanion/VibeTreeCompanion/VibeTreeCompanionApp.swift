@@ -48,6 +48,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         Task { @MainActor in
+            NotificationService.shared.reregisterIfPossible()
             await BuildMonitorService.shared.refreshOnce()
         }
     }

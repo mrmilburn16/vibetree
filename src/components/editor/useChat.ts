@@ -848,8 +848,10 @@ export function useChat(
             } catch {
               /* use finalName as-is */
             }
-            updateProjectNameInLocalStorage(projectId, finalName);
-            onProjectRenamed?.(finalName);
+            if (typeof finalName === "string") {
+              updateProjectNameInLocalStorage(projectId, finalName);
+              onProjectRenamed?.(finalName);
+            }
           }
           const projectNameForLogs = finalName ?? projectName ?? "Unknown";
           const isProBuild =

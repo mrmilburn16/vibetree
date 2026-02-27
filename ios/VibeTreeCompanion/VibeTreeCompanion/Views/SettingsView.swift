@@ -253,6 +253,40 @@ struct SettingsView: View {
                     .cornerRadius(Forest.radiusSm)
                 }
             }
+
+            if notifications.isAuthorized {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Server registration")
+                            .font(Forest.font(size: Forest.textBase, weight: .medium))
+                            .foregroundColor(Forest.textPrimary)
+                        if notifications.isRegistering {
+                            Text(notifications.lastRegistrationError ?? "Registering…")
+                                .font(Forest.font(size: Forest.textXs))
+                                .foregroundColor(Forest.textTertiary)
+                        } else if let success = notifications.lastRegistrationSuccess {
+                            Text(success ? "Registered with server" : (notifications.lastRegistrationError ?? "Failed"))
+                                .font(Forest.font(size: Forest.textXs))
+                                .foregroundColor(success ? Forest.success : Forest.destructiveText)
+                        } else {
+                            Text("Open app to register; tap Register now to retry")
+                                .font(Forest.font(size: Forest.textXs))
+                                .foregroundColor(Forest.textTertiary)
+                        }
+                    }
+                    Spacer()
+                    Button(notifications.isRegistering ? "Registering…" : "Register now") {
+                        Task { await notifications.registerWithServer() }
+                    }
+                    .disabled(notifications.isRegistering)
+                    .font(Forest.font(size: Forest.textSm, weight: .semibold))
+                    .foregroundColor(Forest.backgroundPrimary)
+                    .padding(.horizontal, Forest.space4)
+                    .padding(.vertical, Forest.space2)
+                    .background(Forest.accent)
+                    .cornerRadius(Forest.radiusSm)
+                }
+            }
         }
         .forestCard()
     }

@@ -10,7 +10,8 @@ export async function POST(request: Request) {
     typeof body?.activityPushToken === "string" ? body.activityPushToken : undefined;
 
   registerDevice(deviceToken, activityPushToken);
-  console.log(`[devices] Registered device token: ${deviceToken.slice(0, 12)}…`);
+  const host = request.headers.get("host") ?? "unknown";
+  console.log(`[devices] Registered device token: ${deviceToken.slice(0, 12)}… (Host: ${host})`);
 
   return Response.json({ ok: true });
 }

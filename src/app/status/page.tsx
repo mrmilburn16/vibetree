@@ -149,12 +149,30 @@ function SubServiceRow({ sub }: { sub: SubService }) {
 
 function ServiceCard({ service }: { service: Service }) {
   const [expanded, setExpanded] = useState(false);
+  const [pushTestState, setPushTestState] = useState<{ loading: boolean; message: string | null }>({ loading: false, message: null });
   const colors = statusColor(service.status);
   const ServiceIcon = SERVICE_ICONS[service.id] ?? Server;
   const description = SERVICE_DESCRIPTIONS[service.id];
   const hasDays = service.days.length > 0;
   const hasData = service.days.some((d) => d.checks > 0);
   const hasSubs = service.subServices && service.subServices.length > 0;
+  const isPushService = service.id === "push-notifications";
+
+  const sendTestPush = useCallback(async () => {
+    setPushTestState({ loading: true, message: null });
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      let message = typeof data?.message === "string" ? data.message : res.ok ? "Sent." : "Request failed.";
+      if (!res.ok && typeof window !== "undefined" && message.toLowerCase().includes("no devices registered")) {
+        const url = data?.suggestedServerURL ?? window.location.origin;
+        message += ` On your iPhone set the Companion app Server URL to ${url} (same Wi‑Fi), then open the app and allow notifications.`;
+      }
+      setPushTestState({ loading: false, message });
+    } catch (e) {
+      setPushTestState({ loading: false, message: e instanceof Error ? e.message : "Request failed." });
+    }
+  }, []);
 
   return (
     <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] transition-colors hover:border-[var(--border-subtle)]">
@@ -198,6 +216,25 @@ function ServiceCard({ service }: { service: Service }) {
           <p className="mt-3 rounded-[var(--radius-sm)] bg-[var(--background-tertiary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
             {service.message}
           </p>
+        )}
+
+        {isPushService && (
+          <div className="mt-3 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={sendTestPush}
+              disabled={pushTestState.loading}
+              className="flex w-fit items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-subtle)] hover:text-[var(--text-primary)] disabled:opacity-50"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              {pushTestState.loading ? "Sending…" : "Send test notification"}
+            </button>
+            {pushTestState.message && (
+              <p className={`text-xs ${pushTestState.message.startsWith("Test") || pushTestState.message.includes("sent") ? "text-[var(--semantic-success)]" : "text-[var(--semantic-error)]"}`}>
+                {pushTestState.message}
+              </p>
+            )}
+          </div>
         )}
       </div>
 

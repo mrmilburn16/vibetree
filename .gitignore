@@ -32,12 +32,15 @@ ios/**/DerivedData/
 # misc
 .DS_Store
 *.pem
+*.p8
+AuthKey_*.p8
 
 # local run artifacts
 data/*.jsonl
 data/project-chats/
 data/service-status.json
 data/uptime-history.jsonl
+data/registered-devices.json
 
 # debug
 npm-debug.log*

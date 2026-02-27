@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Send, Sparkles, ArrowRight, Copy, Trash2, Zap } from "lucide-react";
+import { Send, Sparkles, ArrowRight, Copy, Trash2, Zap, Bell } from "lucide-react";
 import { Button, BetaBadge, Textarea, DropdownSelect } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -85,7 +85,29 @@ export default function DashboardPage() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [projectsLoading, setProjectsLoading] = useState(true);
+  const [pushTestLoading, setPushTestLoading] = useState(false);
+  const [pushTestMessage, setPushTestMessage] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const sendTestPush = useCallback(async () => {
+    setPushTestLoading(true);
+    setPushTestMessage(null);
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      let message = typeof data?.message === "string" ? data.message : res.ok ? "Sent." : "Request failed.";
+      if (!res.ok && typeof window !== "undefined" && message.toLowerCase().includes("no devices registered")) {
+        const url = data?.suggestedServerURL ?? window.location.origin;
+        message += ` On your iPhone set the Companion app Server URL to ${url} (same Wi‑Fi), then open the app and allow notifications.`;
+      }
+      setPushTestMessage(message);
+      if (res.ok) setTimeout(() => setPushTestMessage(null), 4000);
+    } catch (e) {
+      setPushTestMessage(e instanceof Error ? e.message : "Request failed.");
+    } finally {
+      setPushTestLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -364,6 +386,21 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-3">
             <ThemeSwitcher />
+            <button
+              type="button"
+              onClick={sendTestPush}
+              disabled={pushTestLoading}
+              className="flex items-center gap-1.5 rounded-full border border-[var(--border-default)] bg-[var(--background-tertiary)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-subtle)] hover:text-[var(--text-primary)] disabled:opacity-50"
+              title="Send a test push notification to your iPhone"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              {pushTestLoading ? "Sending…" : "Test push"}
+            </button>
+            {pushTestMessage && (
+              <span className={`max-w-[180px] truncate text-[10px] ${pushTestMessage.includes("sent") || pushTestMessage.startsWith("Test") ? "text-[var(--semantic-success)]" : "text-[var(--semantic-error)]"}`} title={pushTestMessage}>
+                {pushTestMessage}
+              </span>
+            )}
             <CreditsWidget />
             <Link href="/sign-in">
               <Button variant="ghost" size="sm">Sign out</Button>

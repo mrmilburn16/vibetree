@@ -8,6 +8,12 @@ final class NotificationService: NSObject, ObservableObject {
 
     @Published var isAuthorized = false
     @Published var deviceToken: String?
+    /// Last server registration result: true = success, false = failure (see lastRegistrationError).
+    @Published var lastRegistrationSuccess: Bool?
+    @Published var lastRegistrationError: String?
+    @Published var isRegistering = false
+    /// When Apple rejects push registration, iOS calls didFailToRegister; we store it here so the UI can show the real reason.
+    @Published var apnsRegistrationError: String?
 
     override init() {
         super.init()
@@ -20,9 +26,23 @@ final class NotificationService: NSObject, ObservableObject {
             isAuthorized = granted
             if granted {
                 UIApplication.shared.registerForRemoteNotifications()
+                // Token is delivered asynchronously; poll for up to ~20s and register when it arrives.
+                await waitForTokenAndRegister()
             }
         } catch {
             print("Notification permission error: \(error)")
+        }
+    }
+
+    /// After permission granted, wait for APNs to deliver the device token and register with server (up to ~20s).
+    private func waitForTokenAndRegister() async {
+        for _ in 0..<10 {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            let token = UserDefaults.standard.string(forKey: "apnsDeviceToken")
+            if let token, !token.isEmpty {
+                await registerWithServer(token: token)
+                return
+            }
         }
     }
 
@@ -32,18 +52,61 @@ final class NotificationService: NSObject, ObservableObject {
         UserDefaults.standard.set(tokenString, forKey: "apnsDeviceToken")
 
         Task {
-            try? await APIService.shared.registerDevice(token: tokenString)
+            await registerWithServer(token: tokenString)
+        }
+    }
+
+    /// Registers the given token (or the stored token if nil) with the app’s server. Updates lastRegistrationSuccess and lastRegistrationError.
+    /// If no token is stored but notifications are enabled, asks iOS for the token again and waits for it before registering.
+    func registerWithServer(token: String? = nil) async {
+        isRegistering = true
+        lastRegistrationError = nil
+        apnsRegistrationError = nil
+        defer { isRegistering = false }
+
+        var tokenToUse = token ?? UserDefaults.standard.string(forKey: "apnsDeviceToken")
+        if (tokenToUse ?? "").isEmpty, isAuthorized {
+            lastRegistrationError = "Requesting token from Apple…"
+            UIApplication.shared.registerForRemoteNotifications()
+            await waitForTokenAndRegister()
+            tokenToUse = UserDefaults.standard.string(forKey: "apnsDeviceToken")
+        }
+        guard let t = tokenToUse, !t.isEmpty else {
+            lastRegistrationSuccess = false
+            if let apnsErr = apnsRegistrationError, !apnsErr.isEmpty {
+                lastRegistrationError = "Apple: \(apnsErr)"
+            } else {
+                lastRegistrationError = "No device token yet. Use a real device (not Simulator), check network, then tap Register now again."
+            }
+            return
+        }
+        lastRegistrationError = "Registering with server…"
+        do {
+            try await APIService.shared.registerDevice(token: t)
+            lastRegistrationSuccess = true
+            lastRegistrationError = nil
+            apnsRegistrationError = nil
+        } catch {
+            lastRegistrationSuccess = false
+            lastRegistrationError = error.localizedDescription
         }
     }
 
     func reregisterIfPossible() {
-        guard let token = UserDefaults.standard.string(forKey: "apnsDeviceToken"), !token.isEmpty else { return }
-        Task {
-            try? await APIService.shared.registerDevice(token: token)
+        let token = UserDefaults.standard.string(forKey: "apnsDeviceToken")
+        if let token, !token.isEmpty {
+            Task { await registerWithServer(token: token) }
+            return
+        }
+        // Permission granted but no token yet (e.g. delayed delivery); ask iOS again.
+        if isAuthorized {
+            UIApplication.shared.registerForRemoteNotifications()
+            Task { await waitForTokenAndRegister() }
         }
     }
 
     func handleRegistrationError(_ error: Error) {
+        apnsRegistrationError = error.localizedDescription
         print("APNs registration failed: \(error)")
     }
 
