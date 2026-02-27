@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getProject, ensureProject } from "@/lib/projectStore";
 import {
   setProjectFiles,
@@ -11,13 +11,23 @@ import { estimateCostUsd } from "@/lib/llm/usageCost";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { enrichWithSkills } from "@/lib/llm/promptEnrichment";
 import { detectSkills, buildSkillPromptBlock } from "@/lib/skills/registry";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
 
 const MAX_MESSAGE_LENGTH = 4000;
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ip = getClientIp(request.headers);
+  const rl = rateLimit(`message:${ip}`, 30, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.resetMs / 1000)) } }
+    );
+  }
+
   const { id: projectId } = await params;
 
   const body = await request.json().catch(() => ({}));

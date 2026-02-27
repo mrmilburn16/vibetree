@@ -1,11 +1,18 @@
 import { NextRequest } from "next/server";
 import { apiOk, apiError } from "@/lib/apiResponse";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
 
 const MAX_MESSAGE_LENGTH = 2000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VALID_SUBJECTS = ["general", "sales", "support", "feedback", "other", ""];
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req.headers);
+  const rl = rateLimit(`contact:${ip}`, 5, 60_000);
+  if (!rl.allowed) {
+    return apiError("Too many submissions. Please try again later.", 429);
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();

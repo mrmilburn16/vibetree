@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { randomUUID } from "crypto";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
 
 const POINTS_SIGNUP = 100;
 const POINTS_REFERRAL_BONUS = 500;
@@ -11,6 +12,14 @@ function generateReferralCode(token: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request.headers);
+    const rl = rateLimit(`waitlist:${ip}`, 5, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please try again later." },
+        { status: 429 }
+      );
+    }
     const body = (await request.json()) as { email?: string; name?: string; ref?: string; abVariant?: "a" | "b" };
     const email = (body.email ?? "").trim().toLowerCase();
     const name = (body.name ?? "").trim();
