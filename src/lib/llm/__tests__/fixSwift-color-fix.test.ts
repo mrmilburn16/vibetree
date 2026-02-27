@@ -60,41 +60,51 @@ describe("fixSwift: ColorColorColor and ColorColor fix", () => {
   });
 });
 
-describe("fixSwift: black background → system background", () => {
-  it("replaces .background(Color.black) with .background(Color(.systemBackground))", () => {
+describe("fixSwift: black/flat background → subtle gradient", () => {
+  const GRADIENT = "LinearGradient(colors: [Color(.secondarySystemBackground), Color(.systemBackground)], startPoint: .top, endPoint: .bottom)";
+
+  it("replaces .background(Color.black) with gradient", () => {
     const files = [
       { path: "ContentView.swift", content: "var body: some View { VStack { }.background(Color.black) }" },
     ];
     const result = fixSwiftCommonIssues(files);
-    expect(result[0].content).toContain(".background(Color(.systemBackground))");
-    expect(result[0].content).not.toContain(".background(Color.black)");
+    expect(result[0].content).toContain(GRADIENT);
+    expect(result[0].content).not.toContain("Color.black");
   });
 
-  it("replaces .background { Color.black } with .background { Color(.systemBackground) }", () => {
+  it("replaces .background { Color.black } with gradient", () => {
     const files = [
       { path: "ContentView.swift", content: "VStack { }.background { Color.black }" },
     ];
     const result = fixSwiftCommonIssues(files);
-    expect(result[0].content).toContain(".background { Color(.systemBackground) }");
+    expect(result[0].content).toContain(GRADIENT);
     expect(result[0].content).not.toContain("Color.black");
   });
 
-  it("replaces ZStack { Color.black with ZStack { Color(.systemBackground) (full-screen black)", () => {
+  it("replaces ZStack { Color.black with ZStack { gradient (full-screen black)", () => {
     const files = [
       { path: "ContentView.swift", content: "var body: some View { ZStack { Color.black\n.ignoresSafeArea()\nText(\"Hi\") } }" },
     ];
     const result = fixSwiftCommonIssues(files);
-    expect(result[0].content).toContain("ZStack { Color(.systemBackground)");
-    expect(result[0].content).toContain(".ignoresSafeArea()");
+    expect(result[0].content).toContain(`ZStack { ${GRADIENT}`);
     expect(result[0].content).not.toMatch(/ZStack\s*\{\s*Color\.black\b/);
   });
 
-  it("replaces Color.black.ignoresSafeArea() with Color(.systemBackground).ignoresSafeArea()", () => {
+  it("replaces Color.black.ignoresSafeArea() with gradient.ignoresSafeArea()", () => {
     const files = [
       { path: "ContentView.swift", content: "Color.black.ignoresSafeArea()" },
     ];
     const result = fixSwiftCommonIssues(files);
-    expect(result[0].content).toContain("Color(.systemBackground).ignoresSafeArea()");
+    expect(result[0].content).toContain(`${GRADIENT}.ignoresSafeArea()`);
     expect(result[0].content).not.toContain("Color.black");
+  });
+
+  it("replaces ZStack { Color(.systemBackground).ignoresSafeArea() with gradient (dark-mode fix)", () => {
+    const files = [
+      { path: "ContentView.swift", content: "ZStack { Color(.systemBackground).ignoresSafeArea()\nVStack { Text(\"Hello\") } }" },
+    ];
+    const result = fixSwiftCommonIssues(files);
+    expect(result[0].content).toContain(`ZStack { ${GRADIENT}.ignoresSafeArea()`);
+    expect(result[0].content).not.toMatch(/Color\(\s*\.systemBackground\s*\)\s*\.ignoresSafeArea/);
   });
 });

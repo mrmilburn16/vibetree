@@ -31,12 +31,18 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       content = "import SwiftUI\n" + content;
     }
 
-    // Avoid plain black main-screen background (looks unfinished). Prefer semantic/system colors.
-    content = content.replace(/\.background\s*\(\s*Color\.black\s*\)/g, ".background(Color(.systemBackground))");
-    content = content.replace(/\.background\s*\{\s*Color\.black\s*\}/g, ".background { Color(.systemBackground) }");
-    // ZStack { Color.black ... } or Color.black.ignoresSafeArea() (common full-screen background)
-    content = content.replace(/ZStack\s*\{\s*Color\.black\b/g, "ZStack { Color(.systemBackground)");
-    content = content.replace(/\bColor\.black\b(\s*\.ignoresSafeArea\s*\(\s*\))/g, "Color(.systemBackground)$1");
+    // Avoid plain black or flat-color full-screen backgrounds (looks unfinished in dark mode).
+    // Replace with a subtle gradient that looks polished in both light and dark.
+    const GRADIENT_BG = "LinearGradient(colors: [Color(.secondarySystemBackground), Color(.systemBackground)], startPoint: .top, endPoint: .bottom)";
+    content = content.replace(/\.background\s*\(\s*Color\.black\s*\)/g, `.background(${GRADIENT_BG})`);
+    content = content.replace(/\.background\s*\{\s*Color\.black\s*\}/g, `.background { ${GRADIENT_BG} }`);
+    content = content.replace(/ZStack\s*\{\s*Color\.black\b/g, `ZStack { ${GRADIENT_BG}`);
+    content = content.replace(/\bColor\.black\b(\s*\.ignoresSafeArea\s*\(\s*\))/g, `${GRADIENT_BG}$1`);
+    // Also fix ZStack { Color(.systemBackground).ignoresSafeArea() — still looks black in dark mode
+    content = content.replace(
+      /ZStack\s*\{\s*Color\(\s*\.systemBackground\s*\)\s*\.ignoresSafeArea\s*\(\s*\)/g,
+      `ZStack { ${GRADIENT_BG}.ignoresSafeArea()`
+    );
 
     const usesFoundation = /\b(Date|UUID|JSONDecoder|JSONEncoder|UserDefaults|FileManager|Data|URL|URLSession|Timer|Calendar|DateFormatter|NumberFormatter|Locale|TimeZone|NotificationCenter|Bundle)\b/.test(content);
     if (usesFoundation && !content.includes("import Foundation") && !content.includes("import SwiftUI")) {

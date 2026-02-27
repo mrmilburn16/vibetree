@@ -11,11 +11,12 @@ const CLAUDE_ADAPTER = path.resolve(process.cwd(), "src/lib/llm/claudeAdapter.ts
 const MESSAGE_ROUTE = path.resolve(process.cwd(), "src/app/api/projects/[id]/message/route.ts");
 
 describe("System prompt: Critical background and app name rules", () => {
-  it("structuredOutput SYSTEM_PROMPT_SWIFT includes Critical — Background (no Color.black)", () => {
+  it("structuredOutput SYSTEM_PROMPT_SWIFT includes Critical — Background (no flat black, use gradient)", () => {
     const content = fs.readFileSync(STRUCTURED_OUTPUT, "utf8");
     expect(content).toContain("Critical — Background");
-    expect(content).toMatch(/Do NOT use Color\.black|Color\.black.*main screen/);
-    expect(content).toMatch(/systemBackground|\.systemBackground/);
+    expect(content).toMatch(/Do NOT use Color\.black/);
+    expect(content).toMatch(/LinearGradient/);
+    expect(content).toMatch(/secondarySystemBackground/);
   });
 
   it("structuredOutput SYSTEM_PROMPT_SWIFT includes Critical — App name (do not rename)", () => {
@@ -24,11 +25,12 @@ describe("System prompt: Critical background and app name rules", () => {
     expect(content).toMatch(/already named|Do not change the app name|do not rename/);
   });
 
-  it("claudeAdapter SYSTEM_PROMPT_SWIFT includes same Critical rules", () => {
+  it("claudeAdapter SYSTEM_PROMPT_SWIFT includes same Critical rules with gradient guidance", () => {
     const content = fs.readFileSync(CLAUDE_ADAPTER, "utf8");
     expect(content).toContain("Critical — Background");
     expect(content).toContain("Critical — App name");
     expect(content).toMatch(/Do NOT use Color\.black/);
+    expect(content).toMatch(/LinearGradient/);
   });
 });
 
