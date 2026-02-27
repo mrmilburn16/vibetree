@@ -669,6 +669,7 @@ export function useChat(
                 phase?: string;
                 path?: string;
                 count?: number;
+                existing?: boolean;
                 error?: string;
                 assistantMessage?: unknown;
                 buildStatus?: string;

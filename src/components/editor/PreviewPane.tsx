@@ -164,6 +164,8 @@ function CSSDeviceFrame({
   const [afterUrl, setAfterUrl] = useState<string | null>(null);
   /** Split position 0–100; 50 = half. Dragging left reveals more before, right more after. */
   const [splitPercent, setSplitPercent] = useState(50);
+  /** Labels below the phone fade in on first drag and stay visible. */
+  const [labelsRevealed, setLabelsRevealed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
 
@@ -254,6 +256,7 @@ function CSSDeviceFrame({
     (e: React.MouseEvent) => {
       e.preventDefault();
       isDraggingRef.current = true;
+      setLabelsRevealed(true);
       handleMove(e.clientX);
     },
     [handleMove]
@@ -262,6 +265,7 @@ function CSSDeviceFrame({
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
       isDraggingRef.current = true;
+      setLabelsRevealed(true);
       handleMove(e.touches[0].clientX);
     },
     [handleMove]
@@ -291,18 +295,20 @@ function CSSDeviceFrame({
 
   const showComparison = isPro && beforeUrl && afterUrl;
   const showSingle = isPro && simulatorPreviewUrl && !showComparison;
+  const frameWidth = DEVICE_WIDTH + 20;
 
   return (
-    <div
-      className="relative animate-fade-in rounded-[2.75rem] p-[10px]"
-      style={{
-        width: DEVICE_WIDTH + 20,
-        height: DEVICE_HEIGHT + 20,
-        background: `linear-gradient(165deg, var(--border-subtle) 0%, var(--border-default) 35%, var(--background-secondary) 100%)`,
-        boxShadow:
-          "0 25px 50px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
-      }}
-    >
+    <div className="flex flex-col items-center">
+      <div
+        className="relative animate-fade-in rounded-[2.75rem] p-[10px]"
+        style={{
+          width: frameWidth,
+          height: DEVICE_HEIGHT + 20,
+          background: `linear-gradient(165deg, var(--border-subtle) 0%, var(--border-default) 35%, var(--background-secondary) 100%)`,
+          boxShadow:
+            "0 25px 50px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
+        }}
+      >
       {/* Inner screen: clip all content to device rounded shape (iPhone isn't a perfect rectangle) */}
       <div
         className="relative h-full w-full overflow-hidden rounded-[2.25rem] bg-[var(--background-tertiary)]"
@@ -346,7 +352,7 @@ function CSSDeviceFrame({
                   style={{ clipPath: "inset(0 round 2.25rem)" }}
                   aria-hidden
                 >
-                  {/* Before: visible on the left of the divider */}
+                  {/* Left half (before); no visible label inside frame — labels are below the phone */}
                   <div
                     className="absolute inset-0"
                     style={{
@@ -355,12 +361,12 @@ function CSSDeviceFrame({
                   >
                     <img
                       src={beforeUrl}
-                      alt="Before"
+                      alt=""
                       className="h-full w-full object-cover object-top"
                       draggable={false}
                     />
                   </div>
-                  {/* After: visible on the right of the divider */}
+                  {/* Right half (after); no visible label inside frame */}
                   <div
                     className="absolute inset-0"
                     style={{
@@ -369,21 +375,14 @@ function CSSDeviceFrame({
                   >
                     <img
                       src={afterUrl}
-                      alt="After"
+                      alt=""
                       className="h-full w-full object-cover object-top"
                       draggable={false}
                     />
                   </div>
-                  {/* Labels: fade in on hover */}
-                  <span className="pointer-events-none absolute left-3 top-1/2 z-[2] -translate-y-1/2 rounded bg-black/60 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                    Before
-                  </span>
-                  <span className="pointer-events-none absolute right-3 top-1/2 z-[2] -translate-y-1/2 rounded bg-black/60 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                    After
-                  </span>
-                  {/* Divider line + drag handle */}
+                  {/* Divider line + drag handle: wide transparent hit area so the handle is draggable */}
                   <div
-                    className="absolute top-0 bottom-0 z-[3] w-0 cursor-ew-resize"
+                    className="absolute top-0 bottom-0 z-[3] min-w-[40px] w-10 cursor-ew-resize"
                     style={{ left: `${splitPercent}%`, transform: "translateX(-50%)" }}
                     onMouseDown={handleMouseDown}
                     onTouchStart={handleTouchStart}
@@ -395,12 +394,12 @@ function CSSDeviceFrame({
                   >
                     {/* White vertical line */}
                     <div
-                      className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.3)]"
+                      className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.3)] pointer-events-none"
                       aria-hidden
                     />
                     {/* Circular handle with arrows */}
                     <div
-                      className="absolute left-1/2 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-black/70 shadow-md"
+                      className="absolute left-1/2 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-black/70 shadow-md pointer-events-none"
                       aria-hidden
                     >
                       <ChevronLeft className="h-4 w-4 text-white" strokeWidth={2.5} />
@@ -438,6 +437,30 @@ function CSSDeviceFrame({
           )}
         </div>
       </div>
+      </div>
+      {/* Before/After labels below the phone; fade in on first drag, then stay visible */}
+      {showComparison && (
+        <div
+          className="flex w-full items-center"
+          style={{ marginTop: 12, width: frameWidth }}
+          aria-hidden
+        >
+          <div className="flex flex-1 justify-center">
+            <span
+              className={`text-[11px] font-medium uppercase tracking-widest text-[var(--text-tertiary)] transition-opacity duration-200 ${labelsRevealed ? "opacity-100" : "opacity-0"}`}
+            >
+              Before
+            </span>
+          </div>
+          <div className="flex flex-1 justify-center">
+            <span
+              className={`text-[11px] font-medium uppercase tracking-widest text-[var(--text-tertiary)] transition-opacity duration-200 ${labelsRevealed ? "opacity-100" : "opacity-0"}`}
+            >
+              After
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
