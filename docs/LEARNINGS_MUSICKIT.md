@@ -39,6 +39,22 @@ The MusicKit skill now includes a **MUST DO (non-negotiable)** block at the top 
 
 ---
 
+## "Search failed: Could not access Apple Music"
+
+**What happened:** User taps "Build Playlist" and sees an error: "Search failed: Could not access Apple Music."
+
+**Root cause:** The app is trying to search or play before Apple Music is authorized, or the user hasn't authorized yet. On iOS, you must call `MusicAuthorization.request()` and wait for `.authorized` before any `MusicCatalogSearchRequest` or playback. If the "Build Playlist" button is enabled before authorization, or authorization is never requested on screen load, the user will hit this error.
+
+**Correct approach:**
+
+1. **Request authorization as soon as the screen appears** — call `MusicAuthorization.request()` in `.onAppear` (or in a `.task`) so the system prompt appears right away. Don't wait for the user to tap "Build Playlist."
+2. **Disable "Build Playlist" until authorized** — bind the button to `.disabled(!viewModel.isAuthorized)`. When not authorized, show "Authorize Apple Music first" and a button that calls `requestAuthorization()`.
+3. **If the user still sees "Could not access Apple Music"** after authorizing, they may need to check Settings > Music (signed in, Apple Music subscription for full catalog). Show a hint in the error message.
+
+**Skill update:** The MusicKit skill now requires authorization in `.onAppear` and lists this in `commonErrors` so the agent gets stronger guidance.
+
+---
+
 ## Prompt to fix an existing app that shows "developer token" or has Create and Play enabled before auth
 
 Send this as a **follow-up message** in the same Pro project (so the agent has the current files). Be explicit so the agent makes real code changes:
@@ -53,4 +69,22 @@ The app still shows "Failed to request developer token" when I tap Create and Pl
 3. Call MusicAuthorization.request() when the screen appears (e.g. in .onAppear or when the user taps "Authorize Apple Music first"). Do not call MusicCatalogSearchRequest or ApplicationMusicPlayer.play() until after authorization has returned .authorized.
 
 4. Wrap all MusicKit calls (authorization, search, play) in do/catch. On failure, show a user-friendly message like "Could not search" or "Playback failed" in an alert or inline text — never show the raw "Failed to request developer token" to the user. The app must not crash on errors.
+```
+
+---
+
+## Prompt to fix "Could not access Apple Music" (Build Playlist not working)
+
+Send this as a **follow-up message** in the same Playlist Builder (or MusicKit) project so the app fully works:
+
+```
+The app shows "Search failed: Could not access Apple Music" when I tap Build Playlist. Fix it so playlists actually build and play:
+
+1. Request Apple Music authorization as soon as the screen appears: in the main view, add .onAppear { Task { await viewModel.requestAuthorization() } } (or .task { await viewModel.requestAuthorization() }) so the system authorization prompt appears when the user opens the app. Do not wait for them to tap Build Playlist first.
+
+2. Disable the "Build Playlist" button until authorized. In the view model, keep isAuthorized = true only when MusicAuthorization.request() returns .authorized. In the view, set the Build Playlist button to .disabled(!viewModel.isAuthorized). When !viewModel.isAuthorized, show clear text like "Authorize Apple Music first" and a button that calls requestAuthorization() so the user can grant access.
+
+3. Only when isAuthorized is true should search or playback run. Guard every MusicCatalogSearchRequest and ApplicationMusicPlayer.play() path with a check for isAuthorized.
+
+4. If search or playback still fails (e.g. after authorization), show a helpful error message like "Could not access Apple Music. Check Settings > Music and ensure you're signed in with an Apple Music subscription." so the user knows what to check.
 ```

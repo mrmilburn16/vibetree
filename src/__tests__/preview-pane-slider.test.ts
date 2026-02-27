@@ -36,4 +36,11 @@ describe("PreviewPane before/after slider", () => {
     // Children of the divider should not capture pointer so the parent strip gets the event
     expect(content).toContain("pointer-events-none");
   });
+
+  it("divider has pointer-events-auto and wide hit area (64px) so it works after refresh", () => {
+    const content = readFileSync(PREVIEW_PANE_PATH, "utf8");
+    expect(content).toMatch(/pointer-events-auto/);
+    // 64px or w-16 so the handle is reliably clickable
+    expect(content).toMatch(/min-w-\[64px\]|w-16/);
+  });
 });

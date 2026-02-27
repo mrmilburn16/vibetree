@@ -150,6 +150,13 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
     if (usesMusicKit && /Failed to request developer token|developer token|developerToken/i.test(content)) {
       content = content.replace(/Failed to request developer token/gi, "Could not access Apple Music");
     }
+    // Sanitize runtime error display: Apple's API can return "Failed to request developer token"; don't show that.
+    if (usesMusicKit) {
+      content = content.replace(
+        /\berror\.localizedDescription\b/g,
+        '(error.localizedDescription.contains("developer token") ? "Could not access Apple Music" : error.localizedDescription)'
+      );
+    }
 
     const usesSoundAnalysis = /\b(SNAudioStreamAnalyzer|SNClassifySoundRequest|SNClassificationResult|SNResultsObserving|SNRequest)\b/.test(content);
     if (usesSoundAnalysis && !content.includes("import SoundAnalysis")) {

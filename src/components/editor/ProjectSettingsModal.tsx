@@ -8,10 +8,12 @@ import {
   Layers,
   Info,
   RotateCcw,
+  Columns2,
 } from "lucide-react";
 import { Modal, Button, Input, DropdownSelect } from "@/components/ui";
 import { updateProject, type Project } from "@/lib/projects";
 import type { SelectOption } from "@/components/ui";
+import { getBeforeAfterEnabled, setBeforeAfterEnabled as saveBeforeAfterPreference } from "./PreviewPane";
 
 const XCODE_TEAM_ID_PREFIX = "vibetree-xcode-team-id:";
 const XCODE_BUNDLE_ID_OVERRIDE_PREFIX = "vibetree-xcode-bundle-id:";
@@ -238,6 +240,7 @@ export function ProjectSettingsModal({
   const [settings, setSettings] = useState<ProjectSettings>(() => loadSettings(project.id, universalDefaults));
   const [runnerDevices, setRunnerDevices] = useState<RunnerDevicesResponse | null>(null);
   const [devicesLoading, setDevicesLoading] = useState(false);
+  const [beforeAfterEnabled, setBeforeAfterEnabled] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -245,6 +248,7 @@ export function ProjectSettingsModal({
       setBundleId(project.bundleId);
       setNameError("");
       setBundleError("");
+      setBeforeAfterEnabled(getBeforeAfterEnabled());
       const ud = loadUniversalDefaults();
       setUniversalDefaults(ud);
       setSettings(loadSettings(project.id, ud));
@@ -342,6 +346,7 @@ export function ProjectSettingsModal({
     updateProject(project.id, { name: name.trim(), bundleId: bundleId.trim() });
     onProjectUpdate({ name: name.trim(), bundleId: bundleId.trim() });
     saveSettings(project.id, settings);
+    saveBeforeAfterPreference(beforeAfterEnabled);
     onClose();
   }
 
@@ -653,6 +658,29 @@ export function ProjectSettingsModal({
                 </button>
               )}
             </div>
+          </div>
+        </section>
+
+        <div className="border-t border-[var(--border-default)]" />
+
+        {/* ── Preview ── */}
+        <section>
+          <SectionHeader
+            icon={Columns2}
+            title="Preview"
+            description="Simulator preview options"
+          />
+          <div className="space-y-3 pl-11">
+            <label className="flex cursor-pointer items-center gap-3">
+              <input
+                type="checkbox"
+                checked={beforeAfterEnabled}
+                onChange={(e) => setBeforeAfterEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-[var(--border-default)] bg-[var(--background-secondary)] text-[var(--link-default)] focus:ring-2 focus:ring-[var(--focus-ring)]"
+              />
+              <span className="text-sm text-[var(--text-primary)]">Before/after comparison</span>
+            </label>
+            <HelpTip>When enabled, the simulator preview shows a draggable slider to compare the previous and current build. Off by default.</HelpTip>
           </div>
         </section>
 

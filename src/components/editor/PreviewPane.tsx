@@ -17,6 +17,26 @@ const SCREEN_INSET = { top: 7.5, right: 5, bottom: 7.5, left: 5 };
 
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
 
+/** When true, show before/after comparison slider when two frames exist. Default false. */
+const PREVIEW_BEFORE_AFTER_KEY = "vibetree-preview-before-after-enabled";
+
+export function getBeforeAfterEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(PREVIEW_BEFORE_AFTER_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function setBeforeAfterEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.setItem(PREVIEW_BEFORE_AFTER_KEY, "true");
+    else localStorage.removeItem(PREVIEW_BEFORE_AFTER_KEY);
+    window.dispatchEvent(new CustomEvent("vibetree-preview-settings-changed"));
+  } catch {}
+}
+
 export function PreviewPane({
   buildStatus,
   buildFailureReason = null,
@@ -166,8 +186,16 @@ function CSSDeviceFrame({
   const [splitPercent, setSplitPercent] = useState(50);
   /** Labels below the phone fade in on first drag and stay visible. */
   const [labelsRevealed, setLabelsRevealed] = useState(false);
+  /** User preference: show before/after comparison (default off). Updated when settings modal saves. */
+  const [comparisonEnabled, setComparisonEnabled] = useState(() => getBeforeAfterEnabled());
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+
+  useEffect(() => {
+    const onSettingsChange = () => setComparisonEnabled(getBeforeAfterEnabled());
+    window.addEventListener("vibetree-preview-settings-changed", onSettingsChange);
+    return () => window.removeEventListener("vibetree-preview-settings-changed", onSettingsChange);
+  }, []);
 
   useEffect(() => {
     if (buildStatus !== "live" || !isPro || !projectId) {
@@ -293,7 +321,7 @@ function CSSDeviceFrame({
     };
   }, [handleMove]);
 
-  const showComparison = isPro && beforeUrl && afterUrl;
+  const showComparison = comparisonEnabled && isPro && beforeUrl && afterUrl;
   const showSingle = isPro && simulatorPreviewUrl && !showComparison;
   const frameWidth = DEVICE_WIDTH + 20;
 
@@ -380,9 +408,9 @@ function CSSDeviceFrame({
                       draggable={false}
                     />
                   </div>
-                  {/* Divider line + drag handle: wide transparent hit area so the handle is draggable */}
+                  {/* Divider line + drag handle: wide hit area (64px) so the handle is always draggable after refresh */}
                   <div
-                    className="absolute top-0 bottom-0 z-[3] min-w-[40px] w-10 cursor-ew-resize"
+                    className="absolute top-0 bottom-0 z-[4] min-w-[64px] w-16 cursor-ew-resize pointer-events-auto touch-none"
                     style={{ left: `${splitPercent}%`, transform: "translateX(-50%)" }}
                     onMouseDown={handleMouseDown}
                     onTouchStart={handleTouchStart}

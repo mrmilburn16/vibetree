@@ -1,5 +1,7 @@
 # Cursor Rules
 
+**For system-improvement or cloud agents:** See **`AGENTS.md`** in the repo root (do not build apps; use build-results and code edits only).
+
 Quick reference — rules live in `rules/` with numbered prefixes:
 
 | File | What it covers |
