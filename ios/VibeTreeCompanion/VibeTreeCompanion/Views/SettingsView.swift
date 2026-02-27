@@ -62,6 +62,7 @@ struct SettingsView: View {
                     }
                     Spacer()
                     Button("Sign Out") {
+                        HapticService.heavy()
                         auth.signOut()
                     }
                     .font(Forest.font(size: Forest.textSm, weight: .medium))

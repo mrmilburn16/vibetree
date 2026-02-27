@@ -175,6 +175,9 @@ struct ForestPrimaryButtonStyle: ButtonStyle {
             .cornerRadius(Forest.radiusSm)
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, pressed in
+                if pressed, !isDisabled { HapticService.medium() }
+            }
     }
 }
 
@@ -187,6 +190,9 @@ struct ForestSecondaryButtonStyle: ButtonStyle {
             .padding(.vertical, Forest.space3)
             .background(configuration.isPressed ? Forest.buttonSecondaryHover : Forest.buttonSecondaryBg)
             .cornerRadius(Forest.radiusSm)
+            .onChange(of: configuration.isPressed) { _, pressed in
+                if pressed { HapticService.light() }
+            }
     }
 }
 

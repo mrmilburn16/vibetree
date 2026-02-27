@@ -1,5 +1,7 @@
 import SwiftUI
 
+private let deleteConfirmText = "DELETE"
+
 struct ProjectListView: View {
     @StateObject private var service = ProjectService.shared
     @StateObject private var credits = CreditsService.shared
@@ -8,6 +10,8 @@ struct ProjectListView: View {
     @State private var pendingPrompt: String?
     @State private var heroAppeared = false
     @State private var creditsMenuOpen = false
+    @State private var deleteTargetProject: Project?
+    @State private var deleteConfirmInput = ""
     @FocusState private var isPromptFocused: Bool
 
     private let suggestionChips = [
@@ -84,6 +88,22 @@ struct ProjectListView: View {
             }
             .navigationDestination(item: $navigateToProject) { project in
                 EditorView(project: project, pendingPrompt: pendingPrompt)
+            }
+            .sheet(item: $deleteTargetProject) { project in
+                deleteAppSheet(
+                    project: project,
+                    confirmInput: $deleteConfirmInput,
+                    onCancel: {
+                        deleteTargetProject = nil
+                        deleteConfirmInput = ""
+                    },
+                    onConfirm: {
+                        HapticService.heavy()
+                        Task { await service.deleteProject(id: project.id) }
+                        deleteTargetProject = nil
+                        deleteConfirmInput = ""
+                    }
+                )
             }
             .overlay {
                 if creditsMenuOpen {
@@ -185,6 +205,7 @@ struct ProjectListView: View {
                 HStack(spacing: Forest.space2) {
                     ForEach(suggestionChips, id: \.self) { chip in
                         Button {
+                            HapticService.selection()
                             promptText = chip
                             submitPrompt()
                         } label: {
@@ -203,6 +224,7 @@ struct ProjectListView: View {
                     }
 
                     Button {
+                        HapticService.selection()
                         promptText = randomPrompts.randomElement() ?? "Surprise me"
                         submitPrompt()
                     } label: {
@@ -261,6 +283,7 @@ struct ProjectListView: View {
                     Button {
                         Task {
                             if let project = await service.createProject(name: "Untitled app", type: .pro) {
+                                pendingPrompt = nil
                                 navigateToProject = project
                             }
                         }
@@ -279,6 +302,7 @@ struct ProjectListView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(service.projects.enumerated()), id: \.element.id) { index, project in
                         Button {
+                            pendingPrompt = nil
                             navigateToProject = project
                         } label: {
                             projectRow(project)
@@ -293,7 +317,9 @@ struct ProjectListView: View {
                         .contentShape(Rectangle())
                         .contextMenu {
                             Button(role: .destructive) {
-                                Task { await service.deleteProject(id: project.id) }
+                                HapticService.heavy()
+                                deleteConfirmInput = ""
+                                deleteTargetProject = project
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
@@ -345,7 +371,67 @@ struct ProjectListView: View {
                 .font(Forest.font(size: 12, weight: .medium))
                 .foregroundColor(Forest.textTertiary)
         }
+        .contentShape(Rectangle())
         .padding(.horizontal, Forest.space4)
         .padding(.vertical, Forest.space3)
+    }
+
+    // MARK: - Delete app sheet (matches web: type DELETE to confirm)
+
+    private func deleteAppSheet(
+        project: Project,
+        confirmInput: Binding<String>,
+        onCancel: @escaping () -> Void,
+        onConfirm: @escaping () -> Void
+    ) -> some View {
+        let canDelete = confirmInput.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines) == deleteConfirmText
+        return NavigationStack {
+            VStack(alignment: .leading, spacing: Forest.space4) {
+                Text("This will permanently delete this app and its data. This cannot be undone.")
+                    .font(Forest.font(size: Forest.textSm))
+                    .foregroundColor(Forest.textSecondary)
+
+                (Text("Type ") + Text(deleteConfirmText).fontWeight(.semibold) + Text(" to confirm:"))
+                    .font(Forest.font(size: Forest.textSm))
+                    .foregroundColor(Forest.textTertiary)
+                TextField(deleteConfirmText, text: confirmInput)
+                    .font(Forest.fontMono(size: Forest.textSm))
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .padding(Forest.space3)
+                    .background(Forest.backgroundPrimary)
+                    .foregroundColor(Forest.textPrimary)
+                    .cornerRadius(Forest.radiusMd)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Forest.radiusMd)
+                            .stroke(Forest.border, lineWidth: 1)
+                    )
+
+                Spacer(minLength: 0)
+            }
+            .padding(Forest.space5)
+            .background(Forest.backgroundSecondary)
+            .navigationTitle("Delete app")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                    .font(Forest.font(size: Forest.textSm, weight: .medium))
+                    .foregroundColor(Forest.textSecondary)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Delete") {
+                        onConfirm()
+                    }
+                    .font(Forest.font(size: Forest.textSm, weight: .medium))
+                    .foregroundColor(Forest.destructiveText)
+                    .disabled(!canDelete)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }

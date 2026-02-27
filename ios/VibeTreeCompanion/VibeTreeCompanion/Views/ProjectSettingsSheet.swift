@@ -150,7 +150,7 @@ struct ProjectSettingsSheet: View {
             ) {
                 menuField(value: minIOSVersion) {
                     ForEach(iosVersionOptions, id: \.self) { v in
-                        Button(v) { minIOSVersion = v; minIOSOverride = true }
+                        Button(v) { HapticService.selection(); minIOSVersion = v; minIOSOverride = true }
                     }
                 }
             }
@@ -165,7 +165,7 @@ struct ProjectSettingsSheet: View {
             ) {
                 menuField(value: deviceFamilyOptions.first(where: { $0.value == deviceFamily })?.label ?? "iPhone only") {
                     ForEach(deviceFamilyOptions, id: \.value) { opt in
-                        Button(opt.label) { deviceFamily = opt.value; deviceFamilyOverride = true }
+                        Button(opt.label) { HapticService.selection(); deviceFamily = opt.value; deviceFamilyOverride = true }
                     }
                 }
             }
@@ -180,7 +180,7 @@ struct ProjectSettingsSheet: View {
             ) {
                 menuField(value: orientationOptions.first(where: { $0.value == orientation })?.label ?? "All orientations") {
                     ForEach(orientationOptions, id: \.value) { opt in
-                        Button(opt.label) { orientation = opt.value; orientationOverride = true }
+                        Button(opt.label) { HapticService.selection(); orientation = opt.value; orientationOverride = true }
                     }
                 }
             }

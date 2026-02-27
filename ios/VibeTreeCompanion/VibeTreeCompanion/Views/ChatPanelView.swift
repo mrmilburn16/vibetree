@@ -18,6 +18,10 @@ struct ChatPanelView: View {
 
     private let maxChars = 4000
 
+    private func triggerDropdownHaptic() {
+        HapticService.light()
+    }
+
     private var blockSendUntilPreflight: Bool {
         guard selectedProjectType == .pro else { return false }
         if preflightLoading { return true }
@@ -58,16 +62,17 @@ struct ChatPanelView: View {
         }
         .overlay {
             if isLLMMenuOpen {
-                ZStack(alignment: .topTrailing) {
+                ZStack(alignment: .top) {
                     Color.black.opacity(0.001)
                         .ignoresSafeArea()
                         .contentShape(Rectangle())
                         .onTapGesture { isLLMMenuOpen = false }
-                    VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        Spacer(minLength: Forest.space2)
                         llmDropdownList
+                        Spacer(minLength: Forest.space2)
                     }
                     .padding(.top, 56)
-                    .padding(.trailing, 16)
                     .zIndex(1)
                 }
             }
@@ -106,6 +111,8 @@ struct ChatPanelView: View {
 
             projectTypeMenu
             llmMenu
+
+            Spacer(minLength: Forest.space2)
 
             if chatService.isStreaming {
                 Button {
@@ -168,6 +175,7 @@ struct ChatPanelView: View {
         Menu {
             ForEach(ProjectType.dropdownOrder, id: \.rawValue) { type in
                 Button {
+                    HapticService.selection()
                     selectedProjectType = type
                 } label: {
                     HStack {
@@ -192,6 +200,7 @@ struct ChatPanelView: View {
                     .font(Forest.font(size: 14, weight: .medium))
                     .foregroundColor(Forest.textTertiary)
             }
+            .contentShape(Rectangle())
             .padding(.leading, Forest.space3)
             .padding(.trailing, Forest.space4)
             .frame(minWidth: 160, minHeight: 40, maxHeight: 40)
@@ -202,12 +211,14 @@ struct ChatPanelView: View {
                 RoundedRectangle(cornerRadius: Forest.radiusMd)
                     .stroke(Forest.inputBorder, lineWidth: 2)
             )
+            .simultaneousGesture(TapGesture().onEnded { triggerDropdownHaptic() })
         }
         .buttonStyle(.plain)
     }
 
     private var llmMenu: some View {
         Button {
+            triggerDropdownHaptic()
             isLLMMenuOpen.toggle()
         } label: {
             HStack(spacing: Forest.space2) {
@@ -267,6 +278,7 @@ struct ChatPanelView: View {
             ForEach(LLMOption.options) { option in
                 Button {
                     if !option.disabled {
+                        HapticService.selection()
                         selectedModel = option
                         isLLMMenuOpen = false
                     }
@@ -569,6 +581,7 @@ struct ChatPanelView: View {
 
     private func sendIfPossible() {
         guard canSend else { return }
+        HapticService.medium()
         let text = inputText
         inputText = ""
         isInputFocused = false

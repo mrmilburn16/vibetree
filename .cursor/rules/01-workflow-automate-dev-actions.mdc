@@ -14,6 +14,6 @@ When code or config changes require it, **you** must perform the action — do n
   When the user or the task implies that changes should be pushed (e.g. "push this", "save to github", or after finishing a feature): run `git add`, `git commit` with a clear message, and `git push` yourself. Do not say "you can push to GitHub" or "remember to push"; do the push.
 
 - **Install iOS companion on iPhone**  
-  After finishing any change that touches the iOS companion app (e.g. `ios/` or Swift/companion code), run `npm run ios:install` so the app builds, installs, and launches on the user’s connected iPhone. Do this automatically unless the user has said not to.
+  Whenever you would say "after rebuilding the iOS app", "rebuild and run on your phone", or similar: **run it yourself** in that same response. After any change that touches the iOS companion app (e.g. `ios/` or Swift/companion code), run `npm run ios:install` so the app builds, installs, and launches on the user’s connected iPhone. Do not only suggest it — execute the command. Skip only if the user has said not to or doesn’t want the app on device right now.
 
 Only ask the user to do something when it truly requires their credentials, their machine, or a decision only they can make (e.g. choosing a branch, resolving a merge conflict, or approving a deploy).

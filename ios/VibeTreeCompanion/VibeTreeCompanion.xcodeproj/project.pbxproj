@@ -13,6 +13,7 @@
 		10898404EA7D4B1A05FC8165 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CD4869FE21CD800B7861AF /* AuthService.swift */; };
 		14608538428C0D9A7A80276E /* ProBuildPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE7F19BDFCCD81AB931B5AA /* ProBuildPreviewView.swift */; };
 		1488902AF94D973346B9D8AF /* ProjectService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B04B6FBAC82870527B724C /* ProjectService.swift */; };
+		1A2B3C4D5E6F7A8B9C0D1E2F /* HapticService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B8C9D0E1F2A3B4C5D6E7F8 /* HapticService.swift */; };
 		1D5BCE24AB9AA58DC149F981 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99D21CAE83135F29D3AE6FAA /* SignInView.swift */; };
 		2A2F511B52D26357476FD028 /* CreditBalance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E1A7228514CE21D41B0F459 /* CreditBalance.swift */; };
 		2BF347C9167B61A1D64A74AE /* BuildActivityLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A94C98DB0ED32D8F97A47C7 /* BuildActivityLiveActivity.swift */; };
@@ -86,6 +87,7 @@
 		3FEF5B45B4C2284D0C52A33D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		40C6405D7C6E05BEB87C8672 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
 		42B04B6FBAC82870527B724C /* ProjectService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectService.swift; sourceTree = "<group>"; };
+		A7B8C9D0E1F2A3B4C5D6E7F8 /* HapticService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticService.swift; sourceTree = "<group>"; };
 		481429A5C8D3D216F2FAF35B /* DeviceFrameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceFrameView.swift; sourceTree = "<group>"; };
 		4D0504AF9B88680980739A32 /* DeviceRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
 		51394EED4FD473DE5363C6C7 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
@@ -232,6 +234,7 @@
 				D23547693987332EDA69896E /* CreditsService.swift */,
 				D0ED858E18B1F05FD393CBCF /* NotificationService.swift */,
 				42B04B6FBAC82870527B724C /* ProjectService.swift */,
+				A7B8C9D0E1F2A3B4C5D6E7F8 /* HapticService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -350,6 +353,7 @@
 				2E9316E1D49B916CE5670710 /* DeviceRegistration.swift in Sources */,
 				363A621ACFED275B23283E49 /* EditorView.swift in Sources */,
 				7BB8DE76A8593B087DEAAE51 /* ForestTheme.swift in Sources */,
+				1A2B3C4D5E6F7A8B9C0D1E2F /* HapticService.swift in Sources */,
 				EF90C9703AA810674D6004BD /* GuidedModeView.swift in Sources */,
 				D07B899FC3654A441969B29A /* InstallOnDeviceSheet.swift in Sources */,
 				710C8A00190400EE7719B64E /* MainTabView.swift in Sources */,

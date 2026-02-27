@@ -59,4 +59,62 @@ describe("Project delete sync (both devices)", () => {
     const getRes = await getProject(new Request("http://test"), { params: Promise.resolve({ id: projectId }) });
     expect(getRes.status).toBe(404);
   });
+
+  it("delete on web → iOS recent apps list does not show deleted project (GET after DELETE)", async () => {
+    const beforeRes = await getProjectsList();
+    const beforeData = await beforeRes.json();
+    const beforeIds = (beforeData.projects ?? []).map((p: { id: string }) => p.id);
+    expect(beforeIds).toContain(projectId);
+
+    await deleteProject(new Request("http://test/api/projects/" + projectId, { method: "DELETE" }), {
+      params: Promise.resolve({ id: projectId }),
+    });
+
+    const afterRes = await getProjectsList();
+    const afterData = await afterRes.json();
+    const afterIds = (afterData.projects ?? []).map((p: { id: string }) => p.id);
+    expect(afterIds).not.toContain(projectId);
+    expect(afterIds.length).toBe(beforeIds.length - 1);
+  });
+});
+
+describe("PATCH project name uniquification", () => {
+  const idA = "proj_uniq_a";
+  const idB = "proj_uniq_b";
+
+  beforeEach(() => {
+    setProjects([
+      {
+        id: idA,
+        name: "To-Do List",
+        bundleId: "com.vibetree.a",
+        projectType: "pro",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+      {
+        id: idB,
+        name: "Untitled app",
+        bundleId: "com.vibetree.b",
+        projectType: "pro",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ]);
+  });
+
+  it("PATCH with duplicate name returns uniquified name (2)", async () => {
+    const { PATCH } = await import("@/app/api/projects/[id]/route");
+    const res = await PATCH(
+      new Request("http://test/api/projects/" + idB, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "To-Do List" }),
+      }),
+      { params: Promise.resolve({ id: idB }) }
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.name).toBe("To-Do List (2)");
+  });
 });

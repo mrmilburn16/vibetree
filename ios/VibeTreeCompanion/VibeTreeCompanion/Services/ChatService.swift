@@ -58,11 +58,30 @@ final class ChatService: ObservableObject {
             if !history.isEmpty {
                 messages = history
                 buildStatus = .ready
+                if suggestedProjectName == nil, let name = Self.appNameFromHistory(history) {
+                    suggestedProjectName = name
+                }
             }
         } catch {
             hasLoadedHistory = false
             logger.error("loadHistory failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Extract "App name: X" from the most recent assistant message so the nav title shows the real name.
+    private static func appNameFromHistory(_ history: [ChatMessage]) -> String? {
+        let prefix = "App name: "
+        for msg in history.reversed() {
+            guard msg.role == .assistant else { continue }
+            let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if text.hasPrefix(prefix) {
+                let rest = text.dropFirst(prefix.count)
+                let firstLine = rest.prefix(while: { $0 != "\n" })
+                let name = String(firstLine).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !name.isEmpty, !isUntitledName(name) { return name }
+            }
+        }
+        return nil
     }
 
     /// Persist current conversation to server (stable messages only). Call after stream completes.
@@ -97,11 +116,18 @@ final class ChatService: ObservableObject {
         streamingFileCount = 0
         recentFiles = []
 
+        if Self.isUntitledName(initialProjectName),
+           let derived = Self.deriveTitleFromPrompt(trimmed),
+           !Self.isUntitledName(derived) {
+            suggestedProjectName = derived
+        }
+
         let assistantId = UUID().uuidString
         messages.append(ChatMessage(
             id: assistantId,
             role: .assistant,
-            text: "",
+            text: Self.phaseLabel("starting_request"),
+            phase: "starting_request",
             isStreaming: true,
             createdAt: Date()
         ))
@@ -337,7 +363,7 @@ final class ChatService: ObservableObject {
         buildStatus = .failed("Connection lost and recovery timed out")
     }
 
-    /// Finalize a successful build — update message, notify, auto-title.
+    /// Finalize a successful build — remove file progress, update message, set app name first, notify.
     private func finalizeSuccess(
         assistantMessageId: String,
         editedFiles: [String],
@@ -346,10 +372,35 @@ final class ChatService: ObservableObject {
         elapsed: Double?,
         prompt: String
     ) {
+        messages.removeAll { $0.id == "stream-files-progress-\(assistantMessageId)" }
+
+        let rawContent = doneContent ?? ""
+        let autoTitle = Self.isUntitledName(initialProjectName)
+            ? (Self.deriveTitleFromPrompt(prompt) ?? Self.deriveTitleFromSummary(rawContent))
+            : nil
+        if let autoTitle, !Self.isUntitledName(autoTitle) {
+            suggestedProjectName = autoTitle
+            Task { @MainActor in
+                do {
+                    let updated = try await APIService.shared.updateProject(id: projectId, name: autoTitle, bundleId: nil)
+                    suggestedProjectName = updated.name
+                    ProjectService.shared.updateProjectName(id: projectId, name: updated.name)
+                } catch {
+                    suggestedProjectName = autoTitle
+                    ProjectService.shared.updateProjectName(id: projectId, name: autoTitle)
+                }
+            }
+        }
+
         if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
-            let finalText = doneContent ?? "Build complete."
-            messages[idx].text = finalText.isEmpty ? "Build complete." : finalText
-            messages[idx].editedFiles = editedFiles.isEmpty ? nil : editedFiles
+            var finalText = rawContent.trimmingCharacters(in: .whitespacesAndNewlines)
+            if finalText.isEmpty { finalText = "Build complete." }
+            if let autoTitle, !Self.isUntitledName(autoTitle) {
+                finalText = "App name: \(autoTitle)\n\n\(finalText)"
+            }
+            messages[idx].text = finalText
+            let fileListOrder = discoveredFiles.isEmpty ? editedFiles : discoveredFiles
+            messages[idx].editedFiles = fileListOrder.isEmpty ? nil : fileListOrder
             messages[idx].discoveredFiles = discoveredFiles.isEmpty ? nil : discoveredFiles
             messages[idx].isStreaming = false
             if let elapsed { messages[idx].elapsedMs = elapsed }
@@ -359,20 +410,11 @@ final class ChatService: ObservableObject {
         buildStatus = .ready
 
         if !editedFiles.isEmpty {
+            HapticService.success()
             NotificationService.shared.showLocalNotification(
                 title: "Your app is ready!",
                 body: "Open Vibetree to view your app."
             )
-            if Self.isUntitledName(initialProjectName) {
-                let rawContent = doneContent ?? ""
-                let autoTitle = Self.deriveTitleFromPrompt(prompt) ?? Self.deriveTitleFromSummary(rawContent)
-                if let autoTitle, !Self.isUntitledName(autoTitle) {
-                    suggestedProjectName = autoTitle
-                    Task {
-                        try? await APIService.shared.updateProject(id: projectId, name: autoTitle, bundleId: nil)
-                    }
-                }
-            }
         }
 
         persistChat()
@@ -475,8 +517,6 @@ final class ChatService: ObservableObject {
         }
 
         if eventType == "file", let path = json["path"] as? String {
-            let count = (json["count"] as? NSNumber)?.intValue ?? (discoveredFiles.count + 1)
-            let fileName = (path as NSString).lastPathComponent
             if !discoveredFiles.contains(path) {
                 discoveredFiles.append(path)
                 streamingFileCount = discoveredFiles.count
@@ -485,15 +525,27 @@ final class ChatService: ObservableObject {
             if !editedFiles.contains(path) {
                 editedFiles.append(path)
             }
-            let fileMsg = ChatMessage(
-                id: "stream-file-\(count)-\(Int(Date().timeIntervalSince1970 * 1000))",
+            let progressId = "stream-files-progress-\(assistantMessageId)"
+            let basenames = discoveredFiles.map { ($0 as NSString).lastPathComponent }
+            let maxNames = 6
+            let filesPart = basenames.isEmpty
+                ? "Writing \(discoveredFiles.count) file\(discoveredFiles.count == 1 ? "" : "s")…"
+                : (basenames.prefix(maxNames).joined(separator: ", ") + (basenames.count > maxNames ? " +\(basenames.count - maxNames) more…" : "…"))
+            let progressText = "Writing…"
+            let progressMsg = ChatMessage(
+                id: progressId,
                 role: .assistant,
-                text: "Creating \(fileName) · \(path)"
+                text: progressText,
+                editedFiles: discoveredFiles.isEmpty ? nil : discoveredFiles,
+                isStreaming: true
             )
-            if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
-                messages.insert(fileMsg, at: idx)
+            if let existingIdx = messages.firstIndex(where: { $0.id == progressId }) {
+                messages[existingIdx].text = progressText
+                messages[existingIdx].editedFiles = discoveredFiles.isEmpty ? nil : discoveredFiles
+            } else if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
+                messages.insert(progressMsg, at: idx)
             } else {
-                messages.append(fileMsg)
+                messages.append(progressMsg)
             }
         }
 

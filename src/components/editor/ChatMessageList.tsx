@@ -60,36 +60,23 @@ function StreamProgressBar({ messages }: { messages: ChatMessage[] }) {
   const countMatch = lastFile.content.match(/\(file (\d+)\)/);
   const currentCount = countMatch ? parseInt(countMatch[1], 10) : fileMessages.length;
   const fileNames = fileMessages.map((m) => {
-    const match = m.content.match(/^Writing (.+?)(?:\s+\(file|$| ·)/);
-    return match?.[1] ?? m.content;
-  });
+    const match = m.content.match(/^Writing (.+?)(?:\s*\(file \d+\))?$/);
+    return match ? match[1].trim() : null;
+  }).filter(Boolean) as string[];
+  const displayNames = fileNames.length > 0 ? fileNames.join(", ") : `${currentCount} ${currentCount === 1 ? "file" : "files"}`;
 
   return (
     <div className="mb-1 rounded-lg border border-[var(--border-default)]/50 bg-[var(--background-secondary)]/50 px-3 py-2">
-      <div className="mb-1.5 flex items-center justify-between text-xs text-[var(--text-tertiary)]">
+      <div className="flex items-center justify-between gap-2 text-xs text-[var(--text-tertiary)]">
         <span>Building app…</span>
-        <span className="font-mono">{currentCount} {currentCount === 1 ? "file" : "files"}</span>
+        <span className="font-mono truncate" title={displayNames}>{displayNames}</span>
       </div>
-      <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--border-default)]/40">
+      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-[var(--border-default)]/40">
         <div
           className="h-full rounded-full bg-[var(--button-primary-bg)] transition-all duration-300 ease-out"
           style={{ width: "100%" }}
         />
       </div>
-      {fileNames.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
-          {fileNames.slice(-8).map((name, i) => (
-            <span key={i} className="text-[10px] font-mono text-[var(--text-tertiary)]/70">
-              {name}
-            </span>
-          ))}
-          {fileNames.length > 8 && (
-            <span className="text-[10px] text-[var(--text-tertiary)]/50">
-              +{fileNames.length - 8} more
-            </span>
-          )}
-        </div>
-      )}
     </div>
   );
 }

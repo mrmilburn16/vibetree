@@ -106,17 +106,17 @@ struct MessageBubbleView: View {
         }
     }
 
-    // MARK: - Reasoning (agent updates: Creating X.swift, Receiving code… — white so they read clearly)
+    // MARK: - Reasoning (agent status: Writing N files…, Receiving code… — grey so user knows it’s activity, not the reply)
 
     private var reasoningBubble: some View {
-        HStack {
+        HStack(alignment: .top, spacing: 0) {
             Text(message.text)
                 .font(Forest.font(size: Forest.textXs))
-                .foregroundColor(Forest.textPrimary)
+                .foregroundColor(Forest.textTertiary)
                 .lineSpacing(2)
+                .padding(.leading, Forest.space2)
                 .padding(.vertical, 1)
-
-            Spacer()
+            Spacer(minLength: 44)
         }
     }
 
@@ -127,15 +127,26 @@ struct MessageBubbleView: View {
         message.isStreaming && (message.text.contains("\n") || message.text.contains("Generating "))
     }
 
+    /// Progress-style messages (Writing…, phase lines, file list) use grey so user sees activity, not the reply.
+    private var isProgressStyle: Bool {
+        guard message.role == .assistant, message.isStreaming else { return false }
+        if message.editedFiles?.isEmpty == false { return true }
+        let t = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.contains("\n") { return true }
+        let phaseLike: Set<String> = ["Writing…", "Receiving code…", "Starting…", "Saving files…", "Waiting for first tokens…", "Complete"]
+        return phaseLike.contains(t)
+    }
+
     @ViewBuilder
     private var streamingText: some View {
         let words = message.text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         let total = words.count
+        let progressColor = isProgressStyle ? Forest.textTertiary : Forest.textPrimary
 
         if message.isStreaming && !hasAnimated && !isBuildLog {
             Text(words.prefix(visibleWordCount).joined(separator: " "))
                 .font(Forest.font(size: Forest.textSm))
-                .foregroundColor(Forest.textPrimary)
+                .foregroundColor(progressColor)
                 .lineSpacing(3)
                 .textSelection(.enabled)
                 .onAppear { startWordAnimation(totalWords: total) }
@@ -146,7 +157,7 @@ struct MessageBubbleView: View {
         } else {
             Text(message.text)
                 .font(Forest.font(size: Forest.textSm))
-                .foregroundColor(Forest.textPrimary)
+                .foregroundColor(progressColor)
                 .lineSpacing(3)
                 .textSelection(.enabled)
                 .onAppear { if !isBuildLog { hasAnimated = true } }
@@ -166,14 +177,18 @@ struct MessageBubbleView: View {
         }
     }
 
-    // MARK: - File list (inline comma-separated monospace, like desktop)
+    // MARK: - File list (one line per file: "creating App.swift", grey)
 
     private func fileList(_ files: [String]) -> some View {
-        Text(files.joined(separator: ", "))
-            .font(Forest.fontMono(size: Forest.textXs))
-            .foregroundColor(Forest.textSecondary)
-            .lineLimit(3)
-            .padding(.top, message.text.isEmpty ? 0 : Forest.space2)
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(files, id: \.self) { path in
+                let basename = (path as NSString).lastPathComponent
+                Text("creating \(basename)")
+                    .font(Forest.fontMono(size: Forest.textXs))
+                    .foregroundColor(Forest.textTertiary)
+            }
+        }
+        .padding(.top, message.text.isEmpty ? 0 : Forest.space2)
     }
 
     // MARK: - Metadata (dot-separated, like desktop)

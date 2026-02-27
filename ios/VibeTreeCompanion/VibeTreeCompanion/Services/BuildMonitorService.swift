@@ -84,11 +84,13 @@ final class BuildMonitorService: ObservableObject {
         for job in recent where job.status.isTerminal {
             guard !notifiedSet.contains(job.id) else { continue }
             if job.status == .succeeded {
+                HapticService.success()
                 NotificationService.shared.showLocalNotification(
                     title: "Your app is ready!",
                     body: "\(job.projectName) built successfully in \(job.elapsedFormatted)."
                 )
             } else {
+                HapticService.error()
                 NotificationService.shared.showLocalNotification(
                     title: "Build failed",
                     body: "\(job.projectName) failed: \(job.error ?? "Unknown error")"

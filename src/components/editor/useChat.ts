@@ -135,7 +135,7 @@ function titleCase(s: string): string {
     .join(" ");
 }
 
-function deriveTitleFromPrompt(prompt: string): string | null {
+export function deriveTitleFromPrompt(prompt: string): string | null {
   const p = (prompt ?? "").trim().replace(/\s+/g, " ");
   if (!p) return null;
   const m = p.match(/^(?:build|create|make|design)\s+(?:an?|the)\s+(.+?)(?:[.\n,]| with | that | which | where |$)/i);
@@ -145,7 +145,7 @@ function deriveTitleFromPrompt(prompt: string): string | null {
   return titleCase(candidate).slice(0, 42);
 }
 
-function deriveTitleFromSummary(summary: string): string | null {
+export function deriveTitleFromSummary(summary: string): string | null {
   const s = (summary ?? "").trim().replace(/\s+/g, " ");
   if (!s) return null;
   const m = s.match(/^(?:built|created|made)\s+(?:an?|the)\s+(.+?)(?:[.\n,]| with | that | which | where |$)/i);
@@ -155,7 +155,7 @@ function deriveTitleFromSummary(summary: string): string | null {
   return titleCase(candidate).slice(0, 42);
 }
 
-function isUntitledName(name: string | undefined | null): boolean {
+export function isUntitledName(name: string | undefined | null): boolean {
   const n = (name ?? "").trim().toLowerCase();
   return !n || n === "untitled app" || n === "untitled";
 }
@@ -715,7 +715,7 @@ export function useChat(
                 const fileMsg: ChatMessage = {
                   id: `stream-file-${streamRunId}-${typeof event.count === "number" ? event.count : Date.now()}`,
                   role: "assistant",
-                  content: `Writing ${event.path.split("/").pop() ?? event.path}${typeof event.count === "number" ? ` (file ${event.count})` : ""} · ${event.path}`,
+                  content: `Writing ${event.path.split("/").pop() ?? event.path}${typeof event.count === "number" ? ` (file ${event.count})` : ""}`,
                 };
                 setMessages((prev) => {
                   const idx = prev.findIndex((m) => m.id === progressMessageId);
@@ -801,6 +801,12 @@ export function useChat(
           };
           const rawContent = am?.content ?? "";
           let editedFiles = Array.isArray(am?.editedFiles) ? am.editedFiles : [];
+          if (discoveredFilePaths.length > 0) {
+            editedFiles = [
+              ...discoveredFilePaths.filter((p) => editedFiles.includes(p)),
+              ...editedFiles.filter((p) => !discoveredFilePaths.includes(p)),
+            ];
+          }
           const shouldPrefixBuilt = editedFiles.length > 0;
           const content =
             rawContent.trim().length === 0
@@ -823,25 +829,38 @@ export function useChat(
             isUntitledName(projectName)
               ? deriveTitleFromPrompt(trimmed) ?? deriveTitleFromSummary(rawContent)
               : null;
-          if (autoTitle && !isUntitledName(autoTitle)) {
-            updateProjectNameInLocalStorage(projectId, autoTitle);
-            onProjectRenamed?.(autoTitle);
-            fetch(`/api/projects/${projectId}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: autoTitle }),
-            }).catch(() => {});
+          let finalName: string | null = autoTitle && !isUntitledName(autoTitle) ? autoTitle : null;
+          if (finalName) {
+            try {
+              const res = await fetch(`/api/projects/${projectId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: finalName }),
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (typeof data?.name === "string" && data.name.trim()) finalName = data.name.trim();
+              }
+            } catch {
+              /* use finalName as-is */
+            }
+            updateProjectNameInLocalStorage(projectId, finalName);
+            onProjectRenamed?.(finalName);
           }
-          const projectNameForLogs = autoTitle ?? projectName ?? "Unknown";
+          const projectNameForLogs = finalName ?? projectName ?? "Unknown";
           const isProBuild =
             projectFiles.length > 0 &&
             projectFiles.some((f: { path: string }) => f.path.endsWith(".swift"));
           const validateMessageId = `validate-${Date.now()}`;
           const generationElapsedMs = Date.now() - localStartedAt;
+          const contentWithTitle =
+            finalName && !isUntitledName(finalName)
+              ? `App name: ${finalName}\n\n${content}`
+              : content;
           const realMessage: ChatMessage = {
             id: am?.id ?? validateMessageId,
             role: "assistant",
-            content,
+            content: contentWithTitle,
             editedFiles,
             ...(usage && { usage }),
             ...(estimatedCostUsd !== undefined && { estimatedCostUsd }),

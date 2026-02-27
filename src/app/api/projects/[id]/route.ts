@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getProject, updateProject, deleteProject } from "@/lib/projectStore";
+import { getProject, updateProject, deleteProject, uniquifyProjectName } from "@/lib/projectStore";
 import { getProjectFilePaths } from "@/lib/projectFileStore";
 import { updateProjectInFirestore, deleteProjectFromFirestore } from "@/lib/projectsFirestore";
 
@@ -32,7 +32,7 @@ export async function PATCH(
   }
   const body = await request.json().catch(() => ({}));
   const updates: { name?: string; bundleId?: string; projectType?: "standard" | "pro" } = {};
-  if (typeof body.name === "string") updates.name = body.name;
+  if (typeof body.name === "string") updates.name = uniquifyProjectName(id, body.name.trim());
   if (typeof body.bundleId === "string") updates.bundleId = body.bundleId;
   if (body.projectType === "standard" || body.projectType === "pro") updates.projectType = body.projectType;
   const project = updateProject(id, updates);

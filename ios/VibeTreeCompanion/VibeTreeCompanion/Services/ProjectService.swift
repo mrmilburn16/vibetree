@@ -38,4 +38,10 @@ final class ProjectService: ObservableObject {
             self.error = error.localizedDescription
         }
     }
+
+    /// Update a project's name in the local list so Recent Apps shows the correct title (e.g. "To Do List") without refetch.
+    func updateProjectName(id: String, name: String) {
+        guard let idx = projects.firstIndex(where: { $0.id == id }) else { return }
+        projects[idx].name = name
+    }
 }

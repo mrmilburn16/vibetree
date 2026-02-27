@@ -39,6 +39,20 @@ export function listProjects(): ProjectRecord[] {
   return Array.from(store.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+/** Returns a display name unique among other projects (e.g. "To-Do List" -> "To-Do List (2)" if already used). */
+export function uniquifyProjectName(projectId: string, name: string): string {
+  const trimmed = (name ?? "").trim();
+  if (!trimmed) return trimmed;
+  const others = listProjects()
+    .filter((p) => p.id !== projectId)
+    .map((p) => p.name);
+  if (!others.includes(trimmed)) return trimmed;
+  const base = trimmed.replace(/\s*\(\d+\)\s*$/, "").trim() || trimmed;
+  let n = 2;
+  while (others.includes(`${base} (${n})`)) n++;
+  return `${base} (${n})`;
+}
+
 export function createProject(name: string, projectType: "standard" | "pro" = "pro"): ProjectRecord {
   const id = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const bundleId = makeDefaultBundleId(id);
