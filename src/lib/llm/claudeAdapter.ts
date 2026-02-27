@@ -6,12 +6,26 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
+import { readFileSync, existsSync } from "fs";
+import { join } from "path";
 import type { LLMResponse } from "./mockAdapter";
 import {
   parseStructuredResponse,
   type StructuredResponse,
 } from "./parseStructuredResponse";
 import { buildAppliedRulesPromptBlock } from "@/lib/qa/appliedRules";
+
+/** INTEGRATIONS.md as a prompt block so the agent has the source of truth when generating Swift apps. */
+function getIntegrationsBlock(): string {
+  const path = join(process.cwd(), "INTEGRATIONS.md");
+  if (!existsSync(path)) return "";
+  try {
+    const content = readFileSync(path, "utf8");
+    return `\n\n---\n\nINTEGRATIONS.md (source of truth — follow setup patterns, Swift code patterns, and agent behavior for each integration):\n\n${content}`;
+  } catch {
+    return "";
+  }
+}
 
 /** Map UI model values to Anthropic API model IDs. GPT 5.2 is disabled in the UI until OpenAI is wired. */
 const MODEL_MAP: Record<string, string> = {
@@ -49,6 +63,8 @@ const SYSTEM_PROMPT_SWIFT = `You are an expert Swift and SwiftUI developer. You 
 
 Output format: Respond with a single JSON object only. No other text before or after.
 Shape: { "summary": "1-2 sentence description of what you built or changed", "files": [ { "path": "App.swift", "content": "full Swift source..." }, { "path": "ContentView.swift", "content": "..." }, ... ] }
+
+- Integrations: Before generating any app that uses an integration (MusicKit, WeatherKit, MapKit, CoreLocation, HealthKit, Sign in with Apple, etc.), check INTEGRATIONS.md for the correct setup pattern, common errors, and agent behavior instructions for that integration. Always follow the Swift code pattern documented there.
 
 Critical — Follow user requests: Whatever the user asks for, you MUST do it and output the full updated JSON with all project files. This includes any change: change a word, add a button, change a color, rename something, move a view, add a screen, etc. Do not return empty files. Do not say "no change needed" or leave the app unchanged. Apply the user's request and return the complete modified files. User requests override default style or design guidance. Color changes are the most common edit request. When a user says "change X to Y color", find the exact modifier and update only that value. Never regenerate the whole file for a color change.
 
@@ -248,8 +264,10 @@ export async function getClaudeResponse(
   const basePrompt =
     options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
   const qaRulesBlock = buildAppliedRulesPromptBlock();
+  const integrationsBlock =
+    options?.projectType === "pro" ? getIntegrationsBlock() : "";
   const systemPrompt =
-    basePrompt + (options?.skillPromptBlock ?? "") + qaRulesBlock;
+    basePrompt + (options?.skillPromptBlock ?? "") + qaRulesBlock + integrationsBlock;
 
   const response = await client.messages.create({
     model,
@@ -336,8 +354,10 @@ async function getClaudeResponseStream(
   const basePrompt =
     options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
   const qaRulesBlock = buildAppliedRulesPromptBlock();
+  const integrationsBlock =
+    options?.projectType === "pro" ? getIntegrationsBlock() : "";
   const systemPrompt =
-    basePrompt + (options?.skillPromptBlock ?? "") + qaRulesBlock;
+    basePrompt + (options?.skillPromptBlock ?? "") + qaRulesBlock + integrationsBlock;
 
   let lastReported = 0;
   const throttleChars = 80;

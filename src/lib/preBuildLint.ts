@@ -107,6 +107,22 @@ export function preBuildLint(files: SwiftFile[]): LintResult {
     }
   }
 
+  // MusicKit library playlist: adding Album (or empty-identifier items) to playlist causes "No catalogID, libraryID" — use only Song from catalog.
+  for (const f of result) {
+    if (!f.path.endsWith(".swift")) continue;
+    const usesLibraryAdd =
+      /MusicLibrary\.shared\.add\s*\(/.test(f.content) || /MusicLibrary\.shared\.createPlaylist\s*\(/.test(f.content);
+    if (usesLibraryAdd && /\b(Album|album)\s*[,\)]|add\s*\(\s*album\s*,|for\s+\w*[Aa]lbum\s+in/.test(f.content)) {
+      warnings.push({
+        file: f.path,
+        message:
+          "MusicLibrary.add/createPlaylist: adding Album or non-Song items causes 'No catalogID, libraryID' — use only Song from MusicCatalogSearchRequest(..., types: [Song.self]).response().songs",
+        severity: "warning",
+        autoFixed: false,
+      });
+    }
+  }
+
   // Force unwrap in view body causes EXC_BREAKPOINT / KeyPath assertion at launch (common crash on device).
   for (const f of result) {
     if (!f.path.endsWith(".swift")) continue;

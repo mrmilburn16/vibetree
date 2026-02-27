@@ -48,5 +48,10 @@ export default function EditorPage() {
     );
   }
 
-  return <EditorLayout project={project} />;
+  const refreshProject = () => {
+    const p = getProject(id);
+    if (p) setProject(p);
+  };
+
+  return <EditorLayout project={project} onProjectSaved={refreshProject} />;
 }

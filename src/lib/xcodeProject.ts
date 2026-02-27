@@ -118,7 +118,7 @@ const PRIVACY_RULES: PrivacyRule[] = [
     description: "This app uses NFC.",
   },
   {
-    patterns: [/\bimport MusicKit\b/, /\bApplicationMusicPlayer\b/, /\bMusicCatalogSearchRequest\b/, /\bMusicLibraryRequest\b/, /\bMusicPersonalRecommendationsRequest\b/],
+    patterns: [/\bimport MusicKit\b/, /\bApplicationMusicPlayer\b/, /\bMusicCatalogSearchRequest\b/, /\bMusicLibraryRequest\b/, /\bMusicPersonalRecommendationsRequest\b/, /\bMusicLibrary\b/],
     key: "NSAppleMusicUsageDescription",
     description: "This app uses Apple Music to search and play your music.",
   },
@@ -218,7 +218,7 @@ const FRAMEWORK_RULES: FrameworkRule[] = [
     framework: "SafariServices",
   },
   {
-    patterns: [/\bimport MusicKit\b/, /\bApplicationMusicPlayer\b/, /\bMusicCatalogSearchRequest\b/, /\bMusicLibraryRequest\b/, /\bMusicPersonalRecommendationsRequest\b/, /\bMusicItem\b/],
+    patterns: [/\bimport MusicKit\b/, /\bApplicationMusicPlayer\b/, /\bMusicCatalogSearchRequest\b/, /\bMusicLibraryRequest\b/, /\bMusicPersonalRecommendationsRequest\b/, /\bMusicItem\b/, /\bMusicLibrary\b/],
     framework: "MusicKit",
   },
 ];

@@ -51,7 +51,14 @@ function getStoredChatWidth(): number {
   return n;
 }
 
-export function EditorLayout({ project }: { project: Project }) {
+export function EditorLayout({
+  project,
+  onProjectSaved,
+}: {
+  project: Project;
+  /** Called after project settings are saved so the parent can refresh project from storage. */
+  onProjectSaved?: () => void;
+}) {
   const [projectName, setProjectName] = useState(project.name);
   useEffect(() => {
     if (project?.name) setProjectName(project.name);
@@ -391,6 +398,7 @@ export function EditorLayout({ project }: { project: Project }) {
         project={project}
         onProjectUpdate={(updates) => {
           if (updates.name) setProjectName(updates.name);
+          onProjectSaved?.();
         }}
       />
       <RunOnDeviceModal

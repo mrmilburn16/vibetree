@@ -1,6 +1,6 @@
 # System Improvement Agent — Mission & Instructions
 
-**See also:** **`AGENTS.md`** in the repo root — short "do not build apps" rule and infrastructure list for future agents.
+**See also:** **`AGENTS.md`** in the repo root — short "do not build apps" rule and infrastructure list for future agents. **`docs/FIRST_TRY_INTEGRATION.md`** — playbook for pre-wiring a new capability (e.g. MapKit) so the first user prompt works without hours of back-and-forth.
 
 ## Mission (what you are improving)
 

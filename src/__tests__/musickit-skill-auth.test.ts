@@ -51,4 +51,32 @@ describe("MusicKit skill — authorization and playlist flow", () => {
     );
     expect(hasAccessError).toBe(true);
   });
+
+  it("instructs to use only Song from catalog search when adding to library playlist", () => {
+    const skill = loadSkill("musickit");
+    expect(skill).not.toBeNull();
+    const injection = skill!.promptInjection;
+    expect(injection).toMatch(/MusicLibrary|createPlaylist|add.*playlist/i);
+    expect(injection).toMatch(/Song.*catalog search|only.*Song|types: \[Song\.self\]/i);
+    expect(injection).toMatch(/do NOT use Album|empty identifier|No catalogID|libraryID/i);
+  });
+
+  it("mentions -7013 / real device for library playlist creation", () => {
+    const skill = loadSkill("musickit");
+    expect(skill).not.toBeNull();
+    const injection = skill!.promptInjection;
+    expect(injection).toMatch(/-7013|entitled|account store|real device|Simulator/i);
+  });
+
+  it("lists empty identifier set and -7013 in commonErrors for library playlist", () => {
+    const skill = loadSkill("musickit");
+    expect(skill).not.toBeNull();
+    const errors = skill!.stats?.commonErrors ?? [];
+    const hasIdError = errors.some(
+      (e) =>
+        typeof e === "string" &&
+        (/catalogID|libraryID|EMPTY|Album|7013|entitled to access/i.test(e))
+    );
+    expect(hasIdError).toBe(true);
+  });
 });

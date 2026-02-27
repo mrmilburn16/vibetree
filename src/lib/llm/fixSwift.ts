@@ -142,7 +142,7 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       content = "import ShazamKit\n" + content;
     }
 
-    const usesMusicKit = /\b(ApplicationMusicPlayer|MusicCatalogSearchRequest|MusicLibraryRequest|MusicPersonalRecommendationsRequest|MusicItem\b|MusicKit\.)\b/.test(content);
+    const usesMusicKit = /\b(ApplicationMusicPlayer|MusicCatalogSearchRequest|MusicLibraryRequest|MusicPersonalRecommendationsRequest|MusicItem\b|MusicKit\.|MusicLibrary\b)\b/.test(content);
     if (usesMusicKit && !content.includes("import MusicKit")) {
       content = "import MusicKit\n" + content;
     }

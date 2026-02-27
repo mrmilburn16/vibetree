@@ -23,6 +23,7 @@ If you are the **system improvement agent** (improving prompts, skills, and fixe
 | Resource | Purpose |
 |----------|---------|
 | **`docs/SYSTEM_IMPROVEMENT_AGENT.md`** | Full instructions for the system improvement agent: mission, how the system works, levers, process, copy-paste brief. |
+| **`docs/FIRST_TRY_INTEGRATION.md`** | Playbook to pre-wire a new capability (e.g. MapKit) so the first user prompt works — skill + learnings + checklist. |
 | **`docs/LEARNINGS_MUSICKIT.md`** | MusicKit failure modes and fix prompts (e.g. "Could not access Apple Music", developer token, authorization-first). |
 | **`docs/DELEGATABLE_TASKS.md`** | (If present) List of tasks a cloud agent can do without building apps. |
 | **`data/build-results.jsonl`** | Build outcomes and compiler errors; input for data-driven improvements. |
