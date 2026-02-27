@@ -11,12 +11,19 @@ const CLAUDE_ADAPTER = path.resolve(process.cwd(), "src/lib/llm/claudeAdapter.ts
 const MESSAGE_ROUTE = path.resolve(process.cwd(), "src/app/api/projects/[id]/message/route.ts");
 
 describe("System prompt: Critical background and app name rules", () => {
-  it("structuredOutput SYSTEM_PROMPT_SWIFT includes Critical — Background (no flat black, use gradient)", () => {
+  it("structuredOutput SYSTEM_PROMPT_SWIFT includes Critical — Follow user requests (any request: change word, add button, etc.)", () => {
+    const content = fs.readFileSync(STRUCTURED_OUTPUT, "utf8");
+    expect(content).toContain("Critical — Follow user requests");
+    expect(content).toMatch(/Whatever the user asks for|you MUST do it/);
+    expect(content).toMatch(/change a word|add a button|change a color/);
+    expect(content).toMatch(/Do not return empty files|Apply the user's request/);
+  });
+
+  it("structuredOutput SYSTEM_PROMPT_SWIFT includes Critical — Background (no flat black; user color request overrides)", () => {
     const content = fs.readFileSync(STRUCTURED_OUTPUT, "utf8");
     expect(content).toContain("Critical — Background");
     expect(content).toMatch(/Do NOT use Color\.black/);
-    expect(content).toMatch(/LinearGradient/);
-    expect(content).toMatch(/secondarySystemBackground/);
+    expect(content).toMatch(/user explicitly requests a specific background color|User requests override/);
   });
 
   it("structuredOutput SYSTEM_PROMPT_SWIFT includes Critical — App name (do not rename)", () => {

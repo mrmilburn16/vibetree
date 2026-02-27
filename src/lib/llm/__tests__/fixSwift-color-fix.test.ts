@@ -61,7 +61,7 @@ describe("fixSwift: ColorColorColor and ColorColor fix", () => {
 });
 
 describe("fixSwift: black/flat background → subtle gradient", () => {
-  const GRADIENT = "LinearGradient(colors: [Color(.secondarySystemBackground), Color(.systemBackground)], startPoint: .top, endPoint: .bottom)";
+  const GRADIENT = "LinearGradient(colors: [Color(.systemGray4), Color(.secondarySystemBackground)], startPoint: .top, endPoint: .bottom)";
 
   it("replaces .background(Color.black) with gradient", () => {
     const files = [

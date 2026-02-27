@@ -16,3 +16,8 @@ export function setSimulatorFrame(projectId: string, buffer: Buffer): void {
 export function getSimulatorFrame(projectId: string): { buffer: Buffer; updatedAt: number } | undefined {
   return frames.get(projectId);
 }
+
+/** Clear the stored frame so the preview shows loading until a new build posts a frame. Call when project files are updated. */
+export function clearSimulatorFrame(projectId: string): void {
+  frames.delete(projectId);
+}

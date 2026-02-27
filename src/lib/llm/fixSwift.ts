@@ -32,8 +32,9 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
     }
 
     // Avoid plain black or flat-color full-screen backgrounds (looks unfinished in dark mode).
-    // Replace with a subtle gradient that looks polished in both light and dark.
-    const GRADIENT_BG = "LinearGradient(colors: [Color(.secondarySystemBackground), Color(.systemBackground)], startPoint: .top, endPoint: .bottom)";
+    // Use systemGray4 → secondarySystemBackground so in dark mode the top is visibly gray (#3A3A3C)
+    // not pure black; in light mode it adapts to a soft light gradient.
+    const GRADIENT_BG = "LinearGradient(colors: [Color(.systemGray4), Color(.secondarySystemBackground)], startPoint: .top, endPoint: .bottom)";
     content = content.replace(/\.background\s*\(\s*Color\.black\s*\)/g, `.background(${GRADIENT_BG})`);
     content = content.replace(/\.background\s*\{\s*Color\.black\s*\}/g, `.background { ${GRADIENT_BG} }`);
     content = content.replace(/ZStack\s*\{\s*Color\.black\b/g, `ZStack { ${GRADIENT_BG}`);

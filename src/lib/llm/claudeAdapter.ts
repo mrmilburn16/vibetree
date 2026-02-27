@@ -50,7 +50,9 @@ const SYSTEM_PROMPT_SWIFT = `You are an expert Swift and SwiftUI developer. You 
 Output format: Respond with a single JSON object only. No other text before or after.
 Shape: { "summary": "1-2 sentence description of what you built or changed", "files": [ { "path": "App.swift", "content": "full Swift source..." }, { "path": "ContentView.swift", "content": "..." }, ... ] }
 
-Critical — Background: Do NOT use Color.black, Color(.systemBackground), or any solid flat color as the full-screen root background — they all appear as plain black in dark mode and look unfinished. Instead, ALWAYS use a subtle LinearGradient for the root ZStack background. Example: LinearGradient(colors: [Color(.secondarySystemBackground), Color(.systemBackground)], startPoint: .top, endPoint: .bottom).ignoresSafeArea(). Pick gradient colors that complement the app's accent/theme. Only use a flat near-black when the concept explicitly requires it (e.g. cinema mode, photo viewer).
+Critical — Follow user requests: Whatever the user asks for, you MUST do it and output the full updated JSON with all project files. This includes any change: change a word, add a button, change a color, rename something, move a view, add a screen, etc. Do not return empty files. Do not say "no change needed" or leave the app unchanged. Apply the user's request and return the complete modified files. User requests override default style or design guidance. Color changes are the most common edit request. When a user says "change X to Y color", find the exact modifier and update only that value. Never regenerate the whole file for a color change.
+
+Critical — Background: Do NOT use Color.black as the full-screen root background by default. Prefer a subtle LinearGradient that matches the app's theme. HOWEVER: if the user explicitly requests any background color or gradient (e.g. "change background to orange", "make it blue", "use a red background"), you MUST apply exactly what they asked for — no substitutions, no gradients unless they asked for a gradient. User color requests are absolute and override all default background rules. Apply them immediately and confirm in the summary.
 
 Critical — App name: When the user message includes "The app is already named X" (or similar), the app has been renamed. Do NOT change the app name, window title, or navigation title to a different name unless the user explicitly asks to rename the app. Keep the existing name in all titles and labels.
 
@@ -237,7 +239,7 @@ export async function getClaudeResponse(
       options.projectName.trim().length > 0
         ? `The app is already named "${options.projectName.trim()}". Do not change the app name, window title, or navigation title unless the user explicitly asks to rename the app.\n\n`
         : "";
-    userContent = `${preserveName}Current project files (apply the user's request to these and output the full updated JSON):\n${JSON.stringify(options.currentFiles)}\n\nUser request: ${message}`;
+    userContent = `${preserveName}Current project files (apply the user's request to these and output the full updated JSON):\n${JSON.stringify(options.currentFiles)}\n\nUser request: ${message}\n\nInstructions: Apply only what the user asked for. Return the complete updated file(s) with that change applied—full content for each file. Do not return the same content unchanged; the user must see their requested change in the app.`;
   } else {
     userContent = message;
   }
@@ -325,7 +327,7 @@ async function getClaudeResponseStream(
       options.projectName.trim().length > 0
         ? `The app is already named "${options.projectName.trim()}". Do not change the app name, window title, or navigation title unless the user explicitly asks to rename the app.\n\n`
         : "";
-    userContent = `${preserveName}Current project files (apply the user's request to these and output the full updated JSON):\n${JSON.stringify(options.currentFiles)}\n\nUser request: ${message}`;
+    userContent = `${preserveName}Current project files (apply the user's request to these and output the full updated JSON):\n${JSON.stringify(options.currentFiles)}\n\nUser request: ${message}\n\nInstructions: Apply only what the user asked for. Return the complete updated file(s) with that change applied—full content for each file. Do not return the same content unchanged; the user must see their requested change in the app.`;
   } else {
     userContent = message;
   }

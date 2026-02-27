@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, ChevronLeft, ChevronRight } from "lucide-react";
 import { QRCode } from "@/components/ui";
 import { ReadyIndicator } from "./ReadyIndicator";
 import { FailedIndicator } from "./FailedIndicator";
@@ -154,12 +154,28 @@ function CSSDeviceFrame({
 }) {
   const [simulatorPreviewUrl, setSimulatorPreviewUrl] = useState<string | null>(null);
   const blobUrlRef = useRef<string | null>(null);
+  /** When we transition to "live", record time so we only show frames newer than this (skip previous build's frame). */
+  const liveSinceRef = useRef<number>(0);
+  /** Previous frame URL; when a new one arrives, we get before/after for the comparison slider. */
+  const prevSimulatorUrlRef = useRef<string | null>(null);
+
+  /** Before/after for comparison slider. Only set when we receive a new screenshot after an edit (second+ frame). */
+  const [beforeUrl, setBeforeUrl] = useState<string | null>(null);
+  const [afterUrl, setAfterUrl] = useState<string | null>(null);
+  /** Split position 0–100; 50 = half. Dragging left reveals more before, right more after. */
+  const [splitPercent, setSplitPercent] = useState(50);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
 
   useEffect(() => {
     if (buildStatus !== "live" || !isPro || !projectId) {
       setSimulatorPreviewUrl(null);
+      setBeforeUrl(null);
+      setAfterUrl(null);
+      prevSimulatorUrlRef.current = null;
       return;
     }
+    liveSinceRef.current = Date.now();
     let cancelled = false;
     let inFlight = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -174,10 +190,12 @@ function CSSDeviceFrame({
     const poll = async () => {
       if (cancelled || inFlight) return;
       inFlight = true;
+      const updatedAfter = liveSinceRef.current || 0;
       try {
-        const res = await fetch(`/api/projects/${projectId}/simulator-preview?t=${Date.now()}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `/api/projects/${projectId}/simulator-preview?t=${Date.now()}${updatedAfter ? `&updatedAfter=${updatedAfter}` : ""}`,
+          { cache: "no-store" }
+        );
         if (cancelled) return;
         // No frame yet: back off to avoid hammering the server (and your laptop).
         if (!res.ok) {
@@ -186,9 +204,21 @@ function CSSDeviceFrame({
         }
         const blob = await res.blob();
         if (cancelled) return;
+        const prevUrl = blobUrlRef.current;
         if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = URL.createObjectURL(blob);
-        setSimulatorPreviewUrl(blobUrlRef.current);
+        const newUrl = blobUrlRef.current;
+        setSimulatorPreviewUrl(newUrl);
+        // When we get a new frame and we had a previous one, store before/after for comparison.
+        if (prevUrl && newUrl !== prevUrl) {
+          setBeforeUrl((b) => {
+            if (b && b.startsWith("blob:")) URL.revokeObjectURL(b);
+            return prevUrl;
+          });
+          setAfterUrl(newUrl);
+          setSplitPercent(50);
+        }
+        prevSimulatorUrlRef.current = newUrl;
         // Got a frame: return to fast polling for smoother updates.
         scheduleNext(SIMULATOR_POLL_MS);
       } catch {
@@ -207,8 +237,60 @@ function CSSDeviceFrame({
         blobUrlRef.current = null;
       }
       setSimulatorPreviewUrl(null);
+      prevSimulatorUrlRef.current = null;
     };
   }, [buildStatus, isPro, projectId]);
+
+  const handleMove = useCallback((clientX: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const pct = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    setSplitPercent(pct);
+  }, []);
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      isDraggingRef.current = true;
+      handleMove(e.clientX);
+    },
+    [handleMove]
+  );
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      isDraggingRef.current = true;
+      handleMove(e.touches[0].clientX);
+    },
+    [handleMove]
+  );
+
+  useEffect(() => {
+    if (!isDraggingRef.current) return;
+    const onMove = (e: MouseEvent) => handleMove(e.clientX);
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      handleMove(e.touches[0].clientX);
+    };
+    const onUp = () => {
+      isDraggingRef.current = false;
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onUp);
+    };
+  }, [handleMove]);
+
+  const showComparison = isPro && beforeUrl && afterUrl;
+  const showSingle = isPro && simulatorPreviewUrl && !showComparison;
 
   return (
     <div
@@ -257,7 +339,76 @@ function CSSDeviceFrame({
                 className="absolute inset-0 pointer-events-none animate-screen-shine rounded-[2.25rem] bg-white/[0.03]"
                 aria-hidden
               />
-              {isPro && simulatorPreviewUrl ? (
+              {showComparison ? (
+                <div
+                  ref={containerRef}
+                  className="group absolute inset-0 overflow-hidden rounded-[2.25rem] select-none"
+                  style={{ clipPath: "inset(0 round 2.25rem)" }}
+                  aria-hidden
+                >
+                  {/* Before: visible on the left of the divider */}
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      clipPath: `inset(0 ${100 - splitPercent}% 0 0)`,
+                    }}
+                  >
+                    <img
+                      src={beforeUrl}
+                      alt="Before"
+                      className="h-full w-full object-cover object-top"
+                      draggable={false}
+                    />
+                  </div>
+                  {/* After: visible on the right of the divider */}
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      clipPath: `inset(0 0 0 ${splitPercent}%)`,
+                    }}
+                  >
+                    <img
+                      src={afterUrl}
+                      alt="After"
+                      className="h-full w-full object-cover object-top"
+                      draggable={false}
+                    />
+                  </div>
+                  {/* Labels: fade in on hover */}
+                  <span className="pointer-events-none absolute left-3 top-1/2 z-[2] -translate-y-1/2 rounded bg-black/60 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                    Before
+                  </span>
+                  <span className="pointer-events-none absolute right-3 top-1/2 z-[2] -translate-y-1/2 rounded bg-black/60 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                    After
+                  </span>
+                  {/* Divider line + drag handle */}
+                  <div
+                    className="absolute top-0 bottom-0 z-[3] w-0 cursor-ew-resize"
+                    style={{ left: `${splitPercent}%`, transform: "translateX(-50%)" }}
+                    onMouseDown={handleMouseDown}
+                    onTouchStart={handleTouchStart}
+                    role="slider"
+                    aria-label="Before/after comparison"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(splitPercent)}
+                  >
+                    {/* White vertical line */}
+                    <div
+                      className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.3)]"
+                      aria-hidden
+                    />
+                    {/* Circular handle with arrows */}
+                    <div
+                      className="absolute left-1/2 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-black/70 shadow-md"
+                      aria-hidden
+                    >
+                      <ChevronLeft className="h-4 w-4 text-white" strokeWidth={2.5} />
+                      <ChevronRight className="h-4 w-4 text-white" strokeWidth={2.5} />
+                    </div>
+                  </div>
+                </div>
+              ) : showSingle ? (
                 <div
                   className="absolute inset-0 overflow-hidden rounded-[2.25rem]"
                   style={{ clipPath: "inset(0 round 2.25rem)" }}
@@ -266,8 +417,7 @@ function CSSDeviceFrame({
                   <img
                     src={simulatorPreviewUrl}
                     alt="Simulator preview"
-                    className="h-full w-full object-contain object-top"
-                    style={{ paddingTop: 40, paddingLeft: 12, paddingRight: 12, paddingBottom: 12 }}
+                    className="h-full w-full object-cover object-top"
                   />
                 </div>
               ) : (
