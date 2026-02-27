@@ -11,6 +11,7 @@ import { estimateCostUsd } from "@/lib/llm/usageCost";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { enrichWithSkills } from "@/lib/llm/promptEnrichment";
 import { detectSkills, buildSkillPromptBlock } from "@/lib/skills/registry";
+import { getIntegrationsBaseUrl } from "@/lib/integrationsBaseUrl";
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -53,7 +54,11 @@ export async function POST(
           : ("standard" as const));
   const { message: enrichedMessage, skillIds } = enrichWithSkills(projectType, message);
   const skillMatches = projectType === "pro" ? detectSkills(message) : [];
-  const skillPromptBlock = buildSkillPromptBlock(skillMatches);
+  let skillPromptBlock = buildSkillPromptBlock(skillMatches);
+  skillPromptBlock = skillPromptBlock.replace(
+    /\{\{VIBETREE_API_BASE_URL\}\}/g,
+    getIntegrationsBaseUrl()
+  );
 
   if (useRealLLM && !hasApiKey) {
     return NextResponse.json(

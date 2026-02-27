@@ -10,6 +10,7 @@ import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { startGeneration, updateGenerationPhase, endGeneration } from "@/lib/activeGenerations";
 import { enrichWithSkills } from "@/lib/llm/promptEnrichment";
 import { detectSkills, buildSkillPromptBlock } from "@/lib/skills/registry";
+import { getIntegrationsBaseUrl } from "@/lib/integrationsBaseUrl";
 import { logLLMAnalytics } from "@/lib/llm/analyticsLog";
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -65,7 +66,11 @@ export async function POST(
   console.log("[message/stream] start", { projectId, projectType, model: body.model, msgLen: message.length });
   const { message: enrichedMessage, skillIds } = enrichWithSkills(projectType, message);
   const skillMatches = projectType === "pro" ? detectSkills(message) : [];
-  const skillPromptBlock = buildSkillPromptBlock(skillMatches);
+  let skillPromptBlock = buildSkillPromptBlock(skillMatches);
+  skillPromptBlock = skillPromptBlock.replace(
+    /\{\{VIBETREE_API_BASE_URL\}\}/g,
+    getIntegrationsBaseUrl()
+  );
 
   if (!hasApiKey) {
     return Response.json(

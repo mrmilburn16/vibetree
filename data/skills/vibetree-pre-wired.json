@@ -1,0 +1,46 @@
+{
+  "id": "vibetree-pre-wired",
+  "name": "Vibetree pre-wired integrations (X, Email, Stripe, Google)",
+  "frameworks": ["SwiftUI", "Foundation"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "post to X",
+      "post to Twitter",
+      "post on X",
+      "tweet",
+      "send email",
+      "contact form",
+      "email form",
+      "notify by email",
+      "payment",
+      "tip",
+      "pay",
+      "Stripe",
+      "checkout",
+      "Google sign in",
+      "sign in with Google",
+      "Continue with Google",
+      "Google login"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "CAPABILITY: Vibetree pre-wired integrations\n\nVibetree provides backend endpoints so your app can post to X, send email, accept payments, and sign in with Google WITHOUT the app builder managing OAuth, API keys, or provider dashboards. The generated app calls Vibetree's API; secrets stay on the server.\n\n**Base URL:** Use {{VIBETREE_API_BASE_URL}} for all endpoints below. The app must receive projectId (and optionally userId for multi-user apps) at runtime, e.g. from a config struct or from the app builder's setup.\n\n**X (Twitter) posting:**\n- Connect: Open URL `{{VIBETREE_API_BASE_URL}}/api/integrations/x/connect?projectId=\\(projectId)` (add `&userId=\\(userId)` if multi-user). Use Link or openURL. After OAuth, user returns to app.\n- Post: POST `{{VIBETREE_API_BASE_URL}}/api/integrations/x/post` with JSON body `{ \"projectId\": projectId, \"userId\": userId?, \"text\": \"tweet text\" }`. Max 280 chars. Use URLSession. Returned: `{ success, tweetId }`.\n- Include a \"Connect X\" button that opens the connect URL, and a \"Post\" action that calls the post endpoint. Show connection status.\n\n**Email sending:**\n- POST `{{VIBETREE_API_BASE_URL}}/api/integrations/email/send` with JSON `{ \"projectId\": projectId, \"to\": \"email@example.com\", \"subject\": \"Subject\", \"text\": \"body\" }`. No OAuth; works immediately. Use for contact forms, notifications.\n\n**Stripe payments:**\n- POST `{{VIBETREE_API_BASE_URL}}/api/integrations/stripe/create-checkout` with JSON `{ \"projectId\": projectId, \"amountCents\": 999, \"currency\": \"usd\", \"successUrl\": \"myapp://success\", \"cancelUrl\": \"myapp://cancel\" }`. Returns `{ url }`. Open the URL in Safari or SFSafariViewController for checkout. No Stripe SDK or keys in the app.\n\n**Google Sign-In:**\n- Connect: Open URL `{{VIBETREE_API_BASE_URL}}/api/integrations/google/connect?projectId=\\(projectId)` (add `&userId=\\(userId)` if multi-user). After OAuth, user returns to app.\n- Get profile: GET `{{VIBETREE_API_BASE_URL}}/api/integrations/google/me?projectId=\\(projectId)` returns `{ googleId, email, name }`. Call after connect to show \"Signed in as [email]\".\n\n**Implementation rules:**\n- Store projectId (and userId if multi-user) in a config or @AppStorage. The app builder sets these when creating the app.\n- For Connect flows (X, Google), use Link(destination:url) or .onOpenURL to open the connect URL in the system browser. Handle the return (e.g. via universal link or query params on success redirect).\n- For POST requests, use URLSession with JSON body and appropriate headers (Content-Type: application/json).\n- Do NOT implement OAuth, API keys, or provider SDKs in the app. All secrets live on Vibetree's backend.\n- Show clear UI: \"Connect X\" / \"Connected\" status, \"Send email\" button, \"Pay\" button, \"Continue with Google\" button.",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Implementing Twitter/X OAuth or API keys in the app",
+    "Implementing Google OAuth or client ID in the app",
+    "Adding Stripe SDK or publishable key to the app",
+    "Adding Resend/SendGrid/Mailgun API keys to the app"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}
