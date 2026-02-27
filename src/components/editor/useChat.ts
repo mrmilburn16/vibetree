@@ -542,7 +542,7 @@ export function useChat(
 
       const idleSecs = Math.max(0, Math.round((Date.now() - lastIncreaseAt) / 1000));
       const showThinking =
-        currentPhaseLabel === "Receiving output" && idleSecs >= 7;
+        (currentPhaseLabel.startsWith("Receiving output") && idleSecs >= 7);
       const label = showThinking
         ? `Thinking… (no new tokens for ${idleSecs}s)`
         : currentPhaseLabel;
@@ -681,41 +681,45 @@ export function useChat(
               if (event.type === "phase" && typeof event.phase === "string") {
                 sawServerProgress = true;
                 const phaseMap: Record<string, string> = {
-                  starting_request: "Starting request",
-                  waiting_for_first_tokens: "Waiting for first tokens",
-                  receiving_output: "Receiving output",
-                  validating_structured_output: "Validating structured output",
-                  saving_files: "Saving files",
+                  starting_request: "Connecting…",
+                  waiting_for_first_tokens: "Waiting for first tokens…",
+                  receiving_output: "Receiving output…",
+                  validating_structured_output: "Validating output…",
+                  saving_files: "Saving files…",
                   done_preview_updating: "Done / Preview updating",
-                  retrying_request: "Retrying request",
+                  retrying_request: "Retrying request…",
                 };
                 currentPhaseLabel = phaseMap[event.phase] ?? "Working";
+                // Don't insert a separate message for receiving_output — the progress line already shows it with files/tokens/cost
                 if (!emittedPhases.has(event.phase)) {
                   emittedPhases.add(event.phase);
-                  const phaseMsg: ChatMessage = {
-                    id: `stream-phase-${streamRunId}-${event.phase}`,
-                    role: "assistant",
-                    content: `${currentPhaseLabel} · ${formatDurationShort(
-                      Math.max(1, Math.floor((Date.now() - localStartedAt) / 1000))
-                    )}`,
-                  };
-                  setMessages((prev) => {
-                    const idx = prev.findIndex((m) => m.id === progressMessageId);
-                    if (idx === -1) return [...prev, phaseMsg];
-                    const next = prev.slice();
-                    next.splice(idx, 0, phaseMsg);
-                    return next;
-                  });
+                  if (event.phase !== "receiving_output") {
+                    const phaseMsg: ChatMessage = {
+                      id: `stream-phase-${streamRunId}-${event.phase}`,
+                      role: "assistant",
+                      content: `${currentPhaseLabel} · ${formatDurationShort(
+                        Math.max(1, Math.floor((Date.now() - localStartedAt) / 1000))
+                      )}`,
+                    };
+                    setMessages((prev) => {
+                      const idx = prev.findIndex((m) => m.id === progressMessageId);
+                      if (idx === -1) return [...prev, phaseMsg];
+                      const next = prev.slice();
+                      next.splice(idx, 0, phaseMsg);
+                      return next;
+                    });
+                  }
                 }
               }
               if (event.type === "file" && typeof event.path === "string") {
                 sawServerProgress = true;
                 if (!discoveredFilePaths.includes(event.path)) discoveredFilePaths.push(event.path);
                 if (typeof event.count === "number") discoveredFilesCount = event.count;
+                const basename = event.path.split("/").pop() ?? event.path;
                 const fileMsg: ChatMessage = {
                   id: `stream-file-${streamRunId}-${typeof event.count === "number" ? event.count : Date.now()}`,
                   role: "assistant",
-                  content: `Writing ${event.path.split("/").pop() ?? event.path}${typeof event.count === "number" ? ` (file ${event.count})` : ""}`,
+                  content: `Creating ${basename}${typeof event.count === "number" ? ` (file ${event.count})` : ""}`,
                 };
                 setMessages((prev) => {
                   const idx = prev.findIndex((m) => m.id === progressMessageId);

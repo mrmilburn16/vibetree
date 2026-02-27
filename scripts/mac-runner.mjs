@@ -16,6 +16,7 @@ const DERIVED_DATA_CACHE_DIR = join(homedir(), ".vibetree", "derived-data-cache"
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 /** Load .env.local from project root so MAC_RUNNER_TOKEN, VIBETREE_SERVER_URL, XCODEBUILD_PATH work with just npm run mac-runner. */
+/** Does not overwrite env vars already set (e.g. VIBETREE_SERVER_URL from npm run mac-runner:mock). */
 function loadEnvLocal() {
   const path = join(__dirname, "..", ".env.local");
   if (!existsSync(path)) return;
@@ -25,6 +26,7 @@ function loadEnvLocal() {
       const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
       if (!m) continue;
       const key = m[1];
+      if (key in process.env && process.env[key] !== "") continue;
       let value = m[2].trim();
       if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
         value = value.slice(1, -1);

@@ -55,4 +55,24 @@ describe("iOS editor dropdowns: centered and haptic", () => {
     expect(llmSection).toMatch(/if !option\.disabled/);
     expect(llmSection).toMatch(/HapticService\.selection\(\)/);
   });
+
+  it("project type collapsed tap triggers haptic (simultaneousGesture TapGesture triggerDropdownHaptic)", () => {
+    const content = read();
+    const menuSection = content.slice(
+      content.indexOf("private var projectTypeMenu"),
+      content.indexOf("private var llmMenu:")
+    );
+    expect(menuSection).toMatch(/simultaneousGesture.*TapGesture.*triggerDropdownHaptic/);
+    expect(menuSection).toMatch(/Pro \(Swift\)|Standard \(Expo\)/);
+  });
+
+  it("LLM dropdown width matches collapsed trigger (dropdownTriggerWidth, not full screen)", () => {
+    const content = read();
+    expect(content).toContain("dropdownTriggerWidth");
+    const llmDropdownSection = content.slice(
+      content.indexOf("private var llmDropdownList"),
+      content.indexOf("// MARK: - Streaming Progress Bar")
+    );
+    expect(llmDropdownSection).toMatch(/frame.*dropdownTriggerWidth|maxWidth:.*dropdownTriggerWidth/);
+  });
 });

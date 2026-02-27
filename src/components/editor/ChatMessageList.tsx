@@ -60,7 +60,7 @@ function StreamProgressBar({ messages }: { messages: ChatMessage[] }) {
   const countMatch = lastFile.content.match(/\(file (\d+)\)/);
   const currentCount = countMatch ? parseInt(countMatch[1], 10) : fileMessages.length;
   const fileNames = fileMessages.map((m) => {
-    const match = m.content.match(/^Writing (.+?)(?:\s*\(file \d+\))?$/);
+    const match = m.content.match(/^(?:Writing|Creating) (.+?)(?:\s*\(file \d+\))?$/);
     return match ? match[1].trim() : null;
   }).filter(Boolean) as string[];
   const displayNames = fileNames.length > 0 ? fileNames.join(", ") : `${currentCount} ${currentCount === 1 ? "file" : "files"}`;
@@ -316,7 +316,7 @@ export function ChatMessageList({
             <StreamProgressBar messages={messages} />
           )}
           {messages.map((msg, index) => {
-          if (isStreamFileMessage(msg)) return null;
+          const isStreamFile = isStreamFileMessage(msg);
           const isStreamingThis = msg.role === "assistant" && msg.id === streamingMessageId;
           const displayContent = isStreamingThis ? streamedContent : msg.content;
           const streamingComplete = !isStreamingThis || streamedContent === msg.content;
@@ -325,36 +325,50 @@ export function ChatMessageList({
           const staggerDelay =
             msg.role === "assistant" ? Math.min(assistantIndex * 40, 200) : 0;
           const isReasoning = isReasoningMessage(msg);
-          const isAssistantSummary = msg.role === "assistant" && !isReasoning;
+          const isAssistantSummary = msg.role === "assistant" && !isReasoning && !isStreamFile;
           const showAccent = isAssistantSummary;
+          // Show "Creating App.swift" (strip " (file N)" for display)
+          const displayContentForMessage = isStreamFile
+            ? (msg.content.replace(/\s*\(file \d+\)\s*$/, "").trim())
+            : displayContent;
+
+          const isStepLine = (isReasoning || isStreamFile) && msg.role === "assistant";
+          const stepStagger = isStepLine ? assistantIndex * 50 : 0;
 
           return (
           <div
             key={msg.id}
             className={
-              (msg.role === "assistant" ? "animate-chat-message-in " : "animate-fade-in ") +
+              (msg.role === "user"
+                ? "animate-fade-in "
+                : isStepLine
+                  ? "animate-chat-step-in "
+                  : "animate-chat-message-in ") +
               (msg.role === "user"
                 ? "ml-auto w-fit max-w-[88%] rounded-2xl px-4 py-3 text-right shadow-sm " +
                   "bg-[var(--chat-bubble-user-bg)] border border-[var(--border-default)] border-l-[var(--chat-bubble-user-border-accent)]/50"
                 : "max-w-[88%] py-0.5") +
               (showAccent ? " chat-accent-full-box-v2" : "")
             }
-            style={staggerDelay > 0 ? { animationDelay: `${staggerDelay}ms` } : undefined}
+            style={(staggerDelay > 0 || stepStagger > 0) ? { animationDelay: `${staggerDelay || stepStagger}ms` } : undefined}
           >
             {!isFilesOnly && (
               <p
                 className={
                   msg.role === "user"
                     ? "text-sm font-medium text-[var(--text-primary)] leading-relaxed"
-                    : isReasoning
-                      ? "text-xs text-[var(--text-tertiary)] leading-relaxed"
+                    : isReasoning || isStreamFile
+                      ? "text-xs text-[var(--text-tertiary)] leading-relaxed flex items-center gap-2"
                       : "text-sm text-[var(--text-primary)] leading-relaxed"
                 }
               >
-                {displayContent}
+                {isStepLine && (
+                  <span className="chat-step-dot h-2 w-2 shrink-0 rounded-full" aria-hidden />
+                )}
+                {displayContentForMessage}
               </p>
             )}
-            {msg.editedFiles && msg.editedFiles.length > 0 && (isFilesOnly || streamingComplete) && (
+            {msg.editedFiles && msg.editedFiles.length > 0 && (isFilesOnly || streamingComplete) && msg.elapsedMs == null && (
               <div className={isFilesOnly ? "mt-0" : "mt-3"}>
                 <p className="text-xs text-[var(--text-tertiary)]">
                   {msg.editedFiles.map((file, i) => (

@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct ChatPanelView: View {
+    /// Shared width for collapsed dropdown triggers and open LLM panel so they match (not full-width).
+    private static let dropdownTriggerWidth: CGFloat = 160
+
     @ObservedObject var chatService: ChatService
     let projectId: String
     let projectType: ProjectType
@@ -203,7 +206,7 @@ struct ChatPanelView: View {
             .contentShape(Rectangle())
             .padding(.leading, Forest.space3)
             .padding(.trailing, Forest.space4)
-            .frame(minWidth: 160, minHeight: 40, maxHeight: 40)
+            .frame(minWidth: ChatPanelView.dropdownTriggerWidth, minHeight: 40, maxHeight: 40)
             .fixedSize(horizontal: true, vertical: false)
             .background(Forest.inputBg)
             .cornerRadius(Forest.radiusMd)
@@ -234,7 +237,7 @@ struct ChatPanelView: View {
             }
             .padding(.leading, Forest.space3)
             .padding(.trailing, Forest.space4)
-            .frame(minWidth: 160, minHeight: 40, maxHeight: 40)
+            .frame(minWidth: ChatPanelView.dropdownTriggerWidth, minHeight: 40, maxHeight: 40)
             .fixedSize(horizontal: true, vertical: false)
             .background(Forest.inputBg)
             .cornerRadius(Forest.radiusMd)
@@ -316,7 +319,7 @@ struct ChatPanelView: View {
                 .disabled(option.disabled)
             }
         }
-        .frame(minWidth: 200)
+        .frame(minWidth: ChatPanelView.dropdownTriggerWidth, maxWidth: ChatPanelView.dropdownTriggerWidth)
         .background(Forest.backgroundSecondary)
         .cornerRadius(Forest.radiusMd)
         .overlay(
@@ -374,9 +377,6 @@ struct ChatPanelView: View {
                 withAnimation(.easeOut(duration: 0.3)) {
                     proxy.scrollTo("bottom", anchor: .bottom)
                 }
-            }
-            .onChange(of: chatService.messages.last?.text) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
             }
         }
     }

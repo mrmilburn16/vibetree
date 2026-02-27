@@ -62,6 +62,12 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       "Color.accentColor"
     );
 
+    // LLM typo: "Color" or "color" repeated → ColorColorColor / colorcolorcolor (cannot find in scope). Fix to Color.
+    content = content.replace(/\bColorColorColor\b/g, "Color");
+    content = content.replace(/\bColorColor\b/g, "Color");
+    content = content.replace(/\bcolorcolorcolor\b/g, "Color");
+    content = content.replace(/\bcolorcolor\b/g, "Color");
+
     const usesCharts = /\b(Chart|BarMark|LineMark|AreaMark|PointMark|RuleMark|SectorMark)\b/.test(content);
     if (usesCharts && !content.includes("import Charts")) {
       content = "import Charts\n" + content;
@@ -358,6 +364,16 @@ export function applyRuleBasedFixesFromBuild(
         changed = true;
       }
     }
+  }
+
+  // cannot find 'ColorColorColor' in scope — LLM repeated "Color"; fix to Color
+  if (/cannot find ['"]?ColorColorColor['"]? in scope/i.test(combined)) {
+    result = result.map((f) =>
+      f.content.includes("ColorColorColor")
+        ? { ...f, content: f.content.replace(/\bColorColorColor\b/g, "Color") }
+        : f
+    );
+    changed = true;
   }
 
   for (const file of result) {

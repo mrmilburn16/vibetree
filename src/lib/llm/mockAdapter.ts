@@ -134,7 +134,7 @@ const MOCK_DELAY_MS = 1200 + Math.random() * 1200;
 export async function mockGetResponse(
   _message: string,
   _model?: string,
-  projectType: "standard" | "pro" = "standard"
+  projectType: "standard" | "pro" = "pro"
 ): Promise<LLMResponse> {
   await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
   const pool = projectType === "pro" ? MOCK_RESPONSES_PRO : MOCK_RESPONSES_STANDARD;

@@ -254,6 +254,33 @@ struct ProjectListView: View {
         !promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Placeholder id prefix so we can replace with the real project when API returns.
+    private static let pendingIdPrefix = "pending-"
+
+    private func createNewBlankApp() {
+        let now = Date().timeIntervalSince1970 * 1000
+        let placeholder = Project(
+            id: Self.pendingIdPrefix + UUID().uuidString,
+            name: "Untitled app",
+            bundleId: nil,
+            projectType: .pro,
+            createdAt: now,
+            updatedAt: now,
+            fileCount: nil
+        )
+        service.projects.insert(placeholder, at: 0)
+
+        Task {
+            if let project = await service.createProject(name: "Untitled app", type: .pro) {
+                service.projects.removeAll { $0.id.hasPrefix(Self.pendingIdPrefix) }
+                pendingPrompt = nil
+                navigateToProject = project
+            } else {
+                service.projects.removeAll { $0.id == placeholder.id }
+            }
+        }
+    }
+
     private func submitPrompt() {
         let trimmed = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -281,12 +308,7 @@ struct ProjectListView: View {
                         .tracking(0.6)
                     Spacer()
                     Button {
-                        Task {
-                            if let project = await service.createProject(name: "Untitled app", type: .pro) {
-                                pendingPrompt = nil
-                                navigateToProject = project
-                            }
-                        }
+                        createNewBlankApp()
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "plus")

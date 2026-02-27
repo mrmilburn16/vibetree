@@ -4,6 +4,20 @@ Use this list to verify the recent changes. To **click the circle** to mark an i
 
 ---
 
+## 0. Agent / conversation layout (fewest API tokens)
+
+Use this to test how the conversation layout works (messages, streaming, bubbles) while using the fewest API tokens.
+
+- **Zero API tokens (mock):** Run **`npm run dev:mock`** (or **`npm run dev:full:mock`** to include the Mac runner). That forces `NEXT_PUBLIC_USE_REAL_LLM=false` so the client uses the in-app mock — no API key or tokens. Mock dev runs on **port 3002** (so it doesn’t conflict with `npm run dev` on 3001). Open **http://localhost:3002**, then send any short prompt, e.g. **`Counter`** or **`Hello`**. You get full conversation UI and a mock app with no API call. For **Run on iPhone** to show green: in a **second terminal** run **`npm run mac-runner:mock`** (runner must point at 3002), and connect your iPhone via USB.
+- **Minimal real API tokens:** With real LLM on, use the **shortest prompt** that still asks for an app so the model returns code. Recommended: **`Show Hello`** or **`Counter`** (one word). Avoid long prompts like “build a simple counter app” — same flow, more input tokens and usually more output.
+
+| Goal              | Prompt example   | Cost        |
+|-------------------|------------------|-------------|
+| Test layout only  | `Counter` (mock) | 0 tokens    |
+| Test layout + API | `Show Hello`     | Minimal in/out |
+
+---
+
 ## 1. New blank app = fresh slate (iOS)
 
 - [✓] Tap a suggestion chip or submit a prompt so a project is created with that prompt.
@@ -64,6 +78,7 @@ Use this list to verify the recent changes. To **click the circle** to mark an i
 
 | Area              | What to test briefly |
 |-------------------|----------------------|
+| Conversation layout | Mock: `Counter` (0 tokens). Real: `Show Hello` (minimal). |
 | New blank app     | No carried-over prompt; no auto-send. |
 | Duplicate titles  | Second same-prompt app gets “(2)”. |
 | Live stream       | File names during generation; chronological file list after. |

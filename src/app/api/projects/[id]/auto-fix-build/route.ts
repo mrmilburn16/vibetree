@@ -127,6 +127,7 @@ Rules:
    - "generic parameter 'C' could not be inferred": Often with ForEach—provide an explicit id (e.g. ForEach(items, id: \\.id)) or use ForEach(array.indices, id: \\.self) and subscript the array. Ensure the collection type is clear.
    - "cannot find type 'UIView' in scope": Add "import UIKit" at the top. UIView is from UIKit; SwiftUI does not re-export it in all contexts.
    - "cannot find type 'Context' in scope": Context in makeUIView(context: Context) comes from SwiftUI (UIViewRepresentable). Add "import SwiftUI". For TimelineProvider use "import WidgetKit" and qualify as TimelineProvider.Context if needed.
+   - "cannot find 'colorcolorcolor' in scope": LLM typo (Color repeated). Replace colorcolorcolor with Color.primary (or the intended semantic color, e.g. Color.accentColor).
    - "for-in loop requires 'AsyncStream<...>' to conform to 'Sequence'": AsyncStream is async. Use "for await item in stream" not "for item in stream".
    - "generic struct 'StateObject' requires that 'X' conform to 'ObservableObject'": The type passed to @StateObject must conform to ObservableObject. Add ": ObservableObject" to the class declaration and ensure it has @Published properties or an objectWillChange publisher.
    - "cannot convert value of type '[X]' to expected argument type 'Binding<C>'": ForEach expects a collection and id, or a Binding. Use ForEach(items, id: \\.id) { item in ... } not ForEach($items) with a plain array. For mutable list use ForEach(items.indices, id: \\.self) { i in ... } with $items[i] if needed.

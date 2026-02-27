@@ -95,8 +95,9 @@ export function ChatPanel({
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(PROJECT_TYPE_STORAGE_KEY);
       if (stored === "pro" || stored === "standard") return stored;
+      localStorage.setItem(PROJECT_TYPE_STORAGE_KEY, "pro");
     }
-    return "standard";
+    return "pro";
   });
   const [guidedMode, setGuidedMode] = useState(() => {
     if (typeof window !== "undefined") {

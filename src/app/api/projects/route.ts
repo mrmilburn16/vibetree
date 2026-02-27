@@ -38,7 +38,12 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const name = typeof body.name === "string" ? body.name.trim() || "Untitled app" : "Untitled app";
   const id = typeof body.id === "string" ? body.id.trim() : undefined;
-  const projectType = body.projectType === "pro" ? "pro" : "standard";
+  const projectType =
+    body.projectType === "pro"
+      ? "pro"
+      : body.projectType === "standard"
+        ? "standard"
+        : "pro";
   const project = id ? ensureProject(id, name, projectType) : createProject(name, projectType);
   const doc: ProjectDoc = {
     id: project.id,

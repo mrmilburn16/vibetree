@@ -90,10 +90,10 @@ describe("iOS: displays live phases and file progress", () => {
 });
 
 describe("Web: shows actual code files and streaming content in real time", () => {
-  it("useChat creates stream-file messages with 'Writing <basename>' so user sees which files are being written", () => {
+  it("useChat creates stream-file messages with 'Creating <basename>' so user sees which files are being created", () => {
     const content = fs.readFileSync(USE_CHAT, "utf8");
     expect(content).toContain('event.type === "file"');
-    expect(content).toMatch(/Writing.*event\.path|content:.*Writing.*path|split\(["']\/["']\)\.pop\(\)/);
+    expect(content).toMatch(/Creating.*basename|content:.*Creating.*path|split\(["']\/["']\)\.pop\(\)/);
   });
 
   it("useChat progress line includes discovered file names (basenames) in real time", () => {
@@ -108,7 +108,54 @@ describe("Web: shows actual code files and streaming content in real time", () =
 
   it("StreamProgressBar shows actual file names (e.g. App.swift) when streaming", () => {
     const content = fs.readFileSync(CHAT_MESSAGE_LIST, "utf8");
-    expect(content).toMatch(/StreamProgressBar|Building app|fileNames|displayNames|Writing/);
+    expect(content).toMatch(/StreamProgressBar|Building app|fileNames|displayNames|Creating/);
+  });
+
+  it("ChatMessageList does not show editedFiles list after Done (elapsedMs set) so files are not duplicated", () => {
+    const content = fs.readFileSync(CHAT_MESSAGE_LIST, "utf8");
+    expect(content).toMatch(/msg\.elapsedMs\s*==\s*null/);
+    expect(content).toMatch(/editedFiles.*length.*streamingComplete.*elapsedMs/);
+  });
+});
+
+describe("Web and iOS: Cursor-style stream behavior (both platforms)", () => {
+  it("Web: Cursor-style phase labels (Connecting…, Validating output…, Saving files…) and step animation", () => {
+    const useChat = fs.readFileSync(USE_CHAT, "utf8");
+    expect(useChat).toMatch(/Connecting…|starting_request.*Connecting/);
+    expect(useChat).toMatch(/Validating output…|validating_structured_output.*Validating/);
+    expect(useChat).toMatch(/Saving files…/);
+    const chatList = fs.readFileSync(CHAT_MESSAGE_LIST, "utf8");
+    expect(chatList).toContain("animate-chat-step-in");
+    expect(chatList).toMatch(/isStepLine|stepStagger/);
+  });
+
+  it("Web: Cursor-style step dot (accent + pulse) and staggered step entrance", () => {
+    const chatList = fs.readFileSync(CHAT_MESSAGE_LIST, "utf8");
+    expect(chatList).toContain("chat-step-dot");
+    expect(chatList).toMatch(/stepStagger.*assistantIndex\s*\*\s*50/);
+    const globals = fs.readFileSync(path.resolve(process.cwd(), "src/app/globals.css"), "utf8");
+    expect(globals).toContain("chat-step-dot");
+    expect(globals).toMatch(/chat-step-dot-pulse|\.chat-step-dot/);
+    expect(globals).toMatch(/button-primary-bg|--button-primary-bg/);
+  });
+
+  it("iOS: phase labels and creating file list (Starting…, Receiving code…, Validating output…, creating basename)", () => {
+    const chatService = fs.readFileSync(IOS_CHAT_SERVICE, "utf8");
+    expect(chatService).toContain("Starting…");
+    expect(chatService).toContain("Receiving code…");
+    expect(chatService).toContain("Validating output…");
+    expect(chatService).toContain("Saving files…");
+    const bubble = fs.readFileSync(IOS_MESSAGE_BUBBLE, "utf8");
+    expect(bubble).toMatch(/creating.*basename|Text\(.*creating/);
+    expect(bubble).toMatch(/fileList.*VStack|ForEach.*files/);
+  });
+
+  it("both platforms receive same stream API (phase + file events) so behavior stays in sync", () => {
+    const route = fs.readFileSync(STREAM_ROUTE, "utf8");
+    expect(route).toContain('enqueuePhase("starting_request")');
+    expect(route).toContain('enqueuePhase("receiving_output")');
+    expect(route).toContain('type: "file"');
+    expect(route).toMatch(/onDiscoveredFilePath|discoveredFilePath/);
   });
 });
 

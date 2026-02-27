@@ -307,6 +307,31 @@ textarea:-webkit-autofill:active {
   animation: chat-message-in 0.2s ease-out forwards;
 }
 
+/* Chat: Cursor-style step line (e.g. "Searched…", "Read…") — short slide-up + fade */
+@keyframes chat-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-chat-step-in {
+  animation: chat-step-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Chat: Cursor-style step dot — theme accent with subtle pulse so it reads as “live” */
+@keyframes chat-step-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(1.1); }
+}
+.chat-step-dot {
+  background-color: var(--button-primary-bg);
+  animation: chat-step-dot-pulse 1.6s ease-in-out infinite;
+}
+
 /* Chat: per-word reveal when streaming — smooth fade, no bounce */
 @keyframes chat-word-in {
   from { opacity: 0; }
@@ -446,7 +471,9 @@ textarea:-webkit-autofill:active {
   .animate-ready-pop,
   .animate-cursor-blink,
   .animate-chat-message-in,
+  .animate-chat-step-in,
   .animate-chat-word-in,
+  .chat-step-dot,
   .animate-live-glow,
   .animate-screen-shine,
   .dashboard-new-app-card,
@@ -504,7 +531,13 @@ button:disabled,
   .animate-success-check,
   .animate-ready-pop,
   .animate-chat-message-in,
+  .animate-chat-step-in,
   .animate-chat-word-in {
+    opacity: 1;
+    transform: none;
+  }
+  .chat-step-dot {
+    animation: none;
     opacity: 1;
     transform: none;
   }

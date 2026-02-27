@@ -46,8 +46,22 @@ export async function POST(
 
   const hasApiKey = Boolean(process.env.ANTHROPIC_API_KEY);
   const model = typeof body.model === "string" ? body.model : undefined;
+  // Respect client's projectType; if missing/invalid, use project's stored type so Pro (Swift) isn't treated as Expo
   const projectType =
-    body.projectType === "pro" ? "pro" : ("standard" as const);
+    body.projectType === "pro"
+      ? ("pro" as const)
+      : body.projectType === "standard"
+        ? ("standard" as const)
+        : (project.projectType === "pro"
+          ? ("pro" as const)
+          : ("standard" as const));
+  if (body.projectType !== "pro" && body.projectType !== "standard") {
+    console.warn("[message/stream] body.projectType missing or invalid, using project type", {
+      bodyProjectType: body.projectType,
+      projectProjectType: project.projectType,
+      resolved: projectType,
+    });
+  }
   console.log("[message/stream] start", { projectId, projectType, model: body.model, msgLen: message.length });
   const { message: enrichedMessage, skillIds } = enrichWithSkills(projectType, message);
   const skillMatches = projectType === "pro" ? detectSkills(message) : [];

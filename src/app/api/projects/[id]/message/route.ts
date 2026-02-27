@@ -44,7 +44,13 @@ export async function POST(
   const hasApiKey = Boolean(process.env.ANTHROPIC_API_KEY);
   const model = typeof body.model === "string" ? body.model : undefined;
   const projectType =
-    body.projectType === "pro" ? "pro" : ("standard" as const);
+    body.projectType === "pro"
+      ? ("pro" as const)
+      : body.projectType === "standard"
+        ? ("standard" as const)
+        : (project.projectType === "pro"
+          ? ("pro" as const)
+          : ("standard" as const));
   const { message: enrichedMessage, skillIds } = enrichWithSkills(projectType, message);
   const skillMatches = projectType === "pro" ? detectSkills(message) : [];
   const skillPromptBlock = buildSkillPromptBlock(skillMatches);

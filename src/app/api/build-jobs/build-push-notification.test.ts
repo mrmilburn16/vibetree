@@ -8,6 +8,8 @@
  * - Web build: same flow — job is run by mac-runner, which calls update → sendBuildNotification.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
 import { createBuildJob } from "@/lib/buildJobs";
 import { ensureProject } from "@/lib/projectStore";
 
@@ -107,5 +109,57 @@ describe("Build completion push notifications", () => {
     );
 
     expect(sendBuildNotification).not.toHaveBeenCalled();
+  });
+
+  it("web build completion: validate-xcode creates job, runner update with succeeded triggers push", async () => {
+    const { POST: validatePost } = await import("@/app/api/projects/[id]/validate-xcode/route");
+    const validateRes = await validatePost(
+      new Request("http://test/validate-xcode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName,
+          bundleId: "com.test.app",
+        }),
+      }),
+      { params: Promise.resolve({ id: projectId }) }
+    );
+    expect(validateRes.ok).toBe(true);
+    const validateData = await validateRes.json().catch(() => ({}));
+    const jobId = validateData?.job?.id;
+    expect(jobId).toBeDefined();
+    expect(typeof jobId).toBe("string");
+
+    const updateRes = await POST(
+      new Request("http://test/api/build-jobs/" + jobId, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${RUNNER_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "succeeded" }),
+      }),
+      { params: Promise.resolve({ id: jobId }) }
+    );
+    expect(updateRes.status).toBe(200);
+    expect(sendBuildNotification).toHaveBeenCalledWith(projectName, "succeeded");
+  });
+});
+
+describe("Web build success triggers iOS push (full chain)", () => {
+  const macRunnerPath = path.resolve(process.cwd(), "scripts/mac-runner.mjs");
+  const updateRoutePath = path.resolve(process.cwd(), "src/app/api/build-jobs/[id]/update/route.ts");
+
+  it("mac-runner calls updateJob with status succeeded on build success so server can send push", () => {
+    const content = fs.readFileSync(macRunnerPath, "utf8");
+    expect(content).toMatch(/updateJob\s*\([^)]+,\s*\{\s*status:\s*["']succeeded["']/);
+    expect(content).toMatch(/status:\s*["']succeeded["'].*exitCode:\s*0/);
+  });
+
+  it("update route calls sendBuildNotification when status is succeeded so iOS gets push", () => {
+    const content = fs.readFileSync(updateRoutePath, "utf8");
+    expect(content).toContain("sendBuildNotification");
+    expect(content).toMatch(/freshJob\.status\s*===\s*["']succeeded["']/);
+    expect(content).toMatch(/sendBuildNotification\s*\(\s*displayName\s*,\s*["']succeeded["']\s*\)/);
   });
 });
