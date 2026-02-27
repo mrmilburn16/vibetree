@@ -9,7 +9,7 @@ export default function Home() {
   return (
     <div className="flex h-screen flex-col bg-[var(--background-primary)]">
       <Nav />
-      <main className="landing-scroll-container flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+      <main id="main-content" className="landing-scroll-container flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <Hero />
         <ProductShowcase />
         <HowItWorks />

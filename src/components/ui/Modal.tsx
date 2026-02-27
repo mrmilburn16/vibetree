@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -16,6 +16,8 @@ export interface ModalProps {
 }
 
 export function Modal({ isOpen, onClose, title, children, footer, dialogClassName = "", footerClassName = "" }: ModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -27,6 +29,10 @@ export function Modal({ isOpen, onClose, title, children, footer, dialogClassNam
     if (isOpen) {
       document.addEventListener("keydown", handleEscape);
       document.body.style.overflow = "hidden";
+      // Focus the dialog on open for accessibility
+      requestAnimationFrame(() => {
+        dialogRef.current?.focus();
+      });
     }
     return () => {
       document.removeEventListener("keydown", handleEscape);
@@ -41,6 +47,7 @@ export function Modal({ isOpen, onClose, title, children, footer, dialogClassNam
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       aria-modal="true"
       role="dialog"
+      aria-label={title || "Dialog"}
     >
       <div
         className="absolute inset-0 cursor-pointer bg-black/60"
@@ -48,7 +55,9 @@ export function Modal({ isOpen, onClose, title, children, footer, dialogClassNam
         aria-hidden="true"
       />
       <div
-        className={`relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] shadow-xl ${dialogClassName}`.trim()}
+        ref={dialogRef}
+        tabIndex={-1}
+        className={`relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] shadow-xl outline-none ${dialogClassName}`.trim()}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative flex shrink-0 items-center justify-end border-b border-[var(--border-default)] px-6 py-4">
