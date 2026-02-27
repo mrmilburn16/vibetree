@@ -11,7 +11,8 @@ export function getSuggestedServerURL(): string | null {
     for (const list of Object.values(ifaces)) {
       if (!list) continue;
       for (const iface of list) {
-        if ((iface.family === "IPv4" || iface.family === 4) && !iface.internal && iface.address) {
+        const family = iface.family;
+        if ((family === "IPv4" || String(family) === "4") && !iface.internal && iface.address) {
           return `http://${iface.address}:${port}`;
         }
       }
