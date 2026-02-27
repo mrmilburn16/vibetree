@@ -9,6 +9,8 @@ export interface ToastProps {
   variant?: ToastVariant;
   onClose: () => void;
   duration?: number;
+  /** When true, Toast positions itself fixed at the bottom. False when used inside ToastProvider. */
+  standalone?: boolean;
 }
 
 const variantBg: Record<ToastVariant, string> = {
@@ -23,15 +25,20 @@ export function Toast({
   variant = "info",
   onClose,
   duration = 5000,
+  standalone = true,
 }: ToastProps) {
   useEffect(() => {
     const t = setTimeout(onClose, duration);
     return () => clearTimeout(t);
   }, [duration, onClose]);
 
+  const positionClasses = standalone
+    ? "fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-md"
+    : "";
+
   return (
     <div
-      className={`fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-md rounded-lg border px-4 py-3 text-sm shadow-lg ${variantBg[variant]}`}
+      className={`${positionClasses} rounded-lg border px-4 py-3 text-sm shadow-lg ${variantBg[variant]}`}
       role="alert"
     >
       {message}
