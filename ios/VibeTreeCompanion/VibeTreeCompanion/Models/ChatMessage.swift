@@ -6,6 +6,8 @@ struct ChatMessage: Identifiable, Equatable {
     var text: String
     let timestamp: Date
     var editedFiles: [String]?
+    /// Paths that were already in the project (show "editing" instead of "creating" during stream).
+    var editedFileIsExisting: [String]?
     var phase: String?
     var isStreaming: Bool
     var elapsedMs: TimeInterval?
@@ -24,6 +26,7 @@ struct ChatMessage: Identifiable, Equatable {
         text: String,
         timestamp: Date = Date(),
         editedFiles: [String]? = nil,
+        editedFileIsExisting: [String]? = nil,
         phase: String? = nil,
         isStreaming: Bool = false,
         elapsedMs: TimeInterval? = nil,
@@ -35,6 +38,7 @@ struct ChatMessage: Identifiable, Equatable {
         self.text = text
         self.timestamp = timestamp
         self.editedFiles = editedFiles
+        self.editedFileIsExisting = editedFileIsExisting
         self.phase = phase
         self.isStreaming = isStreaming
         self.elapsedMs = elapsedMs

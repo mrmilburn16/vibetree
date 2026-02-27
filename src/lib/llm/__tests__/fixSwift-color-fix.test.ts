@@ -59,3 +59,42 @@ describe("fixSwift: ColorColorColor and ColorColor fix", () => {
     expect(result[0].content).not.toContain("ColorColorColor");
   });
 });
+
+describe("fixSwift: black background → system background", () => {
+  it("replaces .background(Color.black) with .background(Color(.systemBackground))", () => {
+    const files = [
+      { path: "ContentView.swift", content: "var body: some View { VStack { }.background(Color.black) }" },
+    ];
+    const result = fixSwiftCommonIssues(files);
+    expect(result[0].content).toContain(".background(Color(.systemBackground))");
+    expect(result[0].content).not.toContain(".background(Color.black)");
+  });
+
+  it("replaces .background { Color.black } with .background { Color(.systemBackground) }", () => {
+    const files = [
+      { path: "ContentView.swift", content: "VStack { }.background { Color.black }" },
+    ];
+    const result = fixSwiftCommonIssues(files);
+    expect(result[0].content).toContain(".background { Color(.systemBackground) }");
+    expect(result[0].content).not.toContain("Color.black");
+  });
+
+  it("replaces ZStack { Color.black with ZStack { Color(.systemBackground) (full-screen black)", () => {
+    const files = [
+      { path: "ContentView.swift", content: "var body: some View { ZStack { Color.black\n.ignoresSafeArea()\nText(\"Hi\") } }" },
+    ];
+    const result = fixSwiftCommonIssues(files);
+    expect(result[0].content).toContain("ZStack { Color(.systemBackground)");
+    expect(result[0].content).toContain(".ignoresSafeArea()");
+    expect(result[0].content).not.toMatch(/ZStack\s*\{\s*Color\.black\b/);
+  });
+
+  it("replaces Color.black.ignoresSafeArea() with Color(.systemBackground).ignoresSafeArea()", () => {
+    const files = [
+      { path: "ContentView.swift", content: "Color.black.ignoresSafeArea()" },
+    ];
+    const result = fixSwiftCommonIssues(files);
+    expect(result[0].content).toContain("Color(.systemBackground).ignoresSafeArea()");
+    expect(result[0].content).not.toContain("Color.black");
+  });
+});

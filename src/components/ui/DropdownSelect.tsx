@@ -106,7 +106,7 @@ export function DropdownSelect({
           role="listbox"
           aria-label={ariaLabel}
           className={
-            "absolute left-0 z-50 max-h-[280px] min-w-[200px] overflow-auto " +
+            "absolute left-0 right-0 z-50 w-full max-h-[280px] min-w-[160px] overflow-auto " +
             "rounded-[var(--radius-md)] border border-[var(--border-default)] " +
             "bg-[var(--background-secondary)] py-1 shadow-lg " +
             (openUpward ? "bottom-full mb-1" : "top-full mt-1")

@@ -85,9 +85,11 @@ final class BuildMonitorService: ObservableObject {
             guard !notifiedSet.contains(job.id) else { continue }
             if job.status == .succeeded {
                 HapticService.success()
+                let name = job.projectName.trimmingCharacters(in: .whitespacesAndNewlines)
+                let displayName = name.isEmpty ? "App" : name
                 NotificationService.shared.showLocalNotification(
-                    title: "Your app is ready!",
-                    body: "\(job.projectName) built successfully in \(job.elapsedFormatted)."
+                    title: "Your \(displayName) app is ready!",
+                    body: "Open the Vibe Tree app to view it."
                 )
             } else {
                 HapticService.error()
@@ -202,9 +204,11 @@ final class BuildMonitorService: ObservableObject {
         }
 
         if job.status == .succeeded {
+            let name = job.projectName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayName = name.isEmpty ? "App" : name
             NotificationService.shared.showLocalNotification(
-                title: "Your app is ready!",
-                body: "\(job.projectName) built successfully in \(job.elapsedFormatted)."
+                title: "Your \(displayName) app is ready!",
+                body: "Open the Vibe Tree app to view it."
             )
         } else if job.status == .failed {
             NotificationService.shared.showLocalNotification(

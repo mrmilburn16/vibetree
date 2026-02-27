@@ -100,10 +100,16 @@ export type SendBuildNotificationResult =
   | { sent: number; failed: number; reasons: string[] }
   | null;
 
+export type SendBuildNotificationOptions = {
+  /** When true, use "successfully launched" wording (installed + launched on device). */
+  installedOnDevice?: boolean;
+};
+
 export async function sendBuildNotification(
   projectName: string,
   status: "succeeded" | "failed",
-  detail?: string
+  detail?: string,
+  options?: SendBuildNotificationOptions
 ): Promise<SendBuildNotificationResult> {
   const config = getApnsConfig();
   if (!config) {
@@ -117,10 +123,22 @@ export async function sendBuildNotification(
     return null;
   }
 
-  const title = status === "succeeded" ? "Your app is ready!" : "Build failed";
-  const body = status === "succeeded"
-    ? `${projectName} built successfully.${detail ? " " + detail : ""}`
-    : `${projectName} build failed.${detail ? " " + detail : ""}`;
+  const displayName = (projectName || "").trim() || "App";
+  const installedOnDevice = options?.installedOnDevice === true;
+  let title: string;
+  let body: string;
+  if (status === "succeeded") {
+    if (installedOnDevice) {
+      title = `Your ${displayName} app successfully launched!`;
+      body = "Open the Vibe Tree app to run it again.";
+    } else {
+      title = `Your ${displayName} app is ready!`;
+      body = `Open the Vibe Tree app to view it.${detail ? " " + detail : ""}`;
+    }
+  } else {
+    title = "Build failed";
+    body = `${displayName} build failed.${detail ? " " + detail : ""}`;
+  }
 
   const payload = {
     aps: {

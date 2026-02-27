@@ -1,7 +1,13 @@
 import SwiftUI
 
+/// Preference key to pass LLM trigger frame (global) so dropdown can be positioned on top of all content.
+private struct LLMTriggerFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+}
+
 struct ChatPanelView: View {
-    /// Shared width for collapsed dropdown triggers and open LLM panel so they match (not full-width).
+    /// Min width for trigger and dropdown; trigger can grow with content and dropdown matches via frame key.
     private static let dropdownTriggerWidth: CGFloat = 160
 
     @ObservedObject var chatService: ChatService
@@ -18,8 +24,17 @@ struct ChatPanelView: View {
     @State private var preflightChecks: PreflightResponse?
     @State private var preflightLoading = false
     @State private var isLLMMenuOpen = false
+    @State private var llmTriggerFrame: CGRect = .zero
+    @State private var cancelBuildLoading = false
+    @ObservedObject private var buildMonitor = BuildMonitorService.shared
 
     private let maxChars = 4000
+
+    private var activeBuildForProject: BuildJob? {
+        buildMonitor.activeBuilds.first { job in
+            job.request.projectId == projectId && (job.status == .queued || job.status == .running)
+        }
+    }
 
     private func triggerDropdownHaptic() {
         HapticService.light()
@@ -63,21 +78,23 @@ struct ChatPanelView: View {
         .onChange(of: selectedProjectType) { _, _ in
             runPreflightIfNeeded()
         }
+        .onChange(of: chatService.isStreaming) { _, isStreaming in
+            if isStreaming { isLLMMenuOpen = false }
+        }
         .overlay {
             if isLLMMenuOpen {
-                ZStack(alignment: .top) {
+                ZStack(alignment: .topLeading) {
                     Color.black.opacity(0.001)
                         .ignoresSafeArea()
                         .contentShape(Rectangle())
                         .onTapGesture { isLLMMenuOpen = false }
-                    HStack(spacing: 0) {
-                        Spacer(minLength: Forest.space2)
-                        llmDropdownList
-                        Spacer(minLength: Forest.space2)
+                    GeometryReader { geo in
+                        let origin = geo.frame(in: .global).origin
+                        llmDropdownList(width: llmTriggerFrame.width > 0 ? llmTriggerFrame.width : ChatPanelView.dropdownTriggerWidth)
+                            .offset(x: llmTriggerFrame.minX - origin.x, y: llmTriggerFrame.maxY - origin.y)
                     }
-                    .padding(.top, 56)
-                    .zIndex(1)
                 }
+                .zIndex(1000)
             }
         }
     }
@@ -113,7 +130,16 @@ struct ChatPanelView: View {
             Spacer(minLength: Forest.space2)
 
             projectTypeMenu
-            llmMenu
+            ZStack(alignment: .top) {
+                llmMenu
+            }
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(key: LLMTriggerFrameKey.self, value: geo.frame(in: .global))
+                }
+            )
+            .onPreferenceChange(LLMTriggerFrameKey.self) { llmTriggerFrame = $0 }
+            .frame(minWidth: ChatPanelView.dropdownTriggerWidth, minHeight: 40, maxHeight: 40)
 
             Spacer(minLength: Forest.space2)
 
@@ -125,6 +151,25 @@ struct ChatPanelView: View {
                         .font(Forest.font(size: 18))
                         .foregroundColor(Forest.error)
                 }
+            }
+
+            if let job = activeBuildForProject, !chatService.isStreaming {
+                Button {
+                    cancelBuildLoading = true
+                    Task {
+                        defer { Task { @MainActor in cancelBuildLoading = false } }
+                        try? await APIService.shared.cancelBuildJob(id: job.id)
+                    }
+                } label: {
+                    Text(cancelBuildLoading ? "Stopping…" : "Stop build")
+                        .font(Forest.font(size: Forest.textXs, weight: .medium))
+                        .foregroundColor(Forest.textPrimary)
+                        .padding(.horizontal, Forest.space2)
+                        .padding(.vertical, Forest.space1)
+                        .background(Forest.backgroundTertiary)
+                        .cornerRadius(Forest.radiusSm)
+                }
+                .disabled(cancelBuildLoading)
             }
         }
         .padding(.horizontal, Forest.space4)
@@ -276,51 +321,57 @@ struct ChatPanelView: View {
         }
     }
 
-    private var llmDropdownList: some View {
-        VStack(spacing: 0) {
-            ForEach(LLMOption.options) { option in
-                Button {
-                    if !option.disabled {
-                        HapticService.selection()
-                        selectedModel = option
-                        isLLMMenuOpen = false
-                    }
-                } label: {
-                    HStack(spacing: Forest.space2) {
-                        llmIcon(for: option)
-                        Text(option.label)
-                            .font(Forest.font(size: Forest.textSm))
-                            .lineLimit(1)
-                        Spacer(minLength: Forest.space2)
-                        if option.disabled {
-                            Text("SOON")
-                                .font(Forest.font(size: 9, weight: .semibold))
-                                .tracking(0.5)
-                                .textCase(.uppercase)
-                                .foregroundColor(Forest.accent)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Forest.accent.opacity(0.15))
-                                .clipShape(Capsule())
-                        } else if option.id == selectedModel.id {
-                            Image(systemName: "checkmark")
-                                .font(Forest.font(size: 12, weight: .semibold))
-                                .foregroundColor(Forest.accent)
-                        }
-                    }
-                    .padding(.horizontal, Forest.space3)
-                    .padding(.vertical, Forest.space2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(option.id == selectedModel.id && !option.disabled ? Forest.accent.opacity(0.15) : Color.clear)
-                    .foregroundColor(option.disabled ? Forest.textTertiary : (option.id == selectedModel.id ? Forest.accent : Forest.textPrimary))
-                    .opacity(option.disabled ? 0.5 : 1)
+    @ViewBuilder
+    private func llmDropdownRow(_ option: LLMOption) -> some View {
+        Button {
+            if !option.disabled {
+                HapticService.selection()
+                selectedModel = option
+                isLLMMenuOpen = false
+            }
+        } label: {
+            HStack(spacing: Forest.space2) {
+                llmIcon(for: option)
+                Text(option.label)
+                    .font(Forest.font(size: Forest.textSm))
+                    .lineLimit(1)
+                Spacer(minLength: Forest.space2)
+                if option.disabled {
+                    Text("SOON")
+                        .font(Forest.font(size: 9, weight: .semibold))
+                        .tracking(0.5)
+                        .textCase(.uppercase)
+                        .foregroundColor(Forest.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Forest.accent.opacity(0.15))
+                        .clipShape(Capsule())
+                } else if option.id == selectedModel.id {
+                    Image(systemName: "checkmark")
+                        .font(Forest.font(size: 12, weight: .semibold))
+                        .foregroundColor(Forest.accent)
                 }
-                .buttonStyle(.plain)
-                .disabled(option.disabled)
+            }
+            .padding(.horizontal, Forest.space3)
+            .padding(.vertical, Forest.space2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(option.id == selectedModel.id && !option.disabled ? Forest.accent.opacity(0.15) : Color.clear)
+            .foregroundColor(option.disabled ? Forest.textTertiary : (option.id == selectedModel.id ? Forest.accent : Forest.textPrimary))
+            .opacity(option.disabled ? 0.5 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(option.disabled)
+    }
+
+    private func llmDropdownList(width: CGFloat) -> some View {
+        let w = max(width, ChatPanelView.dropdownTriggerWidth)
+        return VStack(spacing: 0) {
+            ForEach(LLMOption.options) { option in
+                llmDropdownRow(option)
             }
         }
-        .frame(minWidth: ChatPanelView.dropdownTriggerWidth, maxWidth: ChatPanelView.dropdownTriggerWidth)
-        .background(Forest.backgroundSecondary)
+        .frame(width: w)
+        .background(Forest.backgroundSecondary.opacity(1))
         .cornerRadius(Forest.radiusMd)
         .overlay(
             RoundedRectangle(cornerRadius: Forest.radiusMd)
@@ -521,6 +572,12 @@ struct ChatPanelView: View {
                 .focused($isInputFocused)
                 .disabled(blockSendUntilPreflight)
                 .submitLabel(canSend ? .send : .done)
+                .animation(nil, value: inputText)
+                .onChange(of: inputText) { _, newValue in
+                    if newValue.count > maxChars {
+                        inputText = String(newValue.prefix(maxChars))
+                    }
+                }
                 .onSubmit {
                     if canSend {
                         sendIfPossible()
@@ -528,6 +585,20 @@ struct ChatPanelView: View {
                         isInputFocused = false
                     }
                 }
+
+            Button {
+                inputText = ""
+                HapticService.light()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(Forest.font(size: 20))
+                    .foregroundStyle(inputText.isEmpty ? Forest.textTertiary.opacity(0.4) : Forest.textTertiary)
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .buttonStyle(.plain)
+            .disabled(inputText.isEmpty || blockSendUntilPreflight)
+            .accessibilityLabel("Clear text")
+            .animation(nil, value: inputText)
 
             sendButton
         }
@@ -582,6 +653,7 @@ struct ChatPanelView: View {
     private func sendIfPossible() {
         guard canSend else { return }
         HapticService.medium()
+        isLLMMenuOpen = false
         let text = inputText
         inputText = ""
         isInputFocused = false

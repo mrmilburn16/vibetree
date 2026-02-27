@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button, Textarea, DropdownSelect } from "@/components/ui";
-import { Send, Sparkles, Square, Zap } from "lucide-react";
+import { Send, Sparkles, Square, X, Zap } from "lucide-react";
 import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { BuildingIndicator } from "./BuildingIndicator";
@@ -63,6 +63,51 @@ function getTeamIdForPreflight(projectId: string): string {
   return "";
 }
 
+function StopBuildButton({
+  projectId,
+  onCancelled,
+}: {
+  projectId: string;
+  onCancelled: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const handleStop = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/build-jobs/active");
+      const data = await res.json().catch(() => ({}));
+      const jobs = Array.isArray(data?.jobs) ? data.jobs : [];
+      const job = jobs.find(
+        (j: { request?: { projectId?: string }; status?: string }) =>
+          j?.request?.projectId === projectId &&
+          (j?.status === "queued" || j?.status === "running")
+      );
+      if (job?.id) {
+        const cancelRes = await fetch(`/api/build-jobs/${job.id}/cancel`, { method: "POST" });
+        if (cancelRes.ok) onCancelled();
+      } else {
+        onCancelled();
+      }
+    } catch {
+      onCancelled();
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, onCancelled]);
+  return (
+    <button
+      type="button"
+      onClick={handleStop}
+      disabled={loading}
+      className="rounded bg-[var(--button-secondary-bg)] px-2 py-1 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--button-secondary-hover)] disabled:opacity-50"
+      title="Stop build and clear Live Activity"
+      aria-label="Stop build"
+    >
+      {loading ? "Stopping…" : "Stop build"}
+    </button>
+  );
+}
+
 export function ChatPanel({
   projectId,
   projectName,
@@ -73,6 +118,7 @@ export function ChatPanel({
   onAppBuilt,
   onProBuildComplete,
   onProjectRenamed,
+  onIsTypingChange,
 }: {
   projectId: string;
   projectName?: string;
@@ -89,6 +135,8 @@ export function ChatPanel({
     onProgress?: (status: string) => void
   ) => Promise<{ status: "succeeded" | "failed"; error?: string }>;
   onProjectRenamed?: (name: string) => void;
+  /** Called when the agent starts or stops typing (so Install can be disabled while generating). */
+  onIsTypingChange?: (typing: boolean) => void;
 }) {
   const [llm, setLlm] = useState(DEFAULT_LLM);
   const [projectType, setProjectType] = useState<"standard" | "pro">(() => {
@@ -139,6 +187,7 @@ export function ChatPanel({
     sendMessage,
     cancelCurrent,
     buildStatus,
+    setBuildStatus,
     input,
     setInput,
     canSend,
@@ -155,6 +204,10 @@ export function ChatPanel({
   useEffect(() => {
     onBuildStatusChange(buildStatus);
   }, [buildStatus, onBuildStatusChange]);
+
+  useEffect(() => {
+    onIsTypingChange?.(isTyping);
+  }, [isTyping, onIsTypingChange]);
 
   const [preflightChecks, setPreflightChecks] = useState<PreflightResult | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
@@ -293,6 +346,12 @@ export function ChatPanel({
           {buildStatus === "building" && <BuildingIndicator />}
           {buildStatus === "live" && <ReadyIndicator label="Ready" />}
           {buildStatus === "failed" && <FailedIndicator reason={buildFailureReason} />}
+          {buildStatus === "building" && (
+            <StopBuildButton
+              projectId={projectId}
+              onCancelled={() => setBuildStatus("failed")}
+            />
+          )}
           {!featureFlags.useRealLLM && (
             <span
               className="rounded bg-[var(--background-tertiary)] px-2 py-0.5 text-xs text-[var(--text-tertiary)]"
@@ -437,6 +496,18 @@ export function ChatPanel({
                 }
               }}
             />
+            {input.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => setInput("")}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
+                aria-label="Clear text"
+                title="Clear text"
+                disabled={blockSendUntilPreflight}
+              >
+                <X className="h-5 w-5 shrink-0" aria-hidden />
+              </button>
+            )}
             <Button
               type={busy ? "button" : "submit"}
               variant={busy ? "secondary" : "primary"}

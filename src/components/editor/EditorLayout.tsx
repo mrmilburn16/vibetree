@@ -61,6 +61,7 @@ export function EditorLayout({ project }: { project: Project }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [buildStatus, setBuildStatus] = useState<"idle" | "building" | "live" | "failed">("idle");
   const [buildFailureReason, setBuildFailureReason] = useState<string | null>(null);
+  const [isAgentTyping, setIsAgentTyping] = useState(false);
   const [expoUrl, setExpoUrl] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; variant: "success" | "warning" | "error" | "info" } | null>(null);
   const [outOfCreditsOpen, setOutOfCreditsOpen] = useState(false);
@@ -344,6 +345,7 @@ export function EditorLayout({ project }: { project: Project }) {
               setBuildStatus(status);
               if (status !== "failed") setBuildFailureReason(null);
             }}
+            onIsTypingChange={setIsAgentTyping}
             onOutOfCredits={() => setOutOfCreditsOpen(true)}
             onError={(message) => {
               setToast({ message, variant: "error" });
@@ -396,6 +398,7 @@ export function EditorLayout({ project }: { project: Project }) {
         onClose={() => setRunOnDeviceOpen(false)}
         projectId={project.id}
         buildStatus={buildStatus}
+        isAgentTyping={isAgentTyping}
         expoUrl={expoUrl}
         onExpoUrl={setExpoUrl}
       />

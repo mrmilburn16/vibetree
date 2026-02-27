@@ -191,6 +191,7 @@ final class ChatService: ObservableObject {
 
             var editedFiles: [String] = []
             var discoveredFiles: [String] = []
+            var discoveredFileIsExisting: [String] = []
             var buildLog: [String] = []
             var doneContent: String?
             var doneEditedFiles: [String]?
@@ -210,6 +211,7 @@ final class ChatService: ObservableObject {
                             buildLog: &buildLog,
                             editedFiles: &editedFiles,
                             discoveredFiles: &discoveredFiles,
+                            discoveredFileIsExisting: &discoveredFileIsExisting,
                             doneContent: &doneContent,
                             doneEditedFiles: &doneEditedFiles,
                             assistantMessageId: assistantMessageId
@@ -499,6 +501,7 @@ final class ChatService: ObservableObject {
         buildLog: inout [String],
         editedFiles: inout [String],
         discoveredFiles: inout [String],
+        discoveredFileIsExisting: inout [String],
         doneContent: inout String?,
         doneEditedFiles: inout [String]?,
         assistantMessageId: String
@@ -522,6 +525,9 @@ final class ChatService: ObservableObject {
                 streamingFileCount = discoveredFiles.count
                 recentFiles = Array(discoveredFiles.suffix(5))
             }
+            if (json["existing"] as? Bool) == true, !discoveredFileIsExisting.contains(path) {
+                discoveredFileIsExisting.append(path)
+            }
             if !editedFiles.contains(path) {
                 editedFiles.append(path)
             }
@@ -537,11 +543,13 @@ final class ChatService: ObservableObject {
                 role: .assistant,
                 text: progressText,
                 editedFiles: discoveredFiles.isEmpty ? nil : discoveredFiles,
+                editedFileIsExisting: discoveredFileIsExisting.isEmpty ? nil : discoveredFileIsExisting,
                 isStreaming: true
             )
             if let existingIdx = messages.firstIndex(where: { $0.id == progressId }) {
                 messages[existingIdx].text = progressText
                 messages[existingIdx].editedFiles = discoveredFiles.isEmpty ? nil : discoveredFiles
+                messages[existingIdx].editedFileIsExisting = discoveredFileIsExisting.isEmpty ? nil : discoveredFileIsExisting
             } else if let idx = messages.firstIndex(where: { $0.id == assistantMessageId }) {
                 messages.insert(progressMsg, at: idx)
             } else {

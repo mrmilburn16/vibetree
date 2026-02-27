@@ -1,0 +1,53 @@
+{
+  "id": "musickit",
+  "name": "Apple Music (MusicKit)",
+  "frameworks": ["MusicKit"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "apple music",
+      "music kit",
+      "musickit",
+      "play me songs",
+      "playlist by artist",
+      "voice playlist",
+      "catalog search",
+      "ApplicationMusicPlayer",
+      "MusicCatalogSearchRequest",
+      "play songs by",
+      "music playback",
+      "apple music library",
+      "search apple music",
+      "play music for 30 mins",
+      "play music for X minutes",
+      "queue by duration"
+    ],
+    "excludeKeywords": ["shazam", "shazamkit", "identify song", "song identification", "what song is this"]
+  },
+  "promptInjection": "CAPABILITY: Apple Music (MusicKit)\n\nMUST DO (non-negotiable):\n- The \"Create and Play\" (or any search/play) button MUST be .disabled until MusicAuthorization.request() has returned .authorized. Use a property like isAuthorized, set it to true only when status == .authorized, and bind the button: .disabled(!viewModel.isAuthorized). If not authorized, show text like \"Authorize Apple Music first\" and a button that calls requestAuthorization().\n- There must be ZERO code that requests, mentions, or uses a \"developer token\". On iOS the phrase \"developer token\" is wrong — delete any such code. Use ONLY MusicAuthorization.request(); the system handles tokens after that.\n- When search or playback fails, show a user-friendly message (e.g. \"Could not search\" or \"Playback failed\"), not the raw \"Failed to request developer token\" — and never crash.\n\nMusicKit lets you search the Apple Music catalog and play songs with ApplicationMusicPlayer. The user must have an Apple Music subscription for full catalog access.\n\nIMPORTS:\n- `import MusicKit` for catalog search and playback.\n\nAUTHORIZATION (required before any MusicKit API):\n1. Request once: `let status = await MusicAuthorization.request()`\n2. Check: `switch status { case .authorized: ... case .denied: ... case .notDetermined: ... }`\n3. Show clear UI if denied (e.g. \"Allow Music access in Settings\").\n4. Info.plist key NSAppleMusicUsageDescription is added automatically by the build system.\n5. Do NOT enable \"Create and Play\" or search/playback until status == .authorized. Disable the button or show \"Authorize Apple Music first\" until then.\n\nCRITICAL — NO DEVELOPER TOKEN ON IOS:\n- On native iOS, do NOT use or request a \"developer token\". MusicKit handles tokens automatically after MusicAuthorization.request(). Any code that requests, generates, or references a developer token is wrong for iOS and causes \"failed to request developer token\" and crashes.\n- Use only MusicAuthorization.request() for user-based access; no backend or JWT required.\n\nCATALOG SEARCH:\n- Use `MusicCatalogSearchRequest(term: \"Artist Name\", types: [Song.self])` or include [Artist.self], [Album.self] as needed.\n- Execute: `let response = try await request.response()`\n- Songs: `response.songs` (MusicItemCollection<Song>). Each Song has .title, .artistName, .duration, .artwork, etc.\n- Song duration is a TimeInterval (seconds). Use it to build playlists by total duration.\n\nPLAYBACK:\n- Use `ApplicationMusicPlayer.shared` (applicationMusicPlayer).\n- Set queue: `applicationMusicPlayer.queue = ApplicationMusicPlayer.Queue(for: songCollection)` or assign an array of Song. Set the full queue before calling play; avoid building the queue incrementally.\n- Start: `try await applicationMusicPlayer.play()`\n- Control: .pause(), .stop(), .skipToNextEntry(), .skipToPreviousEntry()\n- State: applicationMusicPlayer.state (playbackState, currentEntry, etc.)\n\nBUILDING A PLAYLIST BY DURATION (e.g. \"play me songs by Drake for 30 mins\"):\n1. Request MusicAuthorization if not determined.\n2. Search: MusicCatalogSearchRequest(term: artistOrQuery, types: [Song.self]); get response.songs.\n3. Pick songs (e.g. from response.songs) and sum durations until totalDuration >= requestedMinutes * 60. Assume ~3–4 min per song if duration not available; otherwise use song.duration.\n4. Build an array of Song from the selected items, then set queue: applicationMusicPlayer.queue = ApplicationMusicPlayer.Queue(for: selectedSongs).\n5. try await applicationMusicPlayer.play().\n\nVOICE → PLAYLIST FLOW:\n- Use Speech framework (SFSpeechRecognizer) to get the user's phrase (e.g. \"play me songs by Drake for 30 minutes\").\n- Parse the phrase for: artist/query and duration (e.g. 30 mins). Simple parsing: look for numbers + \"min\" or \"minutes\", and the rest as artist/search term.\n- Then run the MusicKit flow above: authorize → search → build queue by duration → play.\n\nDATA MODEL:\n- Song and other MusicKit types are already Identifiable where appropriate. For queue entries, use MusicPlayer.Queue.Entry; it holds the playable item.\n\nERROR HANDLING (mandatory):\n- Never crash on MusicKit or search/playback errors. Wrap all MusicKit calls (authorization, search, play) in do/catch or handle errors in async code.\n- Show errors in UI: set an errorMessage string and display it (e.g. \"Could not search: …\" or \"Playback failed: …\"). Do not force unwrap, fatalError, or throw on API failures.\n\nANTI-PATTERNS:\n- Do NOT use or request a \"developer token\" on iOS — MusicKit handles tokens automatically after MusicAuthorization.request().\n- Do NOT call MusicKit APIs before requesting and checking MusicAuthorization — playback will fail.\n- Do NOT enable Create and Play before authorization is .authorized — disable the button until then.\n- Do NOT force unwrap in view bodies (e.g. Text(song!.title)) — use optional binding or nil-coalescing.\n- Do NOT assume response.songs is non-empty — handle empty results (\"No songs found\").\n- Do NOT let API errors crash the app — always catch and show in UI.\n- For duration-based playlists, do NOT assume every Song has a valid duration — use a default (e.g. 240 seconds) when missing.",
+  "canonicalCode": {
+    "ViewModels/MusicPlaylistViewModel.swift": "import Foundation\nimport MusicKit\n\n@Observable\nclass MusicPlaylistViewModel {\n    var songs: [Song] = []\n    var isAuthorized = false\n    var errorMessage: String?\n    var playbackState: ApplicationMusicPlayer.PlaybackState = .stopped\n    private let player = ApplicationMusicPlayer.shared\n\n    func requestAuthorization() async {\n        let status = await MusicAuthorization.request()\n        await MainActor.run { isAuthorized = (status == .authorized) }\n    }\n\n    func search(term: String) async {\n        guard isAuthorized else { return }\n        let request = MusicCatalogSearchRequest(term: term, types: [Song.self])\n        do {\n            let response = try await request.response()\n            await MainActor.run { songs = Array(response.songs) }\n        } catch {\n            await MainActor.run { errorMessage = error.localizedDescription }\n        }\n    }\n\n    func playSongsForDuration(minutes: Double) async {\n        guard isAuthorized, !songs.isEmpty else { return }\n        let targetSeconds = minutes * 60\n        var total: TimeInterval = 0\n        var selected: [Song] = []\n        for song in songs {\n            if total >= targetSeconds { break }\n            selected.append(song)\n            total += song.duration ?? 240\n        }\n        player.queue = ApplicationMusicPlayer.Queue(for: selected)\n        try? await player.play()\n    }\n}\n"
+  },
+  "antiPatterns": [
+    "Using or requesting a developer token on iOS — use only MusicAuthorization.request()",
+    "Calling MusicKit before MusicAuthorization.request()",
+    "Enabling Create and Play before authorization is .authorized",
+    "Force unwrapping MusicKit results in view bodies",
+    "Assuming response.songs is non-empty without checking",
+    "Letting MusicKit/search/playback errors crash the app — always catch and show in UI",
+    "Ignoring missing Song.duration when building duration-based playlists"
+  ],
+  "requiredPermissions": ["NSAppleMusicUsageDescription"],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [
+      "Failed to request developer token (remove all developer token code; use only MusicAuthorization.request())",
+      "Create and Play enabled before authorization (must .disabled(!isAuthorized) until .authorized)"
+    ],
+    "goldenExamples": []
+  }
+}

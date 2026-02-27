@@ -43,6 +43,11 @@ export interface BuildPbxprojOptions {
   privacyPermissions: Record<string, string>;
   entitlementsPath?: string;
   frameworks?: string[];
+  /**
+   * When set, the app target uses this Info.plist (relative to project root under projectName/)
+   * and GENERATE_INFOPLIST_FILE = NO. Used for exported apps that need a URL scheme for "Open app" in Companion.
+   */
+  appInfoPlistPath?: string;
 }
 
 interface PrivacyRule {
@@ -111,6 +116,11 @@ const PRIVACY_RULES: PrivacyRule[] = [
     patterns: [/\bNFCTagReaderSession\b/, /\bimport CoreNFC\b/],
     key: "NFCReaderUsageDescription",
     description: "This app uses NFC.",
+  },
+  {
+    patterns: [/\bimport MusicKit\b/, /\bApplicationMusicPlayer\b/, /\bMusicCatalogSearchRequest\b/, /\bMusicLibraryRequest\b/, /\bMusicPersonalRecommendationsRequest\b/],
+    key: "NSAppleMusicUsageDescription",
+    description: "This app uses Apple Music to search and play your music.",
   },
 ];
 
@@ -206,6 +216,10 @@ const FRAMEWORK_RULES: FrameworkRule[] = [
   {
     patterns: [/\bimport SafariServices\b/, /\bSFSafariViewController\b/],
     framework: "SafariServices",
+  },
+  {
+    patterns: [/\bimport MusicKit\b/, /\bApplicationMusicPlayer\b/, /\bMusicCatalogSearchRequest\b/, /\bMusicLibraryRequest\b/, /\bMusicPersonalRecommendationsRequest\b/, /\bMusicItem\b/],
+    framework: "MusicKit",
   },
 ];
 
@@ -360,6 +374,15 @@ export function buildPbxproj(
     .map(([key, desc]) => `\t\t\t\tINFOPLIST_KEY_${key} = ${JSON.stringify(desc)};`)
     .join("\n");
   const privacyPermBlock = privacyPermLines ? `${privacyPermLines}\n` : "";
+
+  const appInfoPlistPath = options?.appInfoPlistPath;
+  const useCustomAppPlist = Boolean(appInfoPlistPath?.trim());
+  const appInfoPlistLine = useCustomAppPlist
+    ? `\t\t\t\tGENERATE_INFOPLIST_FILE = NO;\n\t\t\t\tINFOPLIST_FILE = ${JSON.stringify(projectName + "/" + appInfoPlistPath!.trim())};\n`
+    : "";
+  const appPlistGenBlock = useCustomAppPlist
+    ? ""
+    : `\t\t\t\tGENERATE_INFOPLIST_FILE = YES;\n${supportsLiveActivitiesLine}${privacyPermBlock}`;
 
   const entitlementsLine = options?.entitlementsPath
     ? `\t\t\t\tCODE_SIGN_ENTITLEMENTS = ${JSON.stringify(projectName + "/" + options.entitlementsPath)};\n`
@@ -743,8 +766,7 @@ ${widgetSourcesBlock}
 ${entitlementsLine}${developmentTeamLine}\t\t\t\tCURRENT_PROJECT_VERSION = 1;
 \t\t\t\tDEVELOPMENT_ASSET_PATHS = "";
 \t\t\t\tENABLE_PREVIEWS = YES;
-\t\t\t\tGENERATE_INFOPLIST_FILE = YES;
-${supportsLiveActivitiesLine}${privacyPermBlock}\t\t\t\tINFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+${appInfoPlistLine}${appPlistGenBlock}\t\t\t\tINFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 \t\t\t\tINFOPLIST_KEY_UILaunchScreen_Generation = YES;
 \t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 \t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -771,8 +793,7 @@ ${supportsLiveActivitiesLine}${privacyPermBlock}\t\t\t\tINFOPLIST_KEY_UIApplicat
 ${entitlementsLine}${developmentTeamLine}\t\t\t\tCURRENT_PROJECT_VERSION = 1;
 \t\t\t\tDEVELOPMENT_ASSET_PATHS = "";
 \t\t\t\tENABLE_PREVIEWS = YES;
-\t\t\t\tGENERATE_INFOPLIST_FILE = YES;
-${supportsLiveActivitiesLine}${privacyPermBlock}\t\t\t\tINFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+${appInfoPlistLine}${appPlistGenBlock}\t\t\t\tINFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 \t\t\t\tINFOPLIST_KEY_UILaunchScreen_Generation = YES;
 \t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 \t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

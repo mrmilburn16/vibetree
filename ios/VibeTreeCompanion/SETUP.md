@@ -36,7 +36,7 @@ In the **device** dropdown (next to the scheme):
 - **iPhone (your model)** – real device (best for Live Activities and notifications).
 - **iPhone 15** (or any simulator) – simulator (no real push; Live Activity may be limited).
 
-For a real device: connect it with USB (and allow the device to trust the computer if asked).
+For a real device: connect it with USB, keep the iPhone **unlocked** during install, and allow the device to trust the computer if asked.
 
 ---
 

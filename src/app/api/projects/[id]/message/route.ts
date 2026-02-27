@@ -86,6 +86,7 @@ export async function POST(
           currentFiles,
           projectType,
           skillPromptBlock,
+          projectName: currentFiles ? project.name : undefined,
         });
         lastErr = null;
         break;

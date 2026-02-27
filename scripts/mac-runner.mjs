@@ -598,6 +598,7 @@ async function validateJob(job) {
           await updateJob(job.id, {
             status: "succeeded",
             exitCode: 0,
+            ...(installed && { installedOnDevice: true }),
             logs: installed
               ? ["✅ Build succeeded", `✅ Installed on ${device.name}`]
               : ["✅ Build succeeded", `⚠️ Install failed on ${device.name} — download the zip and run from Xcode instead`],

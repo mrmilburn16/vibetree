@@ -67,8 +67,8 @@ struct MessageBubbleView: View {
                             .tint(Forest.accent)
                             .scaleEffect(0.65)
                         Text(phaseLabel(phase))
-                            .font(Forest.font(size: Forest.textXs, weight: .medium))
-                            .foregroundColor(Forest.textTertiary)
+                            .font(Forest.font(size: Forest.textSm, weight: .regular))
+                            .foregroundColor(Forest.textPrimary)
                     }
                 }
 
@@ -77,7 +77,7 @@ struct MessageBubbleView: View {
                 }
 
                 if let files = message.editedFiles, !files.isEmpty {
-                    fileList(files)
+                    fileList(files, existingPaths: Set(message.editedFileIsExisting ?? []))
                 }
 
                 if message.isStreaming && message.text.isEmpty {
@@ -111,8 +111,8 @@ struct MessageBubbleView: View {
     private var reasoningBubble: some View {
         HStack(alignment: .top, spacing: 0) {
             Text(message.text)
-                .font(Forest.font(size: Forest.textXs))
-                .foregroundColor(Forest.textTertiary)
+                .font(Forest.font(size: Forest.textSm))
+                .foregroundColor(Forest.textPrimary)
                 .lineSpacing(2)
                 .padding(.leading, Forest.space2)
                 .padding(.vertical, 1)
@@ -127,7 +127,7 @@ struct MessageBubbleView: View {
         message.isStreaming && (message.text.contains("\n") || message.text.contains("Generating "))
     }
 
-    /// Progress-style messages (Writing…, phase lines, file list) use grey so user sees activity, not the reply.
+    /// Progress-style messages (Writing…, phase lines, file list) — keep same primary color as final message so agent words are in line with white agent messages.
     private var isProgressStyle: Bool {
         guard message.role == .assistant, message.isStreaming else { return false }
         if message.editedFiles?.isEmpty == false { return true }
@@ -141,7 +141,7 @@ struct MessageBubbleView: View {
     private var streamingText: some View {
         let words = message.text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         let total = words.count
-        let progressColor = isProgressStyle ? Forest.textTertiary : Forest.textPrimary
+        let progressColor = Forest.textPrimary
 
         if message.isStreaming && !hasAnimated && !isBuildLog {
             Text(words.prefix(visibleWordCount).joined(separator: " "))
@@ -177,13 +177,14 @@ struct MessageBubbleView: View {
         }
     }
 
-    // MARK: - File list (one line per file: "creating App.swift", grey)
+    // MARK: - File list (one line per file: "creating App.swift" or "editing App.swift", grey)
 
-    private func fileList(_ files: [String]) -> some View {
+    private func fileList(_ files: [String], existingPaths: Set<String>) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(files, id: \.self) { path in
                 let basename = (path as NSString).lastPathComponent
-                Text("creating \(basename)")
+                let verb = existingPaths.contains(path) ? "editing" : "creating"
+                Text("\(verb) \(basename)")
                     .font(Forest.fontMono(size: Forest.textXs))
                     .foregroundColor(Forest.textTertiary)
             }

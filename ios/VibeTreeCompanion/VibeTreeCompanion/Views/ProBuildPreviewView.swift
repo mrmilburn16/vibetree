@@ -146,7 +146,7 @@ struct ProBuildPreviewView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ForestPrimaryButtonStyle())
-                .disabled(installPolling)
+                .disabled(installPolling || chatService.isStreaming)
 
                 if let status = installStatus {
                     VStack(alignment: .leading, spacing: Forest.space2) {

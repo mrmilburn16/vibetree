@@ -64,6 +64,10 @@ actor APIService {
         return response.jobs
     }
 
+    func cancelBuildJob(id: String) async throws {
+        _ = try await request("/api/build-jobs/\(id)/cancel", method: "POST")
+    }
+
     // MARK: - Projects
 
     func fetchProjects() async throws -> [Project] {

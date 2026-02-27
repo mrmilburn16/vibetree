@@ -58,6 +58,93 @@ function buildWidgetInfoPlist(widgetBundleId: string, widgetName: string): strin
 `;
 }
 
+/**
+ * Build app Info.plist with URL scheme so the Companion can open the generated app from "Install on iPhone" success.
+ * Scheme: vt-{bundleId with dots as hyphens} (e.g. vt-com-vibetree-app).
+ */
+function buildAppInfoPlist(
+  bundleId: string,
+  privacyPermissions: Record<string, string>,
+  supportsLiveActivities: boolean
+): string {
+  const scheme = "vt-" + bundleId.replace(/\./g, "-");
+  const privacyEntries = Object.entries(privacyPermissions)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, desc]) => `\t<key>${key}</key>\n\t<string>${escapePlistString(desc)}</string>`)
+    .join("\n\n");
+  const liveActivitiesEntry = supportsLiveActivities
+    ? "\t<key>NSSupportsLiveActivities</key>\n\t<true/>\n"
+    : "";
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+\t<key>CFBundleDevelopmentRegion</key>
+\t<string>$(DEVELOPMENT_LANGUAGE)</string>
+\t<key>CFBundleExecutable</key>
+\t<string>$(EXECUTABLE_NAME)</string>
+\t<key>CFBundleIdentifier</key>
+\t<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+\t<key>CFBundleInfoDictionaryVersion</key>
+\t<string>6.0</string>
+\t<key>CFBundleName</key>
+\t<string>$(PRODUCT_NAME)</string>
+\t<key>CFBundlePackageType</key>
+\t<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+\t<key>CFBundleShortVersionString</key>
+\t<string>$(MARKETING_VERSION)</string>
+\t<key>CFBundleURLTypes</key>
+\t<array>
+\t\t<dict>
+\t\t\t<key>CFBundleURLName</key>
+\t\t\t<string>Vibetree App</string>
+\t\t\t<key>CFBundleURLSchemes</key>
+\t\t\t<array>
+\t\t\t\t<string>${escapePlistString(scheme)}</string>
+\t\t\t</array>
+\t\t\t<key>CFBundleTypeRole</key>
+\t\t\t<string>Editor</string>
+\t\t</dict>
+\t</array>
+\t<key>CFBundleVersion</key>
+\t<string>$(CURRENT_PROJECT_VERSION)</string>
+\t<key>LSRequiresIPhoneOS</key>
+\t<true/>
+${liveActivitiesEntry}\t<key>UIApplicationSupportsIndirectInputEvents</key>
+\t<true/>
+\t<key>UILaunchScreen</key>
+\t<dict/>
+\t<key>UIRequiredDeviceCapabilities</key>
+\t<array>
+\t\t<string>armv7</string>
+\t\t<string>gps</string>
+\t\t<string>location-services</string>
+\t</array>
+\t<key>UISupportedInterfaceOrientations</key>
+\t<array>
+\t\t<string>UIInterfaceOrientationPortrait</string>
+\t\t<string>UIInterfaceOrientationLandscapeLeft</string>
+\t\t<string>UIInterfaceOrientationLandscapeRight</string>
+\t</array>
+\t<key>UISupportedInterfaceOrientations~ipad</key>
+\t<array>
+\t\t<string>UIInterfaceOrientationPortrait</string>
+\t\t<string>UIInterfaceOrientationPortraitUpsideDown</string>
+\t\t<string>UIInterfaceOrientationLandscapeLeft</string>
+\t\t<string>UIInterfaceOrientationLandscapeRight</string>
+\t</array>
+${privacyEntries ? "\n" + privacyEntries + "\n" : ""}</dict>
+</plist>
+`;
+}
+function escapePlistString(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 /** Build a date for zip entries so extracted files show the user's local time (JSZip stores UTC; many extractors show it as-is). */
 function zipFileDate(timezoneOffsetMinutes?: number): Date {
   const now = new Date();
@@ -188,6 +275,13 @@ struct AppLiveActivityWidget: Widget {
   const entitlements = detectEntitlements(allSwiftFiles);
   const entitlementsPath = entitlements ? "App.entitlements" : undefined;
 
+  const appInfoPlistPath = "Info.plist";
+  const supportsLiveActivities = Boolean(widgetInfoPlistPath && widgetSources.length > 0);
+  const appInfoPlistContent = buildAppInfoPlist(
+    options.bundleId,
+    privacyPermissions,
+    supportsLiveActivities
+  );
   const buildResult = buildPbxproj(allPaths, {
     deploymentTarget,
     projectName: options.projectName,
@@ -197,6 +291,7 @@ struct AppLiveActivityWidget: Widget {
     frameworks,
     entitlementsPath,
     appSwiftPaths,
+    appInfoPlistPath,
     widget:
       widgetInfoPlistPath && widgetSources.length > 0
         ? {
@@ -252,6 +347,8 @@ struct AppLiveActivityWidget: Widget {
   for (const path of allPaths) {
     zip.file(`${options.projectName}/${path}`, filesMap[path] ?? "", zipOpt);
   }
+
+  zip.file(`${options.projectName}/${appInfoPlistPath}`, appInfoPlistContent, zipOpt);
 
   if (entitlements && entitlementsPath) {
     zip.file(`${options.projectName}/${entitlementsPath}`, generateEntitlementsPlist(entitlements), zipOpt);

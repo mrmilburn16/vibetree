@@ -716,10 +716,11 @@ export function useChat(
                 if (!discoveredFilePaths.includes(event.path)) discoveredFilePaths.push(event.path);
                 if (typeof event.count === "number") discoveredFilesCount = event.count;
                 const basename = event.path.split("/").pop() ?? event.path;
+                const verb = event.existing === true ? "Editing" : "Creating";
                 const fileMsg: ChatMessage = {
                   id: `stream-file-${streamRunId}-${typeof event.count === "number" ? event.count : Date.now()}`,
                   role: "assistant",
-                  content: `Creating ${basename}${typeof event.count === "number" ? ` (file ${event.count})` : ""}`,
+                  content: `${verb} ${basename}${typeof event.count === "number" ? ` (file ${event.count})` : ""}`,
                 };
                 setMessages((prev) => {
                   const idx = prev.findIndex((m) => m.id === progressMessageId);
@@ -1084,6 +1085,7 @@ export function useChat(
     sendMessage,
     cancelCurrent,
     buildStatus,
+    setBuildStatus,
     input,
     setInput,
     canSend,

@@ -31,6 +31,13 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       content = "import SwiftUI\n" + content;
     }
 
+    // Avoid plain black main-screen background (looks unfinished). Prefer semantic/system colors.
+    content = content.replace(/\.background\s*\(\s*Color\.black\s*\)/g, ".background(Color(.systemBackground))");
+    content = content.replace(/\.background\s*\{\s*Color\.black\s*\}/g, ".background { Color(.systemBackground) }");
+    // ZStack { Color.black ... } or Color.black.ignoresSafeArea() (common full-screen background)
+    content = content.replace(/ZStack\s*\{\s*Color\.black\b/g, "ZStack { Color(.systemBackground)");
+    content = content.replace(/\bColor\.black\b(\s*\.ignoresSafeArea\s*\(\s*\))/g, "Color(.systemBackground)$1");
+
     const usesFoundation = /\b(Date|UUID|JSONDecoder|JSONEncoder|UserDefaults|FileManager|Data|URL|URLSession|Timer|Calendar|DateFormatter|NumberFormatter|Locale|TimeZone|NotificationCenter|Bundle)\b/.test(content);
     if (usesFoundation && !content.includes("import Foundation") && !content.includes("import SwiftUI")) {
       content = "import Foundation\n" + content;
@@ -126,6 +133,15 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
     const usesShazamKit = /\b(SHSession|SHManagedSession|SHMatch|SHMediaItem|SHSignature|SHCatalog)\b/.test(content);
     if (usesShazamKit && !content.includes("import ShazamKit")) {
       content = "import ShazamKit\n" + content;
+    }
+
+    const usesMusicKit = /\b(ApplicationMusicPlayer|MusicCatalogSearchRequest|MusicLibraryRequest|MusicPersonalRecommendationsRequest|MusicItem\b|MusicKit\.)\b/.test(content);
+    if (usesMusicKit && !content.includes("import MusicKit")) {
+      content = "import MusicKit\n" + content;
+    }
+    // iOS MusicKit: never show "Failed to request developer token" to the user (wrong concept on iOS).
+    if (usesMusicKit && /Failed to request developer token|developer token|developerToken/i.test(content)) {
+      content = content.replace(/Failed to request developer token/gi, "Could not access Apple Music");
     }
 
     const usesSoundAnalysis = /\b(SNAudioStreamAnalyzer|SNClassifySoundRequest|SNClassificationResult|SNResultsObserving|SNRequest)\b/.test(content);

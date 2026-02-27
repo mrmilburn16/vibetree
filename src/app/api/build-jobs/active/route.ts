@@ -1,4 +1,4 @@
-import { getAllBuildJobs, type BuildJobRecord } from "@/lib/buildJobs";
+import { getAllBuildJobs, markAbandonedJobs, type BuildJobRecord } from "@/lib/buildJobs";
 import { getActiveGenerations } from "@/lib/activeGenerations";
 import { getProject } from "@/lib/projectStore";
 
@@ -8,6 +8,7 @@ function displayNameForProject(projectId: string, fallback: string): string {
 }
 
 export async function GET() {
+  markAbandonedJobs();
   const all: BuildJobRecord[] = getAllBuildJobs();
   const active = all.filter((j: BuildJobRecord) => j.status === "queued" || j.status === "running");
 

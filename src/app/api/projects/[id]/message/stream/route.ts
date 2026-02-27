@@ -147,7 +147,7 @@ export async function POST(
             result = await getClaudeResponseStream(
               enrichedMessage,
               model,
-              { currentFiles, projectType, skillPromptBlock },
+              { currentFiles, projectType, skillPromptBlock, projectName: currentFiles ? project.name : undefined },
               {
                 onProgress: (data) => {
                   lastReceivedChars = data.receivedChars;
@@ -160,9 +160,11 @@ export async function POST(
                 },
                 onDiscoveredFilePath: (path) => {
                   discoveredFilesCount += 1;
+                  const existing = paths.length > 0 && paths.includes(path);
                   safeEnqueue({
                     type: "file",
                     path,
+                    existing,
                     count: discoveredFilesCount,
                     elapsedMs: Date.now() - startedAt,
                   });
@@ -212,7 +214,23 @@ export async function POST(
             editedFiles = result.editedFiles;
           }
         } else {
-          editedFiles = result.editedFiles;
+          editedFiles = result.editedFiles ?? [];
+          // When agent returns no files on a follow-up (e.g. "code is unchanged"), still run fixSwift
+          // on stored files so black→systemBackground and other safety nets apply.
+          if (paths.length > 0 && projectType === "pro") {
+            const stored = getProjectFiles(projectId);
+            if (stored) {
+              const filesToFix = paths
+                .filter((p) => p.endsWith(".swift"))
+                .map((p) => ({ path: p, content: stored[p] ?? "" }))
+                .filter((f) => f.content.length > 0);
+              if (filesToFix.length > 0) {
+                const fixed = fixSwiftCommonIssues(filesToFix);
+                setProjectFiles(projectId, fixed);
+                editedFiles = fixed.map((f) => f.path);
+              }
+            }
+          }
         }
 
         // Send a small "done" payload (no projectFiles) so iOS and slow clients don't

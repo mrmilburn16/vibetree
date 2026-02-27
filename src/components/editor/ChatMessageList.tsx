@@ -60,7 +60,7 @@ function StreamProgressBar({ messages }: { messages: ChatMessage[] }) {
   const countMatch = lastFile.content.match(/\(file (\d+)\)/);
   const currentCount = countMatch ? parseInt(countMatch[1], 10) : fileMessages.length;
   const fileNames = fileMessages.map((m) => {
-    const match = m.content.match(/^(?:Writing|Creating) (.+?)(?:\s*\(file \d+\))?$/);
+    const match = m.content.match(/^(?:Writing|Creating|Editing) (.+?)(?:\s*\(file \d+\))?$/);
     return match ? match[1].trim() : null;
   }).filter(Boolean) as string[];
   const displayNames = fileNames.length > 0 ? fileNames.join(", ") : `${currentCount} ${currentCount === 1 ? "file" : "files"}`;
@@ -334,6 +334,7 @@ export function ChatMessageList({
 
           const isStepLine = (isReasoning || isStreamFile) && msg.role === "assistant";
           const stepStagger = isStepLine ? assistantIndex * 50 : 0;
+          const assistantBoxClass = "max-w-[88%] py-0.5 chat-accent-full-box-v2";
 
           return (
           <div
@@ -347,8 +348,7 @@ export function ChatMessageList({
               (msg.role === "user"
                 ? "ml-auto w-fit max-w-[88%] rounded-2xl px-4 py-3 text-right shadow-sm " +
                   "bg-[var(--chat-bubble-user-bg)] border border-[var(--border-default)] border-l-[var(--chat-bubble-user-border-accent)]/50"
-                : "max-w-[88%] py-0.5") +
-              (showAccent ? " chat-accent-full-box-v2" : "")
+                : assistantBoxClass)
             }
             style={(staggerDelay > 0 || stepStagger > 0) ? { animationDelay: `${staggerDelay || stepStagger}ms` } : undefined}
           >
@@ -358,14 +358,18 @@ export function ChatMessageList({
                   msg.role === "user"
                     ? "text-sm font-medium text-[var(--text-primary)] leading-relaxed"
                     : isReasoning || isStreamFile
-                      ? "text-xs text-[var(--text-tertiary)] leading-relaxed flex items-center gap-2"
+                      ? "text-sm text-[var(--text-primary)] leading-relaxed relative"
                       : "text-sm text-[var(--text-primary)] leading-relaxed"
                 }
               >
                 {isStepLine && (
-                  <span className="chat-step-dot h-2 w-2 shrink-0 rounded-full" aria-hidden />
+                  <span
+                    className="chat-step-dot absolute left-0 top-[0.35rem] h-2 w-2 rounded-full"
+                    style={{ marginLeft: "-0.25rem" }}
+                    aria-hidden
+                  />
                 )}
-                {displayContentForMessage}
+                <span className={isStepLine ? "block pl-3" : ""}>{displayContentForMessage}</span>
               </p>
             )}
             {msg.editedFiles && msg.editedFiles.length > 0 && (isFilesOnly || streamingComplete) && msg.elapsedMs == null && (

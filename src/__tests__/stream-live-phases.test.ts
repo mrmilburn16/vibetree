@@ -74,26 +74,25 @@ describe("iOS: displays live phases and file progress", () => {
     expect(content).toContain("Waiting for first tokens…");
   });
 
-  it("MessageBubbleView uses grey (textTertiary) for progress-style text (Writing…, phases)", () => {
+  it("MessageBubbleView uses textPrimary for progress-style text so agent words are in line with white messages", () => {
     const content = fs.readFileSync(IOS_MESSAGE_BUBBLE, "utf8");
     expect(content).toMatch(/isProgressStyle|progressStyle/);
-    expect(content).toMatch(/textTertiary.*progress|progressColor|isProgressStyle.*textTertiary/);
-    expect(content).toContain("Forest.textTertiary");
+    expect(content).toMatch(/progressColor = Forest\.textPrimary|Forest\.textPrimary/);
   });
 
-  it("MessageBubbleView shows one line per file with 'creating' prefix (grey text)", () => {
+  it("MessageBubbleView shows one line per file with 'creating' or 'editing' prefix (grey text)", () => {
     const content = fs.readFileSync(IOS_MESSAGE_BUBBLE, "utf8");
-    expect(content).toMatch(/creating.*basename|Text\(.*creating/);
+    expect(content).toMatch(/creating.*basename|editing.*basename|Text\(.*verb.*basename/);
     expect(content).toMatch(/fileList.*VStack|ForEach.*files/);
     expect(content).toMatch(/lastPathComponent|basename/);
   });
 });
 
 describe("Web: shows actual code files and streaming content in real time", () => {
-  it("useChat creates stream-file messages with 'Creating <basename>' so user sees which files are being created", () => {
+  it("useChat creates stream-file messages with 'Creating' or 'Editing' <basename> so user sees which files are being created or edited", () => {
     const content = fs.readFileSync(USE_CHAT, "utf8");
     expect(content).toContain('event.type === "file"');
-    expect(content).toMatch(/Creating.*basename|content:.*Creating.*path|split\(["']\/["']\)\.pop\(\)/);
+    expect(content).toMatch(/Editing.*Creating|verb.*existing|Creating.*basename|content:.*Creating.*path|split\(["']\/["']\)\.pop\(\)/);
   });
 
   it("useChat progress line includes discovered file names (basenames) in real time", () => {
@@ -139,14 +138,14 @@ describe("Web and iOS: Cursor-style stream behavior (both platforms)", () => {
     expect(globals).toMatch(/button-primary-bg|--button-primary-bg/);
   });
 
-  it("iOS: phase labels and creating file list (Starting…, Receiving code…, Validating output…, creating basename)", () => {
+  it("iOS: phase labels and creating/editing file list (Starting…, Receiving code…, Validating output…, creating or editing basename)", () => {
     const chatService = fs.readFileSync(IOS_CHAT_SERVICE, "utf8");
     expect(chatService).toContain("Starting…");
     expect(chatService).toContain("Receiving code…");
     expect(chatService).toContain("Validating output…");
     expect(chatService).toContain("Saving files…");
     const bubble = fs.readFileSync(IOS_MESSAGE_BUBBLE, "utf8");
-    expect(bubble).toMatch(/creating.*basename|Text\(.*creating/);
+    expect(bubble).toMatch(/creating.*basename|editing.*basename|Text\(.*verb.*basename/);
     expect(bubble).toMatch(/fileList.*VStack|ForEach.*files/);
   });
 
@@ -175,5 +174,21 @@ describe("Live stream visible and files in chronological order", () => {
     const content = fs.readFileSync(USE_CHAT, "utf8");
     expect(content).toMatch(/discoveredFilePaths\.length > 0/);
     expect(content).toMatch(/discoveredFilePaths\.filter.*editedFiles\.includes|editedFiles\.filter.*!discoveredFilePaths\.includes/);
+  });
+});
+
+describe("Agent message alignment: step lines and white messages in line on web and iOS", () => {
+  it("Web: step lines and assistant summary use same box and primary text color so agent words align with white messages", () => {
+    const chatList = fs.readFileSync(CHAT_MESSAGE_LIST, "utf8");
+    expect(chatList).toContain("chat-accent-full-box-v2");
+    expect(chatList).toContain("assistantBoxClass");
+    expect(chatList).toMatch(/isReasoning \|\| isStreamFile/);
+    expect(chatList).toMatch(/text-\[var\(--text-primary\)\].*leading-relaxed relative/);
+  });
+
+  it("iOS: phase label and build log use textPrimary so agent words are in line with white agent messages", () => {
+    const bubble = fs.readFileSync(IOS_MESSAGE_BUBBLE, "utf8");
+    expect(bubble).toMatch(/phaseLabel.*Forest\.textPrimary|\.foregroundColor\(Forest\.textPrimary\)/);
+    expect(bubble).toMatch(/progressColor = Forest\.textPrimary|progressColor.*textPrimary/);
   });
 });

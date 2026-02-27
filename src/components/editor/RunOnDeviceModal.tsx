@@ -72,6 +72,7 @@ export function RunOnDeviceModal({
   onClose,
   projectId,
   buildStatus,
+  isAgentTyping = false,
   expoUrl: expoUrlProp,
   onExpoUrl,
   projectType: projectTypeProp,
@@ -81,6 +82,8 @@ export function RunOnDeviceModal({
   projectId: string;
   /** When this becomes "live", preflight re-runs so Project files check updates. */
   buildStatus?: "idle" | "building" | "live" | "failed";
+  /** When true, agent is generating; disable Install so user installs the updated version when ready. */
+  isAgentTyping?: boolean;
   expoUrl?: string | null;
   onExpoUrl?: (url: string) => void;
   projectType?: "standard" | "pro";
@@ -641,13 +644,15 @@ export function RunOnDeviceModal({
             type="button"
             onClick={handleInstallOnDevice}
             disabled={
-              !allPassed || installLoading || isBuilding
+              !allPassed || installLoading || isBuilding || isAgentTyping
             }
             className="w-full"
           >
             {installLoading
               ? "Starting\u2026"
-              : isBuilding
+              : isAgentTyping
+                ? "Wait for agent to finish…"
+                : isBuilding
                 ? `Building & installing\u2026 (${installElapsed}s)`
                 : installStatus === "succeeded"
                   ? "Re-install on iPhone"

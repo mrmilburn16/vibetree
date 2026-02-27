@@ -7,6 +7,8 @@ private let logger = Logger(subsystem: "com.vibetree.companion", category: "Inst
 struct InstallOnDeviceSheet: View {
     let projectId: String
     let projectName: String
+    /// When true, the agent is still generating; Install is disabled so the user installs the updated version when ready.
+    var isAgentWorking: Bool = false
     @Environment(\.dismiss) private var dismiss
 
     @State private var installJobId: String?
@@ -14,6 +16,8 @@ struct InstallOnDeviceSheet: View {
     @State private var installLogTail: [String] = []
     @State private var installPolling = false
     @State private var errorMessage: String?
+    /// Bundle ID of the app that was just installed (for "Open app" shortcut).
+    @State private var installedBundleId: String?
 
     var body: some View {
         NavigationStack {
@@ -30,10 +34,29 @@ struct InstallOnDeviceSheet: View {
                         Text("Check your phone — the app should be open.")
                             .font(Forest.font(size: Forest.textSm))
                             .foregroundColor(Forest.textSecondary)
+                        if let bundleId = installedBundleId, !bundleId.isEmpty {
+                            Button {
+                                openGeneratedApp(bundleId: bundleId)
+                            } label: {
+                                HStack(spacing: Forest.space2) {
+                                    Image(systemName: "arrow.up.forward.app")
+                                        .font(Forest.font(size: 16))
+                                    Text("Open \(projectName)")
+                                        .font(Forest.font(size: Forest.textSm, weight: .semibold))
+                                }
+                                .foregroundColor(Forest.backgroundPrimary)
+                                .padding(.horizontal, Forest.space4)
+                                .padding(.vertical, Forest.space2)
+                                .background(Forest.accent)
+                                .cornerRadius(Forest.radiusMd)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, Forest.space2)
+                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if installStatus == "failed" {
-                    VStack(spacing: Forest.space3) {
+                    VStack(spacing: Forest.space4) {
                         Image(systemName: "xmark.circle.fill")
                             .font(Forest.font(size: 48))
                             .foregroundColor(Forest.error)
@@ -47,11 +70,39 @@ struct InstallOnDeviceSheet: View {
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
                         }
-                        Text("Connect your iPhone to your Mac with a cable and try again.")
+                        Text("Unlock your iPhone, connect it via USB, and try again.")
                             .font(Forest.font(size: Forest.textXs))
                             .foregroundColor(Forest.textTertiary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
+                        if !installLogTail.isEmpty {
+                            VStack(alignment: .leading, spacing: Forest.space1) {
+                                Text("Build output (ran on your Mac)")
+                                    .font(Forest.font(size: Forest.textXs, weight: .medium))
+                                    .foregroundColor(Forest.textTertiary)
+                                Text(installLogTail.suffix(8).joined(separator: "\n"))
+                                    .font(Forest.fontMono(size: 10))
+                                    .foregroundColor(Forest.textSecondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(Forest.space3)
+                                    .background(Forest.backgroundSecondary)
+                                    .cornerRadius(Forest.radiusSm)
+                            }
+                            .padding(.horizontal)
+                        }
+                        Button {
+                            errorMessage = nil
+                            startInstall()
+                        } label: {
+                            Text("Try again")
+                                .font(Forest.font(size: Forest.textSm, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, Forest.space2)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Forest.accent)
+                        .padding(.top, Forest.space2)
+                        .padding(.horizontal, Forest.space8)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -64,7 +115,7 @@ struct InstallOnDeviceSheet: View {
                             .font(Forest.font(size: Forest.textXl, weight: .bold))
                             .foregroundColor(Forest.textPrimary)
 
-                        Text("Your Mac will build the app and install it on your connected iPhone. Make sure your phone is plugged in via USB.")
+                        Text("Your Mac will build the app and install it on your connected iPhone. Keep your phone unlocked and plugged in via USB.")
                             .font(Forest.font(size: Forest.textSm))
                             .foregroundColor(Forest.textSecondary)
                             .multilineTextAlignment(.center)
@@ -97,13 +148,14 @@ struct InstallOnDeviceSheet: View {
                                 HStack(spacing: Forest.space2) {
                                     Image(systemName: "iphone.and.arrow.forward")
                                         .font(Forest.font(size: 18))
-                                    Text("Install on iPhone")
+                                    Text(isAgentWorking ? "Wait for agent to finish…" : "Install on iPhone")
                                         .font(Forest.font(size: Forest.textBase, weight: .semibold))
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, Forest.space4)
                             }
                             .buttonStyle(ForestPrimaryButtonStyle())
+                            .disabled(isAgentWorking)
                             .padding(.top, Forest.space4)
                             .padding(.horizontal, Forest.space8)
                         }
@@ -175,6 +227,9 @@ struct InstallOnDeviceSheet: View {
                 if status == "succeeded" || status == "failed" {
                     await MainActor.run {
                         installPolling = false
+                        if status == "succeeded" {
+                            installedBundleId = job.request.bundleId
+                        }
                         if status == "failed", let err = job.error {
                             errorMessage = err
                         }
@@ -185,5 +240,13 @@ struct InstallOnDeviceSheet: View {
                 logger.error("Poll error: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// Opens the generated app via its URL scheme (vt-{bundleId with dots as hyphens}).
+    /// Generated apps register this scheme so the Companion can re-open them from this screen.
+    private func openGeneratedApp(bundleId: String) {
+        let scheme = "vt-" + bundleId.replacingOccurrences(of: ".", with: "-")
+        guard let url = URL(string: "\(scheme)://") else { return }
+        UIApplication.shared.open(url)
     }
 }

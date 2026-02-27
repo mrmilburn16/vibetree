@@ -38,8 +38,10 @@ export type BuildJobRecord = {
 };
 
 const MAX_LOG_LINES = 1500;
-/** If a "running" job has no activity for this long, assume the runner died and re-queue it. */
+/** If a "running" job has no activity for this long, mark failed so Live Activities end (no re-queue). */
 const STALE_JOB_TIMEOUT_MS = 5 * 60 * 1000;
+/** Queued jobs older than this are marked failed so Live Activities don't show "building" forever. */
+const QUEUED_ABANDON_MS = 30 * 60 * 1000;
 
 // Use globalThis so the store survives Next.js hot-reloads and is shared across all routes.
 const g = globalThis as unknown as { __buildJobs?: Map<string, BuildJobRecord>; __buildQueue?: string[] };
@@ -117,26 +119,43 @@ export function setBuildJobAutoFixInProgress(id: string, inProgress: boolean): v
   jobs.set(id, rec);
 }
 
-export function claimNextBuildJob(runnerId: string): BuildJobRecord | undefined {
-  // First, recover any stale "running" jobs whose runner likely died.
+/** Mark job as failed (cancelled). Returns true if job was queued or running and is now failed. */
+export function cancelBuildJob(id: string): boolean {
+  const rec = jobs.get(id);
+  if (!rec || (rec.status !== "queued" && rec.status !== "running")) return false;
+  rec.status = "failed";
+  rec.finishedAt = Date.now();
+  rec.error = "Cancelled by user";
+  rec.runnerId = undefined;
+  jobs.set(id, rec);
+  return true;
+}
+
+/** Mark abandoned queued jobs (no runner picked up in time) and stale running jobs as failed so Live Activities end. */
+export function markAbandonedJobs(): void {
   const now = Date.now();
   for (const rec of jobs.values()) {
-    if (rec.status !== "running") continue;
-    const lastActive = rec.lastActivityAt ?? rec.startedAt ?? rec.createdAt;
-    if (now - lastActive > STALE_JOB_TIMEOUT_MS) {
-      console.log(
-        `[build-jobs] Re-queuing stale job ${rec.id} (runner ${rec.runnerId}, ` +
-        `idle ${Math.round((now - lastActive) / 1000)}s)`
-      );
-      rec.status = "queued";
-      rec.runnerId = undefined;
-      rec.startedAt = undefined;
-      rec.lastActivityAt = undefined;
-      rec.logs.push(`⚠️ Previous runner stopped responding — re-queued automatically`);
+    if (rec.status === "queued" && now - rec.createdAt > QUEUED_ABANDON_MS) {
+      rec.status = "failed";
+      rec.finishedAt = now;
+      rec.error = "Build abandoned (no runner available)";
       jobs.set(rec.id, rec);
-      queue.push(rec.id);
+    } else if (rec.status === "running") {
+      const lastActive = rec.lastActivityAt ?? rec.startedAt ?? rec.createdAt;
+      if (now - lastActive > STALE_JOB_TIMEOUT_MS) {
+        rec.status = "failed";
+        rec.finishedAt = now;
+        rec.error = "Build abandoned (runner stopped responding)";
+        rec.runnerId = undefined;
+        rec.logs.push(`⚠️ Build abandoned after ${Math.round((now - lastActive) / 60)}m with no runner activity`);
+        jobs.set(rec.id, rec);
+      }
     }
   }
+}
+
+export function claimNextBuildJob(runnerId: string): BuildJobRecord | undefined {
+  markAbandonedJobs();
 
   while (queue.length > 0) {
     const id = queue.shift()!;

@@ -20,8 +20,8 @@ struct EditorView: View {
     }
 
     private var canInstall: Bool {
-        if case .ready = chatService.buildStatus { return true }
-        return false
+        guard case .ready = chatService.buildStatus else { return false }
+        return !chatService.isStreaming
     }
 
     var body: some View {
@@ -115,7 +115,7 @@ struct EditorView: View {
             ShareSheet(project: project)
         }
         .sheet(isPresented: $showInstallSheet) {
-            InstallOnDeviceSheet(projectId: project.id, projectName: projectDisplayName.isEmpty ? project.name : projectDisplayName)
+            InstallOnDeviceSheet(projectId: project.id, projectName: projectDisplayName.isEmpty ? project.name : projectDisplayName, isAgentWorking: chatService.isStreaming)
         }
     }
 

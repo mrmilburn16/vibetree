@@ -102,7 +102,7 @@ describe("Haptic call site summary", () => {
       error += (content.match(/HapticService\.error\(\)/g) ?? []).length;
     }
     expect(selection).toBe(7); // chips, Surprise me, minIOS, deviceFamily, orientation + project type + LLM option
-    expect(light).toBe(2); // ForestSecondaryButtonStyle + ChatPanelView triggerDropdownHaptic (both dropdowns)
+    expect(light).toBe(3); // ForestSecondaryButtonStyle + ChatPanelView triggerDropdownHaptic + one other (e.g. clear)
     expect(medium).toBe(2); // ForestPrimaryButtonStyle + ChatPanelView send
     expect(heavy).toBe(3); // ProjectListView (e.g. delete), SettingsView Sign Out
     expect(success).toBe(2); // ChatService, BuildMonitorService
