@@ -48,8 +48,8 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 64,
-    "firstAttemptCompile": 49,
+    "totalBuilds": 65,
+    "firstAttemptCompile": 50,
     "compileRate": 77,
     "functionalSuccesses": 2,
     "functionalRate": 3,

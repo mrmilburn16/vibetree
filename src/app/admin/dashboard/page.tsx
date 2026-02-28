@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -882,7 +883,7 @@ function CachingROISection() {
     fetch("/api/admin/caching-roi")
       .then((r) => r.json())
       .then(setData)
-      .catch(() => {})
+      .catch((err) => Sentry.captureException(err))
       .finally(() => setLoading(false));
   }, []);
 

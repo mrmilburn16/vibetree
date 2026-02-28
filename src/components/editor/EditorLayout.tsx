@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Settings, Smartphone, Share2, Keyboard } from "lucide-react";
@@ -108,7 +109,7 @@ export function EditorLayout({
     fetch(`/api/projects/${project.id}/run-on-device?projectType=standard`)
       .then((res) => res.json())
       .then((data) => { if (data.expoUrl) setExpoUrl(data.expoUrl); })
-      .catch(() => {});
+      .catch((err) => Sentry.captureException(err));
   }, [project.id]);
 
   const latestWidthRef = useRef(chatWidth);

@@ -26,7 +26,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const result = getBuildResult(id);
+  const result = await getBuildResult(id);
   if (!result?.userImagePath) {
     return new Response(null, { status: 404 });
   }
@@ -47,7 +47,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const result = getBuildResult(id);
+  const result = await getBuildResult(id);
   if (!result) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -69,7 +69,7 @@ export async function POST(
   const path = join(IMAGES_DIR, filename);
   const bytes = new Uint8Array(await file.arrayBuffer());
   writeFileSync(path, Buffer.from(bytes), "binary");
-  updateBuildResult(id, { userImagePath: filename });
+  await updateBuildResult(id, { userImagePath: filename });
   return Response.json({ ok: true, userImagePath: filename });
 }
 
@@ -78,7 +78,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const result = getBuildResult(id);
+  const result = await getBuildResult(id);
   if (!result?.userImagePath) {
     return new Response(null, { status: 404 });
   }
@@ -90,6 +90,6 @@ export async function DELETE(
       // ignore
     }
   }
-  updateBuildResult(id, { userImagePath: null });
+  await updateBuildResult(id, { userImagePath: null });
   return Response.json({ ok: true });
 }

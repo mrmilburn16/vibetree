@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useState, useEffect } from "react";
 import {
   Shield,
@@ -266,7 +267,7 @@ export function ProjectSettingsModal({
         if (!data || typeof data !== "object") return;
         setRunnerDevices(data as RunnerDevicesResponse);
       })
-      .catch(() => {})
+      .catch((err) => Sentry.captureException(err))
       .finally(() => {
         if (cancelled) return;
         setDevicesLoading(false);

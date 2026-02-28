@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const insights = computeQAInsights();
+    const insights = await computeQAInsights();
     return NextResponse.json(insights);
   } catch (e) {
     console.error("[qa-insights] Failed:", e);

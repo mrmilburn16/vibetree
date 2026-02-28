@@ -46,7 +46,7 @@ export async function PATCH(
     updates.visionTestReport = body.visionTestReport ?? null;
   }
 
-  const result = updateBuildResult(id, updates);
+  const result = await updateBuildResult(id, updates);
   if (!result) return Response.json({ error: "Not found" }, { status: 404 });
   return Response.json({ result });
 }

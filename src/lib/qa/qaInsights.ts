@@ -156,8 +156,8 @@ const TAG_TO_SUGGESTION: Record<string, { description: string; suggestedRule: st
   },
 };
 
-export function computeQAInsights() {
-  const results = getAllBuildResults();
+export async function computeQAInsights() {
+  const results = await getAllBuildResults();
   const withNotes = results.filter((r) => r.userNotes.trim().length > 0);
 
   const tagCounts: Record<string, { count: number; buildIds: string[] }> = {};

@@ -1,0 +1,94 @@
+#!/usr/bin/env node
+/**
+ * One-off migration: read every line from data/build-feedback.jsonl and write each
+ * record to Firestore collection "build_feedback". Document ID = bf_migrated_${index}.
+ *
+ * Run once manually: node scripts/migrate-build-feedback.mjs
+ * Requires: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in .env.local
+ * Does not delete or modify the original JSONL file.
+ */
+
+import { readFileSync, existsSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = join(__dirname, "..");
+const LOG_PATH = join(root, "data", "build-feedback.jsonl");
+
+// Load .env.local
+const envPath = join(root, ".env.local");
+if (existsSync(envPath)) {
+  const content = readFileSync(envPath, "utf8");
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1).replace(/\\n/g, "\n");
+    }
+    if (!(key in process.env) || process.env[key] === "") process.env[key] = value;
+  }
+}
+
+const projectId = process.env.FIREBASE_PROJECT_ID;
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+if (privateKey) privateKey = privateKey.replace(/\\n/g, "\n");
+
+if (!projectId || !clientEmail || !privateKey) {
+  console.error("Missing Firebase Admin env. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in .env.local");
+  process.exit(1);
+}
+
+if (!existsSync(LOG_PATH)) {
+  console.error("No file at data/build-feedback.jsonl");
+  process.exit(1);
+}
+
+const { initializeApp, cert } = await import("firebase-admin/app");
+const { getFirestore } = await import("firebase-admin/firestore");
+
+const app = initializeApp({
+  credential: cert({ projectId, clientEmail, privateKey }),
+});
+const db = getFirestore(app);
+const COLLECTION = "build_feedback";
+
+const lines = readFileSync(LOG_PATH, "utf8").split("\n").filter(Boolean);
+console.log(`Found ${lines.length} records in data/build-feedback.jsonl`);
+
+let ok = 0;
+let err = 0;
+for (let i = 0; i < lines.length; i++) {
+  try {
+    const record = JSON.parse(lines[i]);
+    if (!record || (record.rating !== "up" && record.rating !== "down")) {
+      console.warn(`Skip line ${i + 1}: invalid rating`);
+      err++;
+      continue;
+    }
+    if (typeof record.timestamp !== "string") {
+      console.warn(`Skip line ${i + 1}: missing or invalid timestamp`);
+      err++;
+      continue;
+    }
+    const id = `bf_migrated_${i}`;
+    const payload = {
+      timestamp: record.timestamp,
+      projectId: typeof record.projectId === "string" ? record.projectId : "",
+      rating: record.rating,
+    };
+    await db.collection(COLLECTION).doc(id).set(payload);
+    ok++;
+  } catch (e) {
+    console.warn(`Line ${i + 1}:`, e.message);
+    err++;
+  }
+}
+
+console.log(`Done. Wrote ${ok} documents to Firestore build_feedback. Errors: ${err}.`);
+process.exit(err > 0 ? 1 : 0);

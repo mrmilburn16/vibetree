@@ -1,12 +1,17 @@
-import { readFileSync, appendFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join, dirname } from "path";
+/**
+ * Build results persistence via Firestore (collection: build_results).
+ * All exported functions are async and return Promises; callers must await.
+ * visionTestReport.screenshots are stripped before writing to stay under the 1MB document limit.
+ */
+
+import { getAdminDb } from "@/lib/firebaseAdmin";
 import { recordBuildForSkill, addGoldenExample } from "@/lib/skills/registry";
 import { getProjectFiles } from "@/lib/projectFileStore";
 import { classifyNotes } from "@/lib/qa/issueClassifier";
 
-const LOG_PATH = join(process.cwd(), "data", "build-results.jsonl");
+const COLLECTION = "build_results";
 
-/** Stored vision test report (persisted on build result). */
+/** Stored vision test report (persisted on build result). screenshots are not stored in Firestore. */
 export type VisionTestReportStored = {
   projectId: string;
   appName: string;
@@ -54,13 +59,88 @@ export type BuildResult = {
   visionTestReport?: VisionTestReportStored | null;
 };
 
+function getDb() {
+  try {
+    return getAdminDb();
+  } catch {
+    return null;
+  }
+}
+
+/** Strip base64 screenshots from visionTestReport before writing to Firestore (1MB limit). */
+function stripScreenshotsFromReport(
+  report: VisionTestReportStored | null | undefined
+): VisionTestReportStored | null | undefined {
+  if (!report) return report;
+  return {
+    ...report,
+    screenshots: [],
+  };
+}
+
+/** Build a Firestore-safe payload (strip screenshots from nested report). */
+function toFirestorePayload(result: BuildResult): Record<string, unknown> {
+  const vision = result.visionTestReport;
+  return {
+    id: result.id,
+    timestamp: result.timestamp,
+    projectId: result.projectId,
+    projectName: result.projectName,
+    prompt: result.prompt,
+    tier: result.tier,
+    category: result.category,
+    compiled: result.compiled,
+    attempts: result.attempts,
+    autoFixUsed: result.autoFixUsed,
+    compilerErrors: result.compilerErrors,
+    fileCount: result.fileCount,
+    fileNames: result.fileNames,
+    durationMs: result.durationMs,
+    userNotes: result.userNotes ?? "",
+    userDesignScore: result.userDesignScore,
+    userFunctionalScore: result.userFunctionalScore,
+    userImagePath: result.userImagePath,
+    skillsUsed: result.skillsUsed ?? [],
+    issueTags: result.issueTags ?? [],
+    visionTestReport: vision ? stripScreenshotsFromReport(vision) ?? null : null,
+  };
+}
+
+/** Map Firestore doc data back to BuildResult (screenshots will be [] when read from Firestore). */
+function fromFirestoreData(id: string, data: Record<string, unknown>): BuildResult {
+  const vision = data.visionTestReport as VisionTestReportStored | null | undefined;
+  return {
+    id: (data.id as string) || id,
+    timestamp: (data.timestamp as string) || new Date().toISOString(),
+    projectId: (data.projectId as string) || "",
+    projectName: (data.projectName as string) || "",
+    prompt: (data.prompt as string) || "",
+    tier: (data.tier === "easy" || data.tier === "medium" || data.tier === "hard" || data.tier === "custom") ? data.tier : "custom",
+    category: (data.category as string) || "",
+    compiled: Boolean(data.compiled),
+    attempts: typeof data.attempts === "number" ? data.attempts : 1,
+    autoFixUsed: Boolean(data.autoFixUsed),
+    compilerErrors: Array.isArray(data.compilerErrors) ? data.compilerErrors : [],
+    fileCount: typeof data.fileCount === "number" ? data.fileCount : 0,
+    fileNames: Array.isArray(data.fileNames) ? data.fileNames : [],
+    durationMs: typeof data.durationMs === "number" ? data.durationMs : 0,
+    userNotes: typeof data.userNotes === "string" ? data.userNotes : "",
+    userDesignScore: data.userDesignScore === null || (typeof data.userDesignScore === "number" && data.userDesignScore >= 1 && data.userDesignScore <= 5) ? data.userDesignScore as number | null : null,
+    userFunctionalScore: data.userFunctionalScore === null || (typeof data.userFunctionalScore === "number" && data.userFunctionalScore >= 1 && data.userFunctionalScore <= 5) ? data.userFunctionalScore as number | null : null,
+    userImagePath: data.userImagePath === null || (typeof data.userImagePath === "string") ? data.userImagePath as string | null : null,
+    skillsUsed: Array.isArray(data.skillsUsed) ? data.skillsUsed : [],
+    issueTags: Array.isArray(data.issueTags) ? data.issueTags : [],
+    visionTestReport: vision && typeof vision === "object" ? { ...vision, screenshots: Array.isArray(vision.screenshots) ? vision.screenshots : [] } : null,
+  };
+}
+
 function generateId(): string {
   return `br_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function logBuildResult(
+export async function logBuildResult(
   partial: Omit<BuildResult, "id" | "timestamp" | "userNotes" | "userDesignScore" | "userFunctionalScore" | "userImagePath" | "skillsUsed" | "issueTags"> & { skillsUsed?: string[]; issueTags?: string[] }
-): BuildResult {
+): Promise<BuildResult> {
   const result: BuildResult = {
     id: generateId(),
     timestamp: new Date().toISOString(),
@@ -72,15 +152,16 @@ export function logBuildResult(
     issueTags: [],
     ...partial,
   };
-  try {
-    const dir = dirname(LOG_PATH);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(LOG_PATH, JSON.stringify(result) + "\n", "utf8");
-  } catch (e) {
-    console.error("[build-results] Failed to write:", e);
+
+  const db = getDb();
+  if (db) {
+    try {
+      await db.collection(COLLECTION).doc(result.id).set(toFirestorePayload(result));
+    } catch (e) {
+      console.error("[build-results] Firestore write failed:", e);
+    }
   }
 
-  // Update per-skill stats
   for (const skillId of result.skillsUsed) {
     try {
       recordBuildForSkill(
@@ -91,35 +172,37 @@ export function logBuildResult(
         result.compilerErrors,
       );
     } catch {
-      // Skill tracking is best-effort
+      // best-effort
     }
   }
 
   return result;
 }
 
-export function getAllBuildResults(): BuildResult[] {
-  if (!existsSync(LOG_PATH)) return [];
+export async function getAllBuildResults(): Promise<BuildResult[]> {
+  const db = getDb();
+  if (!db) return [];
   try {
-    const lines = readFileSync(LOG_PATH, "utf8").split("\n").filter(Boolean);
-    return lines.map((l) => {
-      const r = JSON.parse(l) as BuildResult;
-      if (r.userImagePath === undefined) r.userImagePath = null;
-      if (!Array.isArray(r.skillsUsed)) r.skillsUsed = [];
-      if (!Array.isArray(r.issueTags)) r.issueTags = [];
-      if (r.visionTestReport === undefined) r.visionTestReport = null;
-      return r;
-    }).reverse();
+    const snap = await db.collection(COLLECTION).orderBy("timestamp", "desc").get();
+    return snap.docs.map((d) => fromFirestoreData(d.id, d.data()));
   } catch {
     return [];
   }
 }
 
-export function getBuildResult(id: string): BuildResult | null {
-  return getAllBuildResults().find((r) => r.id === id) ?? null;
+export async function getBuildResult(id: string): Promise<BuildResult | null> {
+  const db = getDb();
+  if (!db) return null;
+  try {
+    const doc = await db.collection(COLLECTION).doc(id).get();
+    if (!doc.exists) return null;
+    return fromFirestoreData(doc.id, doc.data()!);
+  } catch {
+    return null;
+  }
 }
 
-export function updateBuildResult(
+export async function updateBuildResult(
   id: string,
   updates: {
     userNotes?: string;
@@ -129,74 +212,69 @@ export function updateBuildResult(
     issueTags?: string[];
     visionTestReport?: VisionTestReportStored | null;
   }
-): BuildResult | null {
-  if (!existsSync(LOG_PATH)) return null;
+): Promise<BuildResult | null> {
+  const db = getDb();
+  if (!db) return null;
   try {
-    const lines = readFileSync(LOG_PATH, "utf8").split("\n").filter(Boolean);
-    let found: BuildResult | null = null;
-    const updated = lines.map((line) => {
-      const r = JSON.parse(line) as BuildResult;
-      if (!Array.isArray(r.issueTags)) r.issueTags = [];
-      if (r.id === id) {
-        if (updates.userNotes !== undefined) {
-          r.userNotes = updates.userNotes;
-          r.issueTags = classifyNotes(updates.userNotes);
-        }
-        if (updates.issueTags !== undefined) r.issueTags = updates.issueTags;
-        if (updates.userDesignScore !== undefined) r.userDesignScore = updates.userDesignScore;
-        if (updates.userFunctionalScore !== undefined) r.userFunctionalScore = updates.userFunctionalScore;
-        if (updates.userImagePath !== undefined) r.userImagePath = updates.userImagePath;
-        if (updates.visionTestReport !== undefined) r.visionTestReport = updates.visionTestReport;
-        found = r;
-      }
-      return JSON.stringify(r);
-    });
-    const result = found as BuildResult | null;
-    if (result) {
-      writeFileSync(LOG_PATH, updated.join("\n") + "\n", "utf8");
+    const ref = db.collection(COLLECTION).doc(id);
+    const doc = await ref.get();
+    if (!doc.exists) return null;
 
-      if (updates.userFunctionalScore !== undefined && result.skillsUsed?.length) {
-        for (const skillId of result.skillsUsed) {
-          try {
-            recordBuildForSkill(
-              skillId,
-              result.compiled,
-              result.attempts === 1,
-              updates.userFunctionalScore,
-              [],
-            );
-          } catch {
-            // best-effort
-          }
-        }
+    const existing = fromFirestoreData(doc.id, doc.data()!);
+    if (updates.userNotes !== undefined) {
+      existing.userNotes = updates.userNotes;
+      existing.issueTags = classifyNotes(updates.userNotes);
+    }
+    if (updates.issueTags !== undefined) existing.issueTags = updates.issueTags;
+    if (updates.userDesignScore !== undefined) existing.userDesignScore = updates.userDesignScore;
+    if (updates.userFunctionalScore !== undefined) existing.userFunctionalScore = updates.userFunctionalScore;
+    if (updates.userImagePath !== undefined) existing.userImagePath = updates.userImagePath;
+    if (updates.visionTestReport !== undefined) existing.visionTestReport = updates.visionTestReport;
 
-        // Save golden example when: compiled on first attempt + high functional score
-        if (
-          result.compiled &&
-          result.attempts === 1 &&
-          updates.userFunctionalScore !== null &&
-          updates.userFunctionalScore >= 4
-        ) {
-          try {
-            const projFiles = getProjectFiles(result.projectId);
-            if (projFiles && Object.keys(projFiles).length > 0) {
-              for (const skillId of result.skillsUsed) {
-                addGoldenExample(skillId, result.id, projFiles);
-              }
-            }
-          } catch {
-            // best-effort
-          }
+    const payload = toFirestorePayload(existing);
+    await ref.set(payload);
+
+    if (updates.userFunctionalScore !== undefined && existing.skillsUsed?.length) {
+      for (const skillId of existing.skillsUsed) {
+        try {
+          recordBuildForSkill(
+            skillId,
+            existing.compiled,
+            existing.attempts === 1,
+            updates.userFunctionalScore,
+            [],
+          );
+        } catch {
+          // best-effort
         }
       }
     }
-    return result;
+
+    if (
+      existing.compiled &&
+      existing.attempts === 1 &&
+      updates.userFunctionalScore != null &&
+      updates.userFunctionalScore >= 4
+    ) {
+      try {
+        const projFiles = getProjectFiles(existing.projectId);
+        if (projFiles && Object.keys(projFiles).length > 0) {
+          for (const skillId of existing.skillsUsed) {
+            addGoldenExample(skillId, existing.id, projFiles);
+          }
+        }
+      } catch {
+        // best-effort
+      }
+    }
+
+    return existing;
   } catch {
     return null;
   }
 }
 
-export function getBuildStats(): {
+export async function getBuildStats(): Promise<{
   total: number;
   compiled: number;
   failed: number;
@@ -208,8 +286,8 @@ export function getBuildStats(): {
   commonErrors: Array<{ error: string; count: number }>;
   avgDesignScore: number | null;
   avgFunctionalScore: number | null;
-} {
-  const results = getAllBuildResults();
+}> {
+  const results = await getAllBuildResults();
   const total = results.length;
   if (total === 0) {
     return {
@@ -228,8 +306,8 @@ export function getBuildStats(): {
 
   let totalAttempts = 0;
   let autoFixCount = 0;
-  let designScores: number[] = [];
-  let funcScores: number[] = [];
+  const designScores: number[] = [];
+  const funcScores: number[] = [];
 
   for (const r of results) {
     totalAttempts += r.attempts;

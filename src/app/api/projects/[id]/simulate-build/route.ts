@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { appendBuildJobLogs, createBuildJob, setBuildJobStatus } from "@/lib/buildJobs";
 import { sendBackgroundRefreshPush } from "@/lib/apns";
 import { ensureProject, getProject } from "@/lib/projectStore";
@@ -59,13 +60,13 @@ export async function POST(
   ]);
 
   // If APNs is configured, try to wake the phone so it can refresh build state.
-  sendBackgroundRefreshPush(`sim_build_queued:${job.id}`).catch(() => {});
+  sendBackgroundRefreshPush(`sim_build_queued:${job.id}`).catch((err) => Sentry.captureException(err));
 
   // Transition to running shortly after creation.
   setTimeout(() => {
     setBuildJobStatus(job.id, { status: "running", startedAt: Date.now(), runnerId: "simulator" });
     appendBuildJobLogs(job.id, ["[sim] Starting xcodebuild…", "[sim] CompileSwiftSources…"]);
-    sendBackgroundRefreshPush(`sim_build_running:${job.id}`).catch(() => {});
+    sendBackgroundRefreshPush(`sim_build_running:${job.id}`).catch((err) => Sentry.captureException(err));
   }, 600);
 
   // Stream some fake logs while running.
@@ -89,7 +90,7 @@ export async function POST(
       ...(fail ? { error: "Simulated failure" } : {}),
     });
     appendBuildJobLogs(job.id, [fail ? "[sim] Build failed." : "[sim] Build succeeded."]);
-    sendBackgroundRefreshPush(`sim_build_done:${job.id}`).catch(() => {});
+    sendBackgroundRefreshPush(`sim_build_done:${job.id}`).catch((err) => Sentry.captureException(err));
     timers.delete(job.id);
   }, (total + 1) * 1000);
 

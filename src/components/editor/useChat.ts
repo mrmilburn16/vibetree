@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { featureFlags } from "@/lib/featureFlags";
 import { updateProject } from "@/lib/projects";
@@ -216,7 +217,7 @@ function persistChatToServer(projectId: string, messages: ChatMessage[]): void {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages: stable }),
     keepalive: true,
-  }).catch(() => {});
+  }).catch((err) => Sentry.captureException(err));
 }
 
 function updateProjectNameInLocalStorage(projectId: string, name: string): void {
@@ -956,7 +957,7 @@ export function useChat(
                     durationMs: buildDuration,
                     skillsUsed: doneEvent?.skillIds ?? [],
                   }),
-                }).catch(() => {});
+                }).catch((err) => Sentry.captureException(err));
                 const validationLine =
                   result.status === "succeeded"
                     ? "Build validated. Your app is ready—download from Run on device when you want to run on your iPhone."
@@ -1004,7 +1005,7 @@ export function useChat(
                     durationMs: 0,
                     skillsUsed: doneEvent?.skillIds ?? [],
                   }),
-                }).catch(() => {});
+                }).catch((err) => Sentry.captureException(err));
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === validateMessageId

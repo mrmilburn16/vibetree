@@ -1,7 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync } from "fs";
-import { join, dirname } from "path";
-
-const LOG_PATH = join(process.cwd(), "data", "build-feedback.jsonl");
+import { logBuildFeedback } from "@/lib/buildFeedbackStore";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -18,13 +15,7 @@ export async function POST(request: Request) {
     rating,
   };
 
-  try {
-    const dir = dirname(LOG_PATH);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(LOG_PATH, JSON.stringify(entry) + "\n", "utf8");
-  } catch (e) {
-    console.error("[build-feedback] Failed to write:", e);
-  }
+  await logBuildFeedback(entry);
 
   return Response.json({ ok: true });
 }

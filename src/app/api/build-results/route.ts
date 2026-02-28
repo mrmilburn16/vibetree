@@ -3,16 +3,16 @@ import { logBuildResult, getAllBuildResults, getBuildStats } from "@/lib/buildRe
 export async function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get("stats") === "true") {
-    return Response.json(getBuildStats());
+    return Response.json(await getBuildStats());
   }
   const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
-  const results = getAllBuildResults().slice(0, limit);
+  const results = (await getAllBuildResults()).slice(0, limit);
   return Response.json({ results, total: results.length });
 }
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const result = logBuildResult({
+  const result = await logBuildResult({
     projectId: String(body.projectId ?? ""),
     projectName: String(body.projectName ?? "Unknown"),
     prompt: String(body.prompt ?? ""),

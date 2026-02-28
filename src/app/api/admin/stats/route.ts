@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/adminAuth";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { getBuildFeedbackEntries } from "@/lib/buildFeedbackStore";
 import { getServiceAlerts } from "@/lib/serviceStatus";
 
 export const dynamic = "force-dynamic";
@@ -52,30 +51,6 @@ type FeedbackEntry = {
   projectId?: string;
   rating: "up" | "down";
 };
-
-const FEEDBACK_LOG_PATH = join(process.cwd(), "data", "build-feedback.jsonl");
-
-function parseFeedbackEntries(): FeedbackEntry[] {
-  if (!existsSync(FEEDBACK_LOG_PATH)) return [];
-  try {
-    const raw = readFileSync(FEEDBACK_LOG_PATH, "utf8");
-    const lines = raw.split(/\r?\n/).filter(Boolean);
-    const entries: FeedbackEntry[] = [];
-    for (const line of lines) {
-      try {
-        const obj = JSON.parse(line) as FeedbackEntry;
-        if (!obj || (obj.rating !== "up" && obj.rating !== "down")) continue;
-        if (typeof obj.timestamp !== "string") continue;
-        entries.push(obj);
-      } catch {
-        // ignore bad lines
-      }
-    }
-    return entries;
-  } catch {
-    return [];
-  }
-}
 
 function dateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -139,7 +114,7 @@ export async function GET(request: Request) {
   const { start, end } = getDateRange(range);
   const days = Math.max(7, Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)));
 
-  const feedbackEntries = parseFeedbackEntries();
+  const feedbackEntries = await getBuildFeedbackEntries();
   const feedback = buildFeedbackStats(feedbackEntries, start, end);
   const prevStart = addDays(start, -days);
   const prevEnd = addDays(end, -days);

@@ -8,7 +8,7 @@ import {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const milestone = searchParams.get("milestone");
-  const runs = milestone ? getRunsByMilestone(milestone) : getAllTestSuiteRuns();
+  const runs = milestone ? await getRunsByMilestone(milestone) : await getAllTestSuiteRuns();
   return Response.json({ runs });
 }
 
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
 
   if (body.action === "create") {
-    const run = createTestSuiteRun(
+    const run = await createTestSuiteRun(
       String(body.model ?? "sonnet-4.6"),
       "pro",
       body.milestone ?? undefined,
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "update" && typeof body.id === "string") {
-    const run = updateTestSuiteRun(body.id, {
+    const run = await updateTestSuiteRun(body.id, {
       status: body.status,
       results: body.results,
       summary: body.summary,

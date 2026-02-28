@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
@@ -1211,7 +1212,7 @@ function ResultRow({
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ files }),
-                      }).catch(() => {});
+                      }).catch((err) => Sentry.captureException(err));
                     }
                     const res = await fetch(`/api/projects/${result.projectId}/build-install`, {
                       method: "POST",
@@ -1278,7 +1279,7 @@ function ResultRow({
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ files }),
-                      }).catch(() => {});
+                      }).catch((err) => Sentry.captureException(err));
                       await downloadXcodeZip(
                         result.projectId!,
                         result.idea.title,
@@ -2269,7 +2270,7 @@ export default function TestSuitePage() {
           );
         }
       })
-      .catch(() => {});
+      .catch((err) => Sentry.captureException(err));
   }, []);
 
   useEffect(() => {
@@ -2363,7 +2364,7 @@ export default function TestSuitePage() {
             });
           }
         })
-        .catch(() => {});
+        .catch((err) => Sentry.captureException(err));
     };
 
     if (index !== undefined && updates.notes !== undefined) {
@@ -2406,7 +2407,7 @@ export default function TestSuitePage() {
             });
           }
         })
-        .catch(() => {});
+        .catch((err) => Sentry.captureException(err));
     });
   }, [results]);
 
@@ -2800,7 +2801,7 @@ export default function TestSuitePage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ files: builtFiles }),
-          }).catch(() => {});
+          }).catch((err) => Sentry.captureException(err));
         }
 
         const filesForChecks = (builtFiles?.length ? builtFiles : projectFiles) ?? [];
@@ -3520,7 +3521,7 @@ Please:
         if (!appLoaded) {
           console.log("[vision-test] Proceeding anyway after 5 retries");
         }
-        await session.heartbeat?.().catch(() => {});
+        await session.heartbeat?.().catch((err) => Sentry.captureException(err));
 
         const maxSteps = 30;
         let stoppedByUser = false;
@@ -3530,7 +3531,7 @@ Please:
             console.log("[vision-test] Stop requested, exiting loop");
             break;
           }
-          await session.heartbeat?.().catch(() => {});
+          await session.heartbeat?.().catch((err) => Sentry.captureException(err));
           setVisionTestStep(step + 1);
           console.log("[vision-test] Step", step + 1, ": taking screenshot");
           let screenshotBase64: string;
@@ -3719,7 +3720,7 @@ Please:
 
         console.log("[vision-test] Loop complete after", steps.length, "steps");
 
-        await session.end().catch(() => {});
+        await session.end().catch((err) => Sentry.captureException(err));
 
         let finalNotes = steps
           .map((s, i) => {

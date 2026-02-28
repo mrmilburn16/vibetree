@@ -1,0 +1,10 @@
+import * as Sentry from "@sentry/nextjs";
+
+const dsn = process.env.SENTRY_DSN;
+
+Sentry.init({
+  dsn,
+  sendDefaultPii: false,
+  tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+  environment: process.env.NODE_ENV,
+});
