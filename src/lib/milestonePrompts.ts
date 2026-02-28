@@ -36,6 +36,8 @@ function mediumByTitle(title: string, category: string): MilestoneIdea | null {
 }
 
 const M1_BASELINE: MilestoneIdea[] = [
+  { title: "Smoke Test", category: "Misc", tier: "easy",
+    prompt: "Build the simplest possible iOS app. Just a white screen with a label in the center that says Hello Vibetree in large bold text. Nothing else." },
   { title: "Todo list with categories", category: "Persistence", tier: "medium",
     prompt: `Build a todo app with categories. Main screen: segmented control to filter (All, Active, Completed). List of tasks with checkboxes, due dates, and priority colors (high=red, medium=orange, low=green). Add task sheet: title, due date picker, priority picker, optional notes. Swipe to delete. Sort by due date or priority. Persist with Codable + UserDefaults. Show completion percentage at top.` },
   { title: "Expense tracker", category: "Persistence", tier: "medium",
@@ -117,6 +119,113 @@ const M3_HIG_IDEAS: MilestoneIdea[] = [
     prompt: "Build a notes app demonstrating HIG navigation patterns. Sidebar/list: NavigationStack with .searchable, sorted by date. Each row shows title (.headline), preview (.subheadline, .secondary), and date (.caption). Swipe-to-delete with .confirmationDialog confirmation. Detail view: editable TextEditor with .navigationTitle set to the note title. Toolbar: share button, delete button (with destructive alert confirmation), and a 'New Note' button. Empty state: ContentUnavailableView with pencil.line SF Symbol. Persist with UserDefaults + Codable. Animate list insertions with .spring(). Dark mode and accessibility labels throughout." },
 ];
 
+const M6_INTEGRATION: MilestoneIdea[] = [
+  { title: "Apple Music Playlist Creator", category: "MusicKit", tier: "hard",
+    prompt: "Build an app where I type a mood or artist name and it creates a 30 minute Apple Music playlist. Show the songs before adding to my library. Handle the case where Apple Music is not available or permission is denied." },
+  { title: "Weather Dashboard", category: "WeatherKit", tier: "hard",
+    prompt: "Build a weather dashboard that shows current conditions, hourly forecast, and a 7 day forecast for my current location. Cache the data for 30 minutes. Show a helpful message if location permission is denied." },
+  { title: "Run Route Tracker", category: "HealthKit + CoreLocation", tier: "hard",
+    prompt: "Build a run tracking app that records my GPS route on a map and saves the workout to HealthKit including distance, duration, and calories. Show a permission explanation before requesting access. Handle denied permissions gracefully." },
+  { title: "Sleep Summary", category: "HealthKit", tier: "hard",
+    prompt: "Build an app that reads my last 7 days of sleep data from HealthKit and shows a summary with average sleep duration, a chart of sleep per night, and a sleep quality score. Request only the health data types actually needed." },
+  { title: "Nearby Coffee Map", category: "MapKit + CoreLocation", tier: "medium",
+    prompt: "Build an app that shows a map of nearby coffee shops using MapKit. Show custom pins, allow filtering by distance, and show a detail card when I tap a pin. Handle location permission denial with a helpful message." },
+  { title: "Sign in with Apple Demo", category: "Sign in with Apple", tier: "medium",
+    prompt: "Build a complete sign in with Apple flow with a welcome screen, Apple sign in button, and a home screen that shows the user name and email after signing in. Include a sign out button. Handle errors gracefully." },
+  { title: "Live Text Scanner", category: "VisionKit + AVFoundation", tier: "hard",
+    prompt: "Build an app that uses the camera to scan and extract text from documents in real time using VisionKit DataScanner. Show extracted text below the camera view. Allow copying the text. Request camera permission with a clear explanation." },
+  { title: "Offline Notes with Sync", category: "Core Data + CloudKit", tier: "hard",
+    prompt: "Build a notes app that saves notes locally using Core Data and syncs them to iCloud. Show a sync status indicator. Work fully offline when iCloud is unavailable. Include title and body for each note." },
+  { title: "Notification Scheduler", category: "UserNotifications", tier: "medium",
+    prompt: "Build an app where I can schedule daily reminder notifications at a time I choose. Show all scheduled notifications in a list. Allow deleting them. Request notification permission with a clear explanation of why notifications are needed." },
+  { title: "NFC Tag Reader", category: "CoreNFC", tier: "hard",
+    prompt: "Build an app that reads NFC tags and displays the tag content on screen. Show a scan button that triggers the NFC reader. Display a history of recently scanned tags. Handle the case where NFC is not available on the device." },
+];
+
+/** M7: Regression — 40 test cases tied to specific error patterns we fixed. Verifies system prompt improvements. */
+const M7_REGRESSION: MilestoneIdea[] = [
+  { title: "Flashcard deck with bindings", category: "Persistence (UserDefaults)", tier: "medium",
+    prompt: "Build a flashcard app with decks. Main screen: list of decks; tap a deck to see cards. Add/edit cards in a sheet that takes a Binding to the deck's cards array. Persist with Codable + UserDefaults." },
+  { title: "Event list with semantic colors", category: "Lists & navigation", tier: "medium",
+    prompt: "Build an event list app. One screen: list of events in an inset grouped list. Use semantic list row backgrounds (e.g. secondary fill) and an accent color for the leading icon. Do not use Color.quaternary; use system semantic colors that work in both light and dark mode." },
+  { title: "Camera placeholder with permission", category: "Camera", tier: "medium",
+    prompt: "Build a simple camera app. One screen: a \"Open camera\" button. When tapped, request camera permission; if granted show a placeholder view (dark rectangle with \"Camera active\"); if denied show \"Camera access denied\". Include the required plist usage description." },
+  { title: "Music journal (ShazamKit-style)", category: "Music recognition (ShazamKit)", tier: "medium",
+    prompt: "Build a music journal: recognize a song with ShazamKit, let the user tag the mood (happy/chill/energy), and save. Show mood filters and a list of saved entries. Use a single pending-entry state for the current recognition; do not declare the same property name twice in the ViewModel." },
+  { title: "Workout Live Activity (Intent in extension)", category: "Live Activities (ActivityKit)", tier: "medium",
+    prompt: "Build a workout timer that starts a Live Activity showing elapsed time and rep count. Main app: start/stop and target. Live Activity: compact and expanded layouts. Use AppIntentConfiguration or a timeline provider; if you use an App Intent, define it in the WidgetExtension folder so the widget target can see it." },
+  { title: "Delivery tracker Live Activity", category: "Live Activities (ActivityKit)", tier: "medium",
+    prompt: "Build a delivery tracker that starts a Live Activity for an active delivery (ETA, status, progress). App screen: create a mock delivery and update status. Live Activity updates in real time. Define the activity attributes type so both the app and the WidgetExtension can use it (e.g. in a file the extension can see)." },
+  { title: "Voice memo placeholder", category: "Audio / Microphone", tier: "medium",
+    prompt: "Build a simple voice memo app. One screen: a \"Start recording\" button. When tapped, request microphone permission; if granted show a placeholder \"Recording...\" view; if denied show \"Microphone access denied\". Include the required plist usage description for the microphone." },
+  { title: "Photo picker with permission", category: "Photos / Photo Library", tier: "medium",
+    prompt: "Build a simple app that lets the user pick a photo from their library. One screen: a \"Choose photo\" button. When tapped, request photo library permission if needed, then present a photo picker (PHPickerViewController or PhotosPicker). Show the selected image or a placeholder. Include the required plist usage description for the photo library." },
+  { title: "Settings screen with modern APIs", category: "Lists & navigation", tier: "medium",
+    prompt: "Build a settings screen with NavigationStack (not NavigationView). Use .navigationTitle for the bar title and .foregroundStyle for text and icon colors. No .foregroundColor or .navigationBarTitle. List of 3 sections with toggles and navigation links. Target iOS 17+." },
+  { title: "Async data load in view", category: "Async", tier: "medium",
+    prompt: "Build a single screen that loads a list of items from an async function (e.g. Task { await fetchItems() }). Show ProgressView while loading and the list when done. The fetch is async; call it from the view using .task or Task { }. Do not call the async function without await." },
+  { title: "Voice input placeholder", category: "Speech Recognition", tier: "medium",
+    prompt: "Build a simple app with a \"Start listening\" button. When tapped, request speech recognition permission; if granted show a placeholder \"Listening...\" view; if denied show \"Speech recognition denied\". Include the required plist usage description for speech recognition." },
+  { title: "Contact picker with permission", category: "Contacts", tier: "medium",
+    prompt: "Build a simple app with a \"Choose contact\" button. When tapped, request contacts permission; if granted present a contact picker (CNContactPickerViewController) or list; if denied show \"Contacts access denied\". Include the required plist usage description for contacts." },
+  { title: "BLE scanner placeholder", category: "Bluetooth (CoreBluetooth)", tier: "medium",
+    prompt: "Build a simple app with a \"Scan for devices\" button. When tapped, ensure Bluetooth usage is documented (REQUIRES PLIST comment for NSBluetoothAlwaysUsageDescription). Show a placeholder list of devices or \"Scanning...\". Handle the case when Bluetooth is off. Do not assume Bluetooth is available." },
+  { title: "Savings goal progress (numeric only)", category: "UI / Progress", tier: "medium",
+    prompt: "Build a single screen with a savings goal: ProgressView showing current/target (e.g. 200.0 / 1000.0 as Double). Below it show the same as text (e.g. \"$200 / $1000\"). Use Double for ProgressView(value:total:); format to String only for the Text label. Do not pass a String into ProgressView." },
+  { title: "List of identifiable items", category: "Lists & navigation", tier: "medium",
+    prompt: "Build a list screen showing 5 items. Each item has a unique id (UUID or Int). Use ForEach with the collection and provide id: \\.id because the item type conforms to Identifiable. Tapping an item navigates to detail. Do not pass a Binding where a plain array is expected." },
+  { title: "Sheet with item binding", category: "UI states", tier: "medium",
+    prompt: "Build a screen with a list of 3 items. Tapping an item presents a sheet showing that item's detail. Use .sheet(item: $selectedItem) where selectedItem is Optional (Item?) and Item conforms to Identifiable. Dismiss by setting selectedItem = nil. Do not use a non-optional binding for .sheet(item:)." },
+  { title: "Weather dashboard with cache", category: "WeatherKit", tier: "medium",
+    prompt: "Build a weather dashboard showing current conditions and 3-day forecast. Use WeatherKit. Cache the response for at least 30 minutes; do not call the weather API on every view appearance or in the view body. Check cache before issuing a new request." },
+  { title: "Settings sliders", category: "Forms & pickers", tier: "medium",
+    prompt: "Build a settings screen with a Slider(0...100) for volume and a Stepper for count. Use @State Double for the slider and @State Int for the stepper; pass Binding to Slider and Stepper. Do not use String or a non-binding value. Show the current values as text." },
+  { title: "Login form (TextField binding)", category: "Forms & pickers", tier: "medium",
+    prompt: "Build a simple login form: two text fields (email, password) and a Submit button. Use @State String for each field and pass Binding<String> to TextField and SecureField. Do not use Binding<Int> or a non-String binding. Show the submitted values in an alert." },
+  { title: "Picker with enum selection", category: "Forms & pickers", tier: "medium",
+    prompt: "Build a form with a Picker for \"Priority\" (Low, Medium, High). Use an enum conforming to String and CaseIterable; selection binding is Binding<Priority?>. Use ForEach(Priority.allCases, id: \\.self) or Picker with tag(priority) so the selection type matches. Do not mix Int tags with String binding." },
+  { title: "Long form with scroll", category: "Layout", tier: "medium",
+    prompt: "Build a settings-style form with 8 sections (each with 2–3 rows). Wrap the entire form in a ScrollView so it scrolls on small devices. Do not use a fixed height that would clip content. Use Form or List inside ScrollView if appropriate, or VStack in ScrollView." },
+  { title: "NFC tag reader placeholder", category: "CoreNFC", tier: "medium",
+    prompt: "Build a simple NFC reader app. Before starting a session, check NFCTagReaderSession.readingAvailable. If false, show \"NFC is not available on this device\" (e.g. on simulator). If true, show a \"Scan\" button that starts the session. Include REQUIRES PLIST for NFCReaderUsageDescription." },
+  { title: "Event date picker", category: "Forms & pickers", tier: "medium",
+    prompt: "Build a form with a date picker for \"Event date\". Use @State var eventDate: Date = Date() and pass $eventDate to DatePicker. Do not use a String for the selection. Show the selected date as formatted text below. Include a time picker if appropriate." },
+  { title: "Step count only (HealthKit)", category: "HealthKit", tier: "medium",
+    prompt: "Build an app that reads only step count from HealthKit. Request authorization only for step count (HKQuantityType.quantityType(forIdentifier: .stepCount)); do not request read for all quantity types. Show today's steps and handle denied/unavailable. Include REQUIRES PLIST and capability warning in summary." },
+  { title: "Weather with shared service", category: "WeatherKit", tier: "medium",
+    prompt: "Build a weather screen that shows current conditions. Use WeatherService.shared (or a single shared instance) for the request; do not create a new WeatherService in the view or on every request. Cache the result for 30 minutes. Show a loading state and handle errors." },
+  { title: "Destructive action alert", category: "Alerts & confirmations", tier: "medium",
+    prompt: "Build a screen with a \"Delete\" button. When tapped, show an .alert with a clear title (String), message (String), and two buttons: \"Cancel\" (role: .cancel) and \"Delete\" (role: .destructive). Do not pass a View as the alert title. Dismiss on Cancel; perform delete on Delete." },
+  { title: "Remote image list", category: "Loading / Images", tier: "medium",
+    prompt: "Build a list of 5 items, each with a title and a remote image URL (use placeholder URLs like https://picsum.photos/100). Use AsyncImage for each image with a placeholder (ProgressView) and a failure view (e.g. Image(systemName: \"photo\")). Do not load images synchronously in the view body." },
+  { title: "Settings sync (iCloud KVS)", category: "CloudKit / iCloud", tier: "medium",
+    prompt: "Build a settings screen that syncs a toggle and a text preference to iCloud using NSUbiquitousKeyValueStore. When reading, check if the key exists and provide a default value; do not assume object(forKey:) returns a non-nil value. Handle iCloud unavailable. Include capability warning in summary." },
+  { title: "ViewModel with stable dependency", category: "Architecture", tier: "medium",
+    prompt: "Build a screen that uses a ViewModel (ObservableObject) as @StateObject. The ViewModel takes a stable dependency (e.g. a constant config or store). Do not pass a value that changes on every view redraw (e.g. a new array or id) into the @StateObject initializer—use a constant or inject once. Show data from the ViewModel." },
+  { title: "List with toolbar actions", category: "Navigation", tier: "medium",
+    prompt: "Build a list screen with a .navigationTitle and a .toolbar containing a \"Add\" button (ToolbarItem(placement: .primaryAction)) and an \"Edit\" button. Do not put a NavigationStack or a full view inside the toolbar—only buttons or menus. Tapping Add shows a sheet." },
+  { title: "Location display (single manager)", category: "CoreLocation", tier: "medium",
+    prompt: "Build a screen that shows the current location (latitude/longitude). Use a single CLLocationManager instance (e.g. @StateObject wrapper or retained in a view model). Set the delegate once and request authorization before starting updates. Do not create a new CLLocationManager on every view redraw. Include REQUIRES PLIST for location." },
+  { title: "List with context menu", category: "Lists & Tables", tier: "medium",
+    prompt: "Build a list of 5 items. Each row has a .contextMenu with two actions: \"Edit\" and \"Delete\". Use Button(\"Edit\") and Button(\"Delete\", role: .destructive) inside the context menu. Do not put a NavigationStack or a full view inside the context menu—only action buttons. Tapping Edit shows a sheet; Delete removes the item." },
+  { title: "Form with Observable model", category: "Architecture", tier: "medium",
+    prompt: "Build a form screen using @Observable for the model (iOS 17+). The model has a name: String and isComplete: Bool. In a child view, use @Bindable(model) and pass $model.name to a TextField and $model.isComplete to a Toggle. Do not pass $model where a Binding<String> or Binding<Bool> is expected. Show the values in the parent." },
+  { title: "Step count with single store", category: "HealthKit", tier: "medium",
+    prompt: "Build an app that reads step count from HealthKit. Use one HKHealthStore instance (e.g. @StateObject or shared). Request authorization for step count only (read). Check isHealthDataAvailable() before use. Do not create a new HKHealthStore on every view update. Include REQUIRES PLIST and capability warning." },
+  { title: "Add songs to playlist (MusicKit)", category: "MusicKit", tier: "medium",
+    prompt: "Build an app that searches for songs with MusicKit and lets the user add selected songs to a new playlist. Use MusicLibrary.shared.createPlaylist and add(song, to: playlist). Only add Song items that have a non-empty id; skip or filter out any result with an empty identifier. Include authorization and REQUIRES PLIST. Warn about MusicKit capability in summary." },
+  { title: "Filter with onChange", category: "UI state", tier: "medium",
+    prompt: "Build a screen with a TextField and a label that shows the character count. Use .onChange(of: text) { oldValue, newValue in } (iOS 17+) to update the count when text changes. Use the correct closure signature (two parameters for iOS 17+). Do not use the wrong parameter count or types." },
+  { title: "Full-screen detail cover", category: "UI states", tier: "medium",
+    prompt: "Build a list of 5 items. Tapping an item presents a full-screen cover (not a sheet) showing that item's detail. Use .fullScreenCover(item: $selectedItem) where selectedItem is Item? and Item conforms to Identifiable. Provide a \"Close\" button that sets selectedItem = nil. Do not use a non-optional binding." },
+  { title: "Map with region binding", category: "MapKit", tier: "medium",
+    prompt: "Build a screen with an MKMapView wrapped in UIViewRepresentable. The map region is driven by @State (e.g. center and span). Implement both makeUIView(context:) and updateUIView(_:context:) so that when the state changes, the map's region updates. Do not leave updateUIView empty. Include location permission if showing user location." },
+  { title: "Weather with optional forecast", category: "WeatherKit", tier: "medium",
+    prompt: "Build a weather screen that shows current conditions and, if available, the first day of the daily forecast. Use WeatherKit and cache for 30 minutes. When reading the response, treat dailyForecast (or similar) as optional—use optional binding or nil-coalescing; do not force-unwrap optional properties. Handle the case when daily forecast is nil. Include capability/plist as needed." },
+  { title: "Searchable list", category: "Lists & navigation", tier: "medium",
+    prompt: "Build a list screen with a search bar. Use .searchable(text: $searchText) where searchText is @State String. Filter the list based on searchText. Do not pass a Binding<Int> or a non-String binding to searchable(text:). Show filtered results as the user types." },
+];
+
 const M5_WOW: MilestoneIdea[] = [
   { title: "Push-up Counter (Camera + Pose)", category: "Body pose (Vision)", tier: "hard",
     prompt: "Build a push-up counter that uses the front camera and Vision human body pose estimation. Phone is placed in front of the user. Show a FaceTime-style preview, a huge rep counter readable from 6\u20138 feet, and a flip-camera button. Count reps by tracking a stable metric (e.g. shoulder/hip vertical position or elbow angle) with smoothing, hysteresis thresholds, and a rep state machine (down -> up + cooldown). Include on-screen guidance if the body isn't fully visible. Add tabs: Session (live), History (by day), Goals (daily target with progress bar). Persist history/goals with Codable + UserDefaults. Include camera permission handling." },
@@ -185,25 +294,29 @@ function loadSeedJsonIdeas(): MilestoneIdea[] {
   }
 }
 
-export const MILESTONE_IDS = ["m1-baseline", "m2-easy", "m3-medium", "m4-hard", "m5-wow"] as const;
+export const MILESTONE_IDS = ["m1-baseline", "m2-easy", "m3-medium", "m4-hard", "m5-wow", "m6-integration", "m7-regression"] as const;
 export type MilestoneId = (typeof MILESTONE_IDS)[number];
 
 const MILESTONE_META: Record<MilestoneId, Omit<MilestoneConfig, "ideas">> = {
-  "m1-baseline": { id: "m1-baseline", label: "M1: Baseline", shortLabel: "Baseline", description: "10 representative apps to verify the pipeline works", target: 70 },
-  "m2-easy":     { id: "m2-easy",     label: "M2: Easy",     shortLabel: "Easy",     description: "30 single-screen apps covering all basic patterns", target: 90 },
-  "m3-medium":   { id: "m3-medium",   label: "M3: Medium",   shortLabel: "Medium",   description: "15 multi-screen apps + HIG showcase", target: 80 },
-  "m4-hard":     { id: "m4-hard",     label: "M4: Hard",     shortLabel: "Hard",     description: "All seed.json framework-specific apps", target: 70 },
-  "m5-wow":      { id: "m5-wow",      label: "M5: Wow",      shortLabel: "Wow",      description: "10 impressive demo apps (Vision, AR, Metal, etc.)", target: 60 },
+  "m1-baseline":    { id: "m1-baseline",    label: "M1: Baseline",    shortLabel: "Baseline",    description: "10 representative apps to verify the pipeline works", target: 70 },
+  "m2-easy":        { id: "m2-easy",        label: "M2: Easy",        shortLabel: "Easy",        description: "30 single-screen apps covering all basic patterns", target: 90 },
+  "m3-medium":      { id: "m3-medium",      label: "M3: Medium",      shortLabel: "Medium",      description: "15 multi-screen apps + HIG showcase", target: 80 },
+  "m4-hard":        { id: "m4-hard",        label: "M4: Hard",        shortLabel: "Hard",        description: "All seed.json framework-specific apps", target: 70 },
+  "m5-wow":         { id: "m5-wow",         label: "M5: Wow",         shortLabel: "Wow",         description: "10 impressive demo apps (Vision, AR, Metal, etc.)", target: 60 },
+  "m6-integration": { id: "m6-integration", label: "M6: Integration", shortLabel: "Integration", description: "10 integration apps: compile + permission strings + portal warnings + requestAuth + error handling", target: 70 },
+  "m7-regression":   { id: "m7-regression",   label: "M7: Regression", shortLabel: "Regression",   description: "40 apps tied to specific error patterns we fixed; verifies system prompt improvements", target: 90 },
 };
 
 export function getMilestonePrompts(id: MilestoneId): MilestoneConfig {
   const meta = MILESTONE_META[id];
   switch (id) {
-    case "m1-baseline": return { ...meta, ideas: M1_BASELINE };
-    case "m2-easy":     return { ...meta, ideas: buildM2Easy() };
-    case "m3-medium":   return { ...meta, ideas: buildM3Medium() };
-    case "m4-hard":     return { ...meta, ideas: loadSeedJsonIdeas() };
-    case "m5-wow":      return { ...meta, ideas: M5_WOW };
+    case "m1-baseline":    return { ...meta, ideas: M1_BASELINE };
+    case "m2-easy":        return { ...meta, ideas: buildM2Easy() };
+    case "m3-medium":      return { ...meta, ideas: buildM3Medium() };
+    case "m4-hard":        return { ...meta, ideas: loadSeedJsonIdeas() };
+    case "m5-wow":         return { ...meta, ideas: M5_WOW };
+    case "m6-integration": return { ...meta, ideas: M6_INTEGRATION };
+    case "m7-regression":   return { ...meta, ideas: M7_REGRESSION };
   }
 }
 

@@ -53,12 +53,14 @@
     "NSHealthUpdateUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 1,
-    "firstAttemptCompile": 1,
-    "compileRate": 100,
+    "totalBuilds": 8,
+    "firstAttemptCompile": 5,
+    "compileRate": 63,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "cannot find type 'WorkoutAttributes' in scope"
+    ],
     "goldenExamples": []
   }
 }

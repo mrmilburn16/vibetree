@@ -1,6 +1,7 @@
 import { getProject, ensureProject } from "@/lib/projectStore";
 import { setProjectFiles } from "@/lib/projectFileStore";
 import { createBuildJob } from "@/lib/buildJobs";
+import { isRunnerOnline } from "@/lib/runnerStore";
 
 type SwiftFile = { path: string; content: string };
 
@@ -80,6 +81,16 @@ export async function POST(
 
   if (files?.length) {
     setProjectFiles(projectId, files);
+  }
+
+  if (!isRunnerOnline()) {
+    return Response.json(
+      {
+        error: "mac_runner_offline",
+        message: "The build server is currently offline. Please try again in a moment.",
+      },
+      { status: 503 }
+    );
   }
 
   const job = createBuildJob({

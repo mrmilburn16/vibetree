@@ -68,6 +68,7 @@ export function EditorLayout({
   const [shareOpen, setShareOpen] = useState(false);
   const [buildStatus, setBuildStatus] = useState<"idle" | "building" | "live" | "failed">("idle");
   const [buildFailureReason, setBuildFailureReason] = useState<string | null>(null);
+  const [runnerOnline, setRunnerOnline] = useState<boolean | null>(null);
   const [isAgentTyping, setIsAgentTyping] = useState(false);
   const [expoUrl, setExpoUrl] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; variant: "success" | "warning" | "error" | "info" } | null>(null);
@@ -196,7 +197,10 @@ export function EditorLayout({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        return { status: "failed", error: data?.error ?? "Validation request failed" };
+        return {
+          status: "failed",
+          error: (data?.message ?? data?.error ?? "Validation request failed") as string,
+        };
       }
       const data = await res.json().catch(() => ({}));
       let jobId: string | null = typeof data?.job?.id === "string" ? data.job.id : null;
@@ -254,6 +258,14 @@ export function EditorLayout({
 
   return (
     <div className="flex h-screen flex-col bg-[var(--background-primary)]">
+      {runnerOnline === false && (
+        <div
+          className="shrink-0 border-b border-amber-500/50 bg-amber-500/15 px-4 py-2 text-center text-sm font-medium text-amber-800 dark:text-amber-200"
+          role="status"
+        >
+          Mac runner offline — builds are currently unavailable. Start the runner or wait for it to come back online.
+        </div>
+      )}
       <LowCreditBanner />
       {/* Top bar */}
       <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b-2 border-[var(--border-default)] px-5 sm:px-6">

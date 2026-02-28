@@ -253,7 +253,15 @@ const ENTITLEMENT_RULES: EntitlementRule[] = [
     value: "development",
   },
   {
-    patterns: [/\bimport HealthKit\b/, /\bHKHealthStore\b/],
+    patterns: [
+      /\bimport HealthKit\b/,
+      /\bHKHealthStore\b/,
+      /\bHKQuantityType\b/,
+      /\bHKWorkoutType\b/,
+      /\bHKAnchoredObjectQuery\b/,
+      /\bHKSampleQuery\b/,
+      /\bHKStatisticsQuery\b/,
+    ],
     key: "com.apple.developer.healthkit",
     value: true,
   },
@@ -293,7 +301,7 @@ export function generateEntitlementsPlist(entitlements: Record<string, string | 
   const entries: string[] = [];
   for (const [key, value] of Object.entries(entitlements)) {
     if (typeof value === "boolean") {
-      entries.push(`\t<key>${key}</key>\n\t<${value}/>"`);
+      entries.push(`\t<key>${key}</key>\n\t<${value}/>`);
     } else if (typeof value === "string") {
       entries.push(`\t<key>${key}</key>\n\t<string>${value}</string>`);
     } else if (Array.isArray(value)) {

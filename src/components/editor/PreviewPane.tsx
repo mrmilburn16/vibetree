@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
-import { Maximize2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Maximize2, ChevronLeft, ChevronRight, Play } from "lucide-react";
 import { QRCode } from "@/components/ui";
 import { ReadyIndicator } from "./ReadyIndicator";
 import { FailedIndicator } from "./FailedIndicator";
@@ -173,6 +173,7 @@ function CSSDeviceFrame({
   projectId?: string | null;
 }) {
   const [simulatorPreviewUrl, setSimulatorPreviewUrl] = useState<string | null>(null);
+  const [appetizePublicKey, setAppetizePublicKey] = useState<string | null>(null);
   const blobUrlRef = useRef<string | null>(null);
   /** When we transition to "live", record time so we only show frames newer than this (skip previous build's frame). */
   const liveSinceRef = useRef<number>(0);
@@ -197,8 +198,73 @@ function CSSDeviceFrame({
     return () => window.removeEventListener("vibetree-preview-settings-changed", onSettingsChange);
   }, []);
 
+  // When build becomes live, fetch Appetize public key once; if we're still on the placeholder, poll every 5s for up to 60s
+  const appetizePollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (buildStatus !== "live" || !isPro || !projectId) {
+      setAppetizePublicKey(null);
+      return;
+    }
+    let cancelled = false;
+
+    const fetchKey = async (): Promise<string | null> => {
+      const res = await fetch(`/api/projects/${projectId}/appetize`, { cache: "no-store" });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => null);
+      return data?.publicKey ?? null;
+    };
+
+    const POLL_INTERVAL_MS = 5000;
+    const POLL_MAX_MS = 60000;
+
+    const schedulePoll = (deadline: number) => {
+      if (cancelled) return;
+      if (Date.now() >= deadline) return;
+      if (appetizePollTimeoutRef.current) clearTimeout(appetizePollTimeoutRef.current);
+      appetizePollTimeoutRef.current = setTimeout(async () => {
+        appetizePollTimeoutRef.current = null;
+        if (cancelled || Date.now() >= deadline) return;
+        console.log("[appetize] Polling for publicKey...");
+        const key = await fetchKey();
+        if (cancelled) return;
+        if (key) {
+          setAppetizePublicKey(key);
+          console.log("[appetize] publicKey found, switching to interactive preview");
+          return;
+        }
+        schedulePoll(deadline);
+      }, POLL_INTERVAL_MS);
+    };
+
+    fetchKey().then((key) => {
+      if (cancelled) return;
+      if (key) {
+        setAppetizePublicKey(key);
+        console.log("[appetize] publicKey found, switching to interactive preview");
+        return;
+      }
+      const deadline = Date.now() + POLL_MAX_MS;
+      schedulePoll(deadline);
+    });
+
+    return () => {
+      cancelled = true;
+      if (appetizePollTimeoutRef.current) {
+        clearTimeout(appetizePollTimeoutRef.current);
+        appetizePollTimeoutRef.current = null;
+      }
+    };
+  }, [buildStatus, isPro, projectId]);
+
+  useEffect(() => {
+    if (buildStatus !== "live" || !isPro || !projectId) {
+      setSimulatorPreviewUrl(null);
+      setBeforeUrl(null);
+      setAfterUrl(null);
+      prevSimulatorUrlRef.current = null;
+      return;
+    }
+    if (appetizePublicKey) {
       setSimulatorPreviewUrl(null);
       setBeforeUrl(null);
       setAfterUrl(null);
@@ -269,7 +335,7 @@ function CSSDeviceFrame({
       setSimulatorPreviewUrl(null);
       prevSimulatorUrlRef.current = null;
     };
-  }, [buildStatus, isPro, projectId]);
+  }, [buildStatus, isPro, projectId, appetizePublicKey]);
 
   const handleMove = useCallback((clientX: number) => {
     const el = containerRef.current;
@@ -323,57 +389,139 @@ function CSSDeviceFrame({
 
   const showComparison = comparisonEnabled && isPro && beforeUrl && afterUrl;
   const showSingle = isPro && simulatorPreviewUrl && !showComparison;
+  const showAppetize = isPro && appetizePublicKey;
   const frameWidth = DEVICE_WIDTH + 20;
+  const [appetizeSessionStarted, setAppetizeSessionStarted] = useState(false);
+
+  const appetizeIframeId = "preview-appetize-iframe";
+
+  const loadAppetizeScript = useCallback((): Promise<void> => {
+    const win = window as unknown as { appetize?: { getClient: (s: string) => Promise<unknown> } };
+    if (typeof win.appetize?.getClient === "function") return Promise.resolve();
+    if (document.querySelector('script[src="https://js.appetize.io/embed.js"]'))
+      return new Promise((resolve) => {
+        const check = () => {
+          if (typeof win.appetize?.getClient === "function") {
+            resolve();
+            return;
+          }
+          setTimeout(check, 100);
+        };
+        setTimeout(check, 300);
+      });
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://js.appetize.io/embed.js";
+      script.async = true;
+      script.onload = () => {
+        const check = () => {
+          if (typeof win.appetize?.getClient === "function") {
+            resolve();
+            return;
+          }
+          setTimeout(check, 100);
+        };
+        setTimeout(check, 500);
+      };
+      script.onerror = () => reject(new Error("Appetize script failed to load"));
+      document.head.appendChild(script);
+    });
+  }, []);
+
+  const handleStartAppetizeSession = useCallback(async () => {
+    try {
+      await loadAppetizeScript();
+      const win = window as unknown as { appetize?: { getClient: (s: string) => Promise<{ startSession: (opts?: { grantPermissions?: boolean }) => Promise<unknown> }> } };
+      const client = await win.appetize?.getClient(`#${appetizeIframeId}`);
+      if (client) {
+        await client.startSession({ grantPermissions: true });
+        setAppetizeSessionStarted(true);
+      }
+    } catch (e) {
+      console.warn("[PreviewPane] Appetize session start failed", e);
+    }
+  }, [loadAppetizeScript]);
+
+  useEffect(() => {
+    if (!showAppetize) setAppetizeSessionStarted(false);
+  }, [showAppetize]);
 
   return (
     <div className="flex flex-col items-center">
-      <div
-        className="relative animate-fade-in rounded-[2.75rem] p-[10px]"
-        style={{
-          width: frameWidth,
-          height: DEVICE_HEIGHT + 20,
-          background: `linear-gradient(165deg, var(--border-subtle) 0%, var(--border-default) 35%, var(--background-secondary) 100%)`,
-          boxShadow:
-            "0 25px 50px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
-        }}
-      >
-      {/* Inner screen: clip all content to device rounded shape (iPhone isn't a perfect rectangle) */}
-      <div
-        className="relative h-full w-full overflow-hidden rounded-[2.25rem] bg-[var(--background-tertiary)]"
-        style={{
-          boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.25)",
-          clipPath: "inset(0 round 2.25rem)",
-        }}
-      >
+      {showAppetize ? (
+        /* No autoplay: session starts only when user taps overlay to preserve Appetize minutes */
+        <div className="relative animate-fade-in flex items-center justify-center">
+          <iframe
+            id={appetizeIframeId}
+            title="Interactive simulator"
+            src={`https://appetize.io/embed/${appetizePublicKey}?scale=auto&centered=both&screenOnly=true&grantPermissions=true`}
+            width={DEVICE_WIDTH}
+            height={DEVICE_HEIGHT}
+            className="border-0 rounded-[2rem] overflow-hidden"
+            style={{ maxWidth: "100%", maxHeight: "100%" }}
+          />
+          {!appetizeSessionStarted && (
+            <button
+              type="button"
+              onClick={handleStartAppetizeSession}
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-[2rem] border-0 bg-[var(--background-primary)]/90 backdrop-blur-sm cursor-pointer transition-opacity hover:opacity-95 focus:outline focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+              aria-label="Tap to start simulator"
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--background-secondary)] border border-[var(--border-default)] shadow-lg">
+                <Play className="h-7 w-7 text-[var(--text-primary)] fill-[var(--text-primary)]" strokeWidth={1.5} />
+              </span>
+              <span className="text-sm font-medium text-[var(--text-secondary)]">Tap to start simulator</span>
+            </button>
+          )}
+        </div>
+      ) : (
         <div
-          className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-black"
+          className="relative animate-fade-in rounded-[2.75rem] p-[10px]"
           style={{
-            width: 100,
-            height: 28,
-            boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
+            width: frameWidth,
+            height: DEVICE_HEIGHT + 20,
+            background: `linear-gradient(165deg, var(--border-subtle) 0%, var(--border-default) 35%, var(--background-secondary) 100%)`,
+            boxShadow:
+              "0 25px 50px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
           }}
-        />
-        <div className="flex h-full w-full flex-col items-center justify-center px-5 pt-12 pb-8">
-          {buildStatus === "idle" && (
-            <div className="flex flex-col items-center gap-2 text-center">
-              <p className="text-sm font-medium text-[var(--text-secondary)]">
-                Your preview lives here
-              </p>
-              <p className="text-body-muted max-w-[200px] text-xs leading-relaxed">
-                Describe your app in the chat, then watch it appear in this frame.
-              </p>
-            </div>
-          )}
-          {buildStatus === "building" && (
-            <div className="h-9 w-9 animate-spin-preview rounded-full border-2 border-[var(--spinner-preview)] border-t-transparent" />
-          )}
-          {buildStatus === "live" && (
-            <>
-              <div
-                className="absolute inset-0 pointer-events-none animate-screen-shine rounded-[2.25rem] bg-white/[0.03]"
-                aria-hidden
-              />
-              {showComparison ? (
+        >
+          {/* Inner screen: clip all content to device rounded shape (iPhone isn't a perfect rectangle) */}
+          <div
+            className="relative h-full w-full overflow-hidden rounded-[2.25rem] bg-[var(--background-tertiary)]"
+            style={{
+              boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.25)",
+              clipPath: "inset(0 round 2.25rem)",
+            }}
+          >
+            <div
+              className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-black"
+              style={{
+                width: 100,
+                height: 28,
+                boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
+              }}
+            />
+            <div className="flex h-full w-full flex-col items-center justify-center px-5 pt-12 pb-8">
+              {buildStatus === "idle" && (
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <p className="text-sm font-medium text-[var(--text-secondary)]">
+                    Your preview lives here
+                  </p>
+                  <p className="text-body-muted max-w-[200px] text-xs leading-relaxed">
+                    Describe your app in the chat, then watch it appear in this frame.
+                  </p>
+                </div>
+              )}
+              {buildStatus === "building" && (
+                <div className="h-9 w-9 animate-spin-preview rounded-full border-2 border-[var(--spinner-preview)] border-t-transparent" />
+              )}
+              {buildStatus === "live" && (
+                <>
+                  <div
+                    className="absolute inset-0 pointer-events-none animate-screen-shine rounded-[2.25rem] bg-white/[0.03]"
+                    aria-hidden
+                  />
+                  {showComparison ? (
                 <div
                   ref={containerRef}
                   className="group absolute inset-0 overflow-hidden rounded-[2.25rem] select-none"
@@ -466,8 +614,9 @@ function CSSDeviceFrame({
         </div>
       </div>
       </div>
+      )}
       {/* Before/After labels below the phone; fade in on first drag, then stay visible */}
-      {showComparison && (
+      {showComparison && !showAppetize && (
         <div
           className="flex w-full items-center"
           style={{ marginTop: 12, width: frameWidth }}

@@ -14,6 +14,8 @@ export type TestSuiteResult = {
   errors: string[];
   fileCount: number;
   model?: string;
+  /** Pasted Xcode runtime logs for Cursor analyze & fix. */
+  runtimeLogs?: string;
 };
 
 export type TestSuiteRun = {

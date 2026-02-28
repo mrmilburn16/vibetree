@@ -5,6 +5,8 @@ export interface ProjectRecord {
   projectType?: "standard" | "pro";
   createdAt: number;
   updatedAt: number;
+  /** Appetize public key (persisted); set by Mac runner after successful upload. */
+  appetizePublicKey?: string | null;
 }
 
 const store = new Map<string, ProjectRecord>();
@@ -64,7 +66,7 @@ export function createProject(name: string, projectType: "standard" | "pro" = "p
 
 export function updateProject(
   id: string,
-  updates: Partial<Pick<ProjectRecord, "name" | "bundleId" | "projectType">>
+  updates: Partial<Pick<ProjectRecord, "name" | "bundleId" | "projectType" | "appetizePublicKey">>
 ): ProjectRecord | undefined {
   const project = store.get(id);
   if (!project) return undefined;

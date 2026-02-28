@@ -262,6 +262,75 @@ async function runScreenshotLoop(projectId) {
 }
 
 /**
+ * Zip the .app bundle and upload to Appetize; store publicKey on the project.
+ * Returns { ok: true, publicKey } on success, { ok: false, error } on failure.
+ */
+async function uploadAppToAppetize(projectId, appPath, projectName) {
+  const apiKey = process.env.APPETIZE_API_KEY?.trim();
+  if (!apiKey) {
+    console.warn("[Appetize] APPETIZE_API_KEY not set, skipping upload");
+    return { ok: false, error: "APPETIZE_API_KEY not set" };
+  }
+
+  const zipPath = join(tmpdir(), `vibetree-appetize-${projectId}-${Date.now()}.zip`);
+  try {
+    const appDir = join(appPath, "..");
+    const appName = projectName + ".app";
+    const zipRes = await run("zip", ["-r", "-q", zipPath, appName], { cwd: appDir, onLine: () => {} });
+    if (zipRes.code !== 0) {
+      console.warn("[Appetize] zip failed:", zipRes.err?.slice(0, 200));
+      return { ok: false, error: "zip failed" };
+    }
+
+    const zipBuf = await readFile(zipPath);
+    const form = new FormData();
+    form.append("file", new Blob([zipBuf]), "app.zip");
+    form.append("platform", "ios");
+
+    const uploadRes = await fetch("https://api.appetize.io/v1/apps", {
+      method: "POST",
+      headers: {
+        "X-API-KEY": apiKey,
+      },
+      body: form,
+    });
+
+    if (!uploadRes.ok) {
+      const text = await uploadRes.text();
+      console.warn("[Appetize] upload failed:", uploadRes.status, text?.slice(0, 300));
+      return { ok: false, error: `upload ${uploadRes.status}: ${text?.slice(0, 100)}` };
+    }
+
+    const data = await uploadRes.json();
+    const publicKey = data?.publicKey;
+    if (!publicKey) {
+      console.warn("[Appetize] response missing publicKey:", data);
+      return { ok: false, error: "response missing publicKey" };
+    }
+
+    const storeRes = await api(`/api/projects/${projectId}/appetize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicKey }),
+    });
+    if (!storeRes.ok) {
+      console.warn("[Appetize] failed to store publicKey on server:", await storeRes.text());
+      return { ok: false, error: "failed to store publicKey" };
+    }
+
+    console.log("[Appetize] Appetize upload succeeded:", publicKey);
+    return { ok: true, publicKey };
+  } catch (e) {
+    console.warn("[Appetize] upload error:", e?.message || e);
+    return { ok: false, error: e?.message || String(e) };
+  } finally {
+    try {
+      await rm(zipPath, { force: true });
+    } catch (_) {}
+  }
+}
+
+/**
  * Archive and export a signed IPA from a successful build.
  * Returns the path to the .ipa file, or null on failure.
  */
@@ -631,7 +700,14 @@ async function validateJob(job) {
         );
         const bundleId = job.request.bundleId || "com.vibetree.app";
         const projectId = job.request.projectId;
-        await runSimulatorStream(projectId, appPath, bundleId);
+
+        const appetizeResult = await uploadAppToAppetize(projectId, appPath, projectName);
+        if (appetizeResult.ok) {
+          console.log("[Appetize] Appetize upload succeeded:", appetizeResult.publicKey);
+        } else {
+          console.warn("[Appetize] Appetize upload failed, falling back to screenshots:", appetizeResult.error);
+          await runSimulatorStream(projectId, appPath, bundleId);
+        }
       }
     } else {
       const allOutput = (result.out || "") + "\n" + (result.err || "");
@@ -663,8 +739,23 @@ async function validateJob(job) {
   }
 }
 
+async function sendHeartbeat() {
+  try {
+    const res = await api("/api/runner/heartbeat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runnerId: RUNNER_ID, timestamp: Date.now(), status: "online" }),
+    });
+    if (!res.ok) console.warn("[heartbeat] Server returned", res.status);
+  } catch (e) {
+    console.warn("[heartbeat]", e?.message || e);
+  }
+}
+
 async function main() {
   console.log(`Mac runner ${RUNNER_ID} polling ${SERVER_URL}`);
+  await sendHeartbeat();
+  setInterval(sendHeartbeat, 30 * 1000);
   // Report device list periodically so the web app can offer a dropdown.
   reportRunnerDevices().catch(() => {});
   setInterval(() => {

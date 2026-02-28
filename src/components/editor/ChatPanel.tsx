@@ -133,7 +133,7 @@ export function ChatPanel({
   onProBuildComplete?: (
     projectId: string,
     onProgress?: (status: string) => void
-  ) => Promise<{ status: "succeeded" | "failed"; error?: string }>;
+  ) => Promise<{ status: "succeeded" | "failed"; error?: string; message?: string }>;
   onProjectRenamed?: (name: string) => void;
   /** Called when the agent starts or stops typing (so Install can be disabled while generating). */
   onIsTypingChange?: (typing: boolean) => void;

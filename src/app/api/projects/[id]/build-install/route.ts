@@ -1,6 +1,7 @@
 import { getProject, ensureProject } from "@/lib/projectStore";
 import { getProjectFiles, getProjectFilePaths, setProjectFiles } from "@/lib/projectFileStore";
 import { createBuildJob } from "@/lib/buildJobs";
+import { isRunnerOnline } from "@/lib/runnerStore";
 
 function isValidBundleId(value: string): boolean {
   return /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/i.test(value);
@@ -73,6 +74,16 @@ export async function POST(
           "No files to build. Use the Xcode button to download the project, open it in Xcode, select your iPhone, and run (⌘R). Or re-run this app once in the test suite so files are saved, then try Run on iPhone again.",
       },
       { status: 400 }
+    );
+  }
+
+  if (!isRunnerOnline()) {
+    return Response.json(
+      {
+        error: "mac_runner_offline",
+        message: "The build server is currently offline. Please try again in a moment.",
+      },
+      { status: 503 }
     );
   }
 

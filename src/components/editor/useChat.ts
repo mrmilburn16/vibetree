@@ -263,6 +263,7 @@ export function useChat(
     ) => Promise<{
       status: "succeeded" | "failed";
       error?: string;
+      message?: string;
       fixedFiles?: Array<{ path: string; content: string }>;
       attempts?: number;
       compilerErrors?: string[];
@@ -973,6 +974,7 @@ export function useChat(
                   )
                 );
                 setBuildStatus(result.status === "succeeded" ? (queueRef.current.length > 0 ? "building" : "live") : "failed");
+                if (result.status === "failed") onError?.(result.message ?? result.error ?? "Build failed");
                 if (result.status === "succeeded") onAppBuilt?.();
               })
               .catch(() => {

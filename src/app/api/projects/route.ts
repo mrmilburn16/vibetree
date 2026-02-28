@@ -11,7 +11,7 @@ import {
   type ProjectDoc,
 } from "@/lib/projectsFirestore";
 
-function toRecord(doc: ProjectDoc): { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number } {
+function toRecord(doc: ProjectDoc): { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number; appetizePublicKey?: string | null } {
   return {
     id: doc.id,
     name: doc.name,
@@ -19,6 +19,7 @@ function toRecord(doc: ProjectDoc): { id: string; name: string; bundleId: string
     projectType: doc.projectType,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
+    appetizePublicKey: doc.appetizePublicKey,
   };
 }
 

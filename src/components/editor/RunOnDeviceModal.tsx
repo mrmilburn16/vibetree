@@ -339,7 +339,8 @@ export function RunOnDeviceModal({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error ?? "Install request failed");
+        const msg = data?.error === "mac_runner_offline" ? (data?.message ?? "Build server is offline. Builds are paused until the server comes back online.") : (data?.error ?? "Install request failed");
+        throw new Error(msg);
       }
       const data = await res.json().catch(() => ({}));
       const jobId = typeof data?.job?.id === "string" ? data.job.id : null;

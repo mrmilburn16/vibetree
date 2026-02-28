@@ -42,6 +42,8 @@ const MAX_LOG_LINES = 1500;
 const STALE_JOB_TIMEOUT_MS = 5 * 60 * 1000;
 /** Queued jobs older than this are marked failed so Live Activities don't show "building" forever. */
 const QUEUED_ABANDON_MS = 30 * 60 * 1000;
+/** Stuck job threshold: queued or running longer than this is marked failed (runner may be offline). */
+const STUCK_JOB_MS = 10 * 60 * 1000;
 
 // Use globalThis so the store survives Next.js hot-reloads and is shared across all routes.
 const g = globalThis as unknown as { __buildJobs?: Map<string, BuildJobRecord>; __buildQueue?: string[] };
@@ -152,6 +154,31 @@ export function markAbandonedJobs(): void {
       }
     }
   }
+}
+
+function markStuckJobsInternal(): void {
+  const now = Date.now();
+  for (const rec of jobs.values()) {
+    if (rec.status !== "queued" && rec.status !== "running") continue;
+    const started = rec.startedAt ?? rec.createdAt;
+    if (now - started <= STUCK_JOB_MS) continue;
+    const wasQueued = rec.status === "queued";
+    rec.status = "failed";
+    rec.finishedAt = now;
+    rec.error = "Build timed out - Mac runner may be offline";
+    rec.runnerId = undefined;
+    rec.logs.push(`Job ${rec.id} timed out after 10 minutes - marking as failed`);
+    jobs.set(rec.id, rec);
+    if (wasQueued) {
+      const idx = queue.indexOf(rec.id);
+      if (idx >= 0) queue.splice(idx, 1);
+    }
+    console.warn(`[buildJobs] Job ${rec.id} timed out after 10 minutes - marking as failed`);
+  }
+}
+
+export function markStuckJobs(): void {
+  markStuckJobsInternal();
 }
 
 export function claimNextBuildJob(runnerId: string): BuildJobRecord | undefined {

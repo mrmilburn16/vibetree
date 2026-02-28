@@ -51,12 +51,19 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 2,
+    "totalBuilds": 6,
     "firstAttemptCompile": 0,
     "compileRate": 0,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "cannot find type 'WorkoutAttributes' in scope",
+      "cannot find type 'DeliveryStage' in scope",
+      "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Decodable'",
+      "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Encodable'",
+      "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Hashable'",
+      "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Equatable'"
+    ],
     "goldenExamples": []
   }
 }

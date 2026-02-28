@@ -29,9 +29,12 @@ import {
   Maximize2,
   Smartphone,
   CheckSquare,
+  ClipboardPaste,
+  X,
 } from "lucide-react";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
+import { stripOldImages, type VisionMessage } from "@/lib/visionTestUtils";
 
 /* ────────────────────────── Types ────────────────────────── */
 
@@ -78,12 +81,91 @@ type TestResult = {
   liveEvents?: Array<{ at: number; msg: string }>;
   /** When false, this app is skipped when clicking Run (manual selection). Default true. */
   selected?: boolean;
+  /** For M6 Integration milestone: summary from the LLM response (used to check portal warnings). */
+  generationSummary?: string;
+  /** For M6 Integration milestone: per-check pass/fail. */
+  integrationChecks?: {
+    plistComments: boolean;
+    summaryWarnings: boolean;
+    requestAuth: boolean;
+    errorHandling: boolean;
+  };
+  /** Pasted Xcode runtime logs for this app (Paste Logs modal). */
+  runtimeLogs?: string;
+  /** Claude vision automated test report (Auto Test). */
+  visionTestReport?: {
+    projectId: string;
+    appName: string;
+    totalActions: number;
+    duration: number;
+    allIssues: string[];
+    featuresTestedSuccessfully: string[];
+    featuresThatCouldNotBeTested: string[];
+    screenshots: string[];
+    overallScore: number;
+    recommendation: "Pass" | "Minor issues" | "Major issues" | "Fail" | "Rebuild required" | "Stopped";
+    cursorPrompt: string;
+    total_cost_usd?: number;
+    total_input_tokens?: number;
+    total_output_tokens?: number;
+  };
 };
 
 type RunConfig = {
   model: string;
   projectType: "pro";
 };
+
+function isScreenshotMostlyBlank(base64: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(false);
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, img.width, img.height).data;
+        let light = 0;
+        let dark = 0;
+        const step = Math.max(1, Math.floor(data.length / 4 / 3000));
+        for (let i = 0; i < data.length; i += 4 * step) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          if (r > 250 && g > 250 && b > 250) light++;
+          else if (r < 5 && g < 5 && b < 5) dark++;
+        }
+        const sampled = Math.ceil((data.length / 4) / step);
+        const blank = (light + dark) / sampled >= 0.95;
+        resolve(blank);
+      } catch {
+        resolve(false);
+      }
+    };
+    img.onerror = () => resolve(false);
+    img.src = `data:image/png;base64,${base64}`;
+  });
+}
+
+/** Appetize tap expects coordinates in DIP (points). Screenshot is at device pixel resolution (2x/3x). */
+const VISION_TAP_DIP_WIDTH = 375;
+const VISION_TAP_DIP_HEIGHT = 812;
+
+function getImageDimensionsFromBase64(base64: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const dataUrl = base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}`;
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error("Failed to load image for dimensions"));
+    img.src = dataUrl;
+  });
+}
 
 type SavedRun = {
   id: string;
@@ -103,6 +185,9 @@ type SavedRun = {
     errors: string[];
     fileCount: number;
     model?: string;
+    integrationChecks?: { plistComments: boolean; summaryWarnings: boolean; requestAuth: boolean; errorHandling: boolean };
+    runtimeLogs?: string;
+    visionTestReport?: TestResult["visionTestReport"];
   }>;
   summary: {
     total: number;
@@ -181,18 +266,65 @@ const DEFAULT_IDEAS: AppIdea[] = [
 /* ────────────────────────── Error Classification ────────────────────────── */
 
 type ErrorCategory =
-  | "missing_import"
-  | "type_mismatch"
-  | "trailing_closure"
-  | "missing_conformance"
   | "member_not_found"
-  | "missing_return"
-  | "argument_mismatch"
+  | "missing_entitlement"
+  | "missing_permission_string"
+  | "framework_not_linked"
   | "deprecated_api"
-  | "binding_error"
+  | "type_mismatch"
+  | "missing_import"
+  | "trailing_closure"
+  | "scope_error"
+  | "async_await_misuse"
+  | "optional_unwrap_failure"
+  | "bundle_id_mismatch"
+  | "missing_capability"
   | "other";
 
 const ERROR_PATTERNS: Array<{ category: ErrorCategory; patterns: RegExp[] }> = [
+  { category: "member_not_found", patterns: [/has no member/i, /value of type .+ has no member/i] },
+  {
+    category: "missing_entitlement",
+    patterns: [
+      /missing .* entitlement/i,
+      /com\.apple\.developer\.\w+/i,
+      /not in entitlements/i,
+      /entitlement.*required/i,
+    ],
+  },
+  {
+    category: "missing_permission_string",
+    patterns: [
+      /NSLocationWhenInUseUsageDescription|NSLocationAlwaysAndWhenInUseUsageDescription/i,
+      /NSHealthShareUsageDescription|NSHealthUpdateUsageDescription/i,
+      /NSCameraUsageDescription|NSMicrophoneUsageDescription|NSPhotoLibraryUsageDescription/i,
+      /usage description.*required|required.*usage description/i,
+      /Info\.plist.*privacy|privacy.*Info\.plist/i,
+      /NSAppleMusicUsageDescription/i,
+    ],
+  },
+  {
+    category: "framework_not_linked",
+    patterns: [
+      /undefined symbol.*HealthKit|undefined symbol.*MapKit|undefined symbol.*MusicKit/i,
+      /linker command failed/i,
+      /Undefined symbols for architecture/i,
+      /framework.*not found.*HealthKit|framework.*not found.*MapKit|framework.*not found.*MusicKit/i,
+    ],
+  },
+  {
+    category: "deprecated_api",
+    patterns: [
+      /deprecated|was deprecated in|renamed to/i,
+      /\bNavigationView\b/i,
+      /\.foregroundColor\b/i,
+      /\.navigationBarTitle\b/i,
+    ],
+  },
+  {
+    category: "type_mismatch",
+    patterns: [/cannot convert value of type/i, /cannot assign value of type/i],
+  },
   {
     category: "missing_import",
     patterns: [
@@ -202,40 +334,43 @@ const ERROR_PATTERNS: Array<{ category: ErrorCategory; patterns: RegExp[] }> = [
       /use of unresolved identifier/i,
     ],
   },
+  { category: "trailing_closure", patterns: [/extra trailing closure/i, /contextual closure type/i] },
   {
-    category: "type_mismatch",
+    category: "scope_error",
     patterns: [
-      /cannot convert value of type/i,
-      /cannot assign value of type/i,
+      /used (before|outside).*declaration/i,
+      /not in scope(?!.*unresolved)/i,
+      /variable used (before|outside)/i,
     ],
   },
   {
-    category: "trailing_closure",
-    patterns: [/extra trailing closure/i, /contextual closure type/i],
+    category: "async_await_misuse",
+    patterns: [
+      /missing 'await'/i,
+      /call is 'async' but/i,
+      /does not support concurrency/i,
+      /async function.*called in.*non-async/i,
+    ],
   },
   {
-    category: "missing_conformance",
-    patterns: [/does not conform to protocol/i],
+    category: "optional_unwrap_failure",
+    patterns: [/unexpectedly found nil/i, /Fatal error:.*nil/i, /force.*unwrap.*nil/i],
   },
   {
-    category: "member_not_found",
-    patterns: [/has no member/i, /value of type .+ has no member/i],
+    category: "bundle_id_mismatch",
+    patterns: [
+      /bundle (identifier|ID).*mismatch|provisioning profile.*bundle/i,
+      /does not include.*bundle/i,
+      /No profile for team.*matching/i,
+    ],
   },
   {
-    category: "missing_return",
-    patterns: [/missing return in/i, /non-void function should return/i],
-  },
-  {
-    category: "argument_mismatch",
-    patterns: [/missing argument/i, /extra argument/i, /incorrect argument label/i],
-  },
-  {
-    category: "deprecated_api",
-    patterns: [/NavigationView/i, /\.foregroundColor\b/i, /\.navigationBarTitle\b/i],
-  },
-  {
-    category: "binding_error",
-    patterns: [/cannot find type 'Binding'/i, /use of unresolved identifier '\$\w+'/i],
+    category: "missing_capability",
+    patterns: [
+      /capability.*not enabled|not enabled.*capability/i,
+      /developer portal.*capability|App ID.*capability/i,
+      /enable.*in (Apple Developer|developer portal)/i,
+    ],
   },
 ];
 
@@ -249,6 +384,78 @@ function classifyError(msg: string): ErrorCategory {
   return "other";
 }
 
+const CATEGORY_LABELS: Record<ErrorCategory, string> = {
+  member_not_found: "Member not found",
+  missing_entitlement: "Missing entitlement",
+  missing_permission_string: "Missing permission string",
+  framework_not_linked: "Framework not linked",
+  deprecated_api: "Deprecated API",
+  type_mismatch: "Type mismatch",
+  missing_import: "Missing import",
+  trailing_closure: "Trailing closure",
+  scope_error: "Scope error",
+  async_await_misuse: "Async/await misuse",
+  optional_unwrap_failure: "Optional unwrap failure",
+  bundle_id_mismatch: "Bundle ID mismatch",
+  missing_capability: "Missing capability",
+  other: "Any other error",
+};
+
+type GroupedError = {
+  category: ErrorCategory;
+  displayName: string;
+  appCount: number;
+  occurrenceCount: number;
+  items: Array<{ appName: string; rawMessage: string }>;
+};
+
+function groupErrorsByPattern(results: TestResult[]): GroupedError[] {
+  const byCategory: Record<
+    ErrorCategory,
+    Array<{ appName: string; rawMessage: string }>
+  > = {} as Record<ErrorCategory, Array<{ appName: string; rawMessage: string }>>;
+  const categories: ErrorCategory[] = [
+    "member_not_found",
+    "missing_entitlement",
+    "missing_permission_string",
+    "framework_not_linked",
+    "deprecated_api",
+    "type_mismatch",
+    "missing_import",
+    "trailing_closure",
+    "scope_error",
+    "async_await_misuse",
+    "optional_unwrap_failure",
+    "bundle_id_mismatch",
+    "missing_capability",
+    "other",
+  ];
+  for (const cat of categories) byCategory[cat] = [];
+
+  for (const r of results) {
+    const appName = r.idea?.title ?? "Unknown app";
+    for (const rawMessage of r.compilerErrors) {
+      const cat = classifyError(rawMessage);
+      byCategory[cat].push({ appName, rawMessage });
+    }
+  }
+
+  return categories
+    .filter((cat) => byCategory[cat].length > 0)
+    .map((cat) => {
+      const items = byCategory[cat];
+      const appCount = new Set(items.map((i) => i.appName)).size;
+      return {
+        category: cat,
+        displayName: CATEGORY_LABELS[cat],
+        appCount,
+        occurrenceCount: items.length,
+        items,
+      };
+    })
+    .sort((a, b) => b.occurrenceCount - a.occurrenceCount);
+}
+
 function groupErrors(errors: string[]): Array<{ category: ErrorCategory; count: number }> {
   const counts: Record<string, number> = {};
   for (const e of errors) {
@@ -259,19 +466,6 @@ function groupErrors(errors: string[]): Array<{ category: ErrorCategory; count: 
     .map(([category, count]) => ({ category: category as ErrorCategory, count }))
     .sort((a, b) => b.count - a.count);
 }
-
-const CATEGORY_LABELS: Record<ErrorCategory, string> = {
-  missing_import: "Missing import",
-  type_mismatch: "Type mismatch",
-  trailing_closure: "Trailing closure",
-  missing_conformance: "Protocol conformance",
-  member_not_found: "Member not found",
-  missing_return: "Missing return",
-  argument_mismatch: "Argument mismatch",
-  deprecated_api: "Deprecated API",
-  binding_error: "Binding error",
-  other: "Other",
-};
 
 /* ────────────────────────── Helpers ────────────────────────── */
 
@@ -334,12 +528,70 @@ function toPascalCase(str: string): string {
   );
 }
 
+/** API → required plist key(s) for // REQUIRES PLIST: check */
+const PRIVACY_API_TO_PLIST: Array<{ pattern: RegExp; keys: string[] }> = [
+  { pattern: /\bCLLocationManager\b/, keys: ["NSLocationWhenInUseUsageDescription", "NSLocationAlwaysAndWhenInUseUsageDescription"] },
+  { pattern: /\bHKHealthStore\b/, keys: ["NSHealthShareUsageDescription", "NSHealthUpdateUsageDescription"] },
+  { pattern: /\bAVCaptureDevice\b|\.video\b/, keys: ["NSCameraUsageDescription"] },
+  { pattern: /\bAVAudioSession\b|\.microphone\b/, keys: ["NSMicrophoneUsageDescription"] },
+  { pattern: /\bPHPhotoLibrary\b|\bPHPickerViewController\b/, keys: ["NSPhotoLibraryUsageDescription"] },
+  { pattern: /\bCNContactStore\b/, keys: ["NSContactsUsageDescription"] },
+  { pattern: /\bEKEventStore\b/, keys: ["NSCalendarsUsageDescription"] },
+  { pattern: /\bCBCentralManager\b|\bCBPeripheralManager\b/, keys: ["NSBluetoothAlwaysUsageDescription"] },
+  { pattern: /\bCMMotionManager\b/, keys: ["NSMotionUsageDescription"] },
+  { pattern: /\bNFCTagReaderSession\b/, keys: ["NFCReaderUsageDescription"] },
+  { pattern: /\bSFSpeechRecognizer\b/, keys: ["NSSpeechRecognitionUsageDescription"] },
+  { pattern: /\bMusicAuthorization\b|\bApplicationMusicPlayer\b/, keys: ["NSAppleMusicUsageDescription"] },
+];
+
+function evaluateIntegrationChecks(
+  files: Array<{ path: string; content: string }>,
+  summary: string | undefined,
+): { plistComments: boolean; summaryWarnings: boolean; requestAuth: boolean; errorHandling: boolean } {
+  const combined = files.filter((f) => f.path.endsWith(".swift")).map((f) => f.content).join("\n");
+  const combinedLower = combined.toLowerCase();
+  const summaryLower = (summary ?? "").toLowerCase();
+
+  let plistComments = true;
+  for (const { pattern, keys } of PRIVACY_API_TO_PLIST) {
+    if (!pattern.test(combined)) continue;
+    const hasComment = keys.some((key) =>
+      new RegExp(`//\\s*REQUIRES\\s+PLIST:\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(combined),
+    );
+    if (!hasComment) {
+      plistComments = false;
+      break;
+    }
+  }
+
+  // UNUserNotificationCenter does not require portal capability — only runtime permission; do not require portal warning for it
+  const needsPortalWarning = /\b(HKHealthStore|MusicAuthorization|MusicKit|ASAuthorizationAppleIDProvider|NSUbiquitousKeyValueStore|CKContainer|NFCTagReaderSession)\b/.test(combined);
+  const summaryWarnings = !needsPortalWarning || (summaryLower.includes("enable") && (summaryLower.includes("developer portal") || summaryLower.includes("app id") || summaryLower.includes("capability") || summaryLower.includes("entitlement") || summaryLower.includes("portal")));
+
+  const requestAuth =
+    /\b(requestAuthorization|requestWhenInUseAuthorization|requestAccess\s*\(|requestPermission)\s*\(/.test(combined) ||
+    /\bMusicAuthorization\.request\s*\(/.test(combined) ||
+    /\bperformRequests\s*\(/.test(combined) ||
+    /\bASAuthorizationAppleIDProvider\b/.test(combined) ||
+    /\bDataScannerViewController\b/.test(combined) ||
+    (/\bCKContainer\b/.test(combined) && /\baccountStatus\b/.test(combined)) ||
+    (/\bNFCTagReaderSession\b/.test(combined) && /\breadingAvailable\b/.test(combined));
+
+  const errorHandling =
+    /\b(guard|if.*!.*available|isHealthDataAvailable|denied|unavailable|handle|catch|\.denied|\.restricted)\b/.test(combinedLower) ||
+    /\b(permission.*denied|not available|graceful|fallback)\b/.test(combinedLower);
+
+  return { plistComments, summaryWarnings, requestAuth, errorHandling };
+}
+
 const MILESTONE_LABELS: Record<string, string> = {
   "m1-baseline": "Baseline",
   "m2-easy": "Easy",
   "m3-medium": "Medium",
   "m4-hard": "Hard",
   "m5-wow": "Wow",
+  "m6-integration": "Integration",
+  "m7-regression": "Regression",
 };
 
 function formatModelName(m: string): string {
@@ -361,7 +613,7 @@ function generateRunReport(
   const totalAttempts = completed.reduce((s, r) => s + r.attempts, 0);
   const totalDuration = completed.reduce((s, r) => s + r.durationMs, 0);
   const allErrors = completed.flatMap((r) => r.compilerErrors);
-  const grouped = groupErrors(allErrors);
+  const groupedByPattern = groupErrorsByPattern(completed);
   const failed = completed.filter((r) => !r.compiled);
   const autoFixed = completed.filter((r) => r.compiled && r.attempts > 1);
   const cleanPasses = completed.filter((r) => r.compiled && r.attempts <= 1);
@@ -373,14 +625,52 @@ function generateRunReport(
   lines.push(
     `- Compile rate: ${compiled}/${completed.length} (${Math.round((compiled / completed.length) * 100)}%)${opts.target ? ` \u2014 Target: ${opts.target}%` : ""}`,
   );
+  const isM6Report = opts.milestone?.toLowerCase().includes("integration");
+  const integrationPassCount = isM6Report
+    ? completed.filter(
+        (r) =>
+          r.compiled &&
+          r.integrationChecks &&
+          r.integrationChecks.plistComments &&
+          r.integrationChecks.summaryWarnings &&
+          r.integrationChecks.requestAuth &&
+          r.integrationChecks.errorHandling,
+      ).length
+    : compiled;
+  if (isM6Report) {
+    lines.push(`- Integration pass: ${integrationPassCount}/${completed.length} (${completed.length ? Math.round((integrationPassCount / completed.length) * 100) : 0}%) \u2014 Target: ${opts.target ?? 70}%`);
+  }
   lines.push(`- Avg attempts: ${(totalAttempts / completed.length).toFixed(1)}`);
   lines.push(`- Total time: ${formatDuration(totalDuration)}`);
   lines.push("");
 
-  if (grouped.length > 0) {
+  if (isM6Report && completed.some((r) => r.integrationChecks != null)) {
+    lines.push("### Integration Checks Per App");
+    lines.push("| App | Compile | PLIST Comments | Summary Warnings | Request Auth | Error Handling | Pass |");
+    lines.push("|-----|---------|----------------|------------------|--------------|----------------|------|");
+    for (const r of completed) {
+      const c = r.integrationChecks;
+      const compileCell = r.compiled ? "✓" : "✗";
+      const plistCell = c ? (c.plistComments ? "✓" : "✗") : "—";
+      const summaryCell = c ? (c.summaryWarnings ? "✓" : "✗") : "—";
+      const requestCell = c ? (c.requestAuth ? "✓" : "✗") : "—";
+      const errorCell = c ? (c.errorHandling ? "✓" : "✗") : "—";
+      const pass =
+        Boolean(r.compiled) &&
+        Boolean(c?.plistComments && c?.summaryWarnings && c?.requestAuth && c?.errorHandling);
+      const passCell = pass ? "✓" : "✗";
+      const title = r.idea.title.replace(/\|/g, ", ");
+      lines.push(`| ${title} | ${compileCell} | ${plistCell} | ${summaryCell} | ${requestCell} | ${errorCell} | ${passCell} |`);
+    }
+    lines.push("");
+  }
+
+  if (groupedByPattern.length > 0) {
     lines.push("### Error Patterns");
-    for (const { category, count } of grouped) {
-      lines.push(`- ${CATEGORY_LABELS[category]}: ${count}x (${Math.round((count / allErrors.length) * 100)}%)`);
+    for (const { displayName, appCount, occurrenceCount } of groupedByPattern) {
+      lines.push(
+        `- ${displayName}: ${occurrenceCount}x (${appCount} app${appCount !== 1 ? "s" : ""}) (${Math.round((occurrenceCount / allErrors.length) * 100)}%)`,
+      );
     }
     lines.push("");
   }
@@ -401,7 +691,7 @@ function generateRunReport(
       }
       if (r.errorMessage) lines.push(`  Error: ${r.errorMessage}`);
       if (r.designRating || r.functionalityRating)
-        lines.push(`  Ratings: Design ${r.designRating ?? "\u2014"}/5, Function ${r.functionalityRating ?? "\u2014"}/5`);
+        lines.push(`  Ratings: Design ${r.designRating ?? "\u2014"}/5, Works as expected: ${r.functionalityRating ?? "\u2014"}/5`);
       if (r.notes) lines.push(`  Notes: ${r.notes}`);
       lines.push("");
     }
@@ -411,7 +701,7 @@ function generateRunReport(
     lines.push("### Auto-fixed (succeeded after retries)");
     for (const r of autoFixed) {
       const extras: string[] = [];
-      if (r.designRating || r.functionalityRating) extras.push(`D:${r.designRating ?? "-"}/5 F:${r.functionalityRating ?? "-"}/5`);
+      if (r.designRating || r.functionalityRating) extras.push(`D:${r.designRating ?? "-"}/5 W:${r.functionalityRating ?? "-"}/5`);
       if (r.notes) extras.push(`"${r.notes}"`);
       lines.push(`- ${r.idea.title}: ${r.attempts} attempts${extras.length ? ` — ${extras.join(", ")}` : ""}`);
     }
@@ -422,11 +712,36 @@ function generateRunReport(
     lines.push("### Clean passes (1st attempt)");
     for (const r of cleanPasses) {
       const extras: string[] = [];
-      if (r.designRating || r.functionalityRating) extras.push(`D:${r.designRating ?? "-"}/5 F:${r.functionalityRating ?? "-"}/5`);
+      if (r.designRating || r.functionalityRating) extras.push(`D:${r.designRating ?? "-"}/5 W:${r.functionalityRating ?? "-"}/5`);
       if (r.notes) extras.push(`"${r.notes}"`);
       lines.push(`- ${r.idea.title}${extras.length ? ` — ${extras.join(", ")}` : ""}`);
     }
     lines.push("");
+  }
+
+  if (isM6Report && completed.some((r) => r.integrationChecks != null)) {
+    const integrationFailures = completed.filter((r) => {
+      const c = r.integrationChecks;
+      const pass =
+        Boolean(r.compiled) &&
+        Boolean(c?.plistComments && c?.summaryWarnings && c?.requestAuth && c?.errorHandling);
+      return !pass;
+    });
+    if (integrationFailures.length > 0) {
+      lines.push("### Integration Failures");
+      for (const r of integrationFailures) {
+        const failedChecks: string[] = [];
+        if (!r.compiled) failedChecks.push("Compile");
+        if (r.integrationChecks) {
+          if (!r.integrationChecks.plistComments) failedChecks.push("PLIST comments");
+          if (!r.integrationChecks.summaryWarnings) failedChecks.push("Summary warnings");
+          if (!r.integrationChecks.requestAuth) failedChecks.push("Request auth");
+          if (!r.integrationChecks.errorHandling) failedChecks.push("Error handling");
+        }
+        lines.push(`**${r.idea.title}** — Failed: ${failedChecks.join(", ")}`);
+      }
+      lines.push("");
+    }
   }
 
   return lines.join("\n");
@@ -448,7 +763,7 @@ function generateResultCopy(result: TestResult): string {
   }
   if (result.errorMessage) lines.push(`Error: ${result.errorMessage}`);
   if (result.designRating || result.functionalityRating)
-    lines.push(`Ratings: Design ${result.designRating ?? "\u2014"}/5, Function ${result.functionalityRating ?? "\u2014"}/5`);
+    lines.push(`Ratings: Design ${result.designRating ?? "\u2014"}/5, Works as expected: ${result.functionalityRating ?? "\u2014"}/5`);
   if (result.notes) lines.push(`Notes: ${result.notes}`);
   return lines.join("\n");
 }
@@ -686,6 +1001,66 @@ async function downloadXcodeZip(
   URL.revokeObjectURL(url);
 }
 
+function PasteLogsModal({
+  appName,
+  initialLogs,
+  onClose,
+  onAnalyzeFix,
+}: {
+  appName: string;
+  initialLogs: string;
+  onClose: () => void;
+  onAnalyzeFix: (content: string) => void;
+}) {
+  const [draft, setDraft] = useState(initialLogs);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="paste-logs-title">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden />
+      <div className="relative z-10 flex max-h-[90vh] w-full max-w-2xl flex-col rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-primary)] shadow-xl">
+        <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-3">
+          <h2 id="paste-logs-title" className="text-sm font-semibold text-[var(--text-primary)]">
+            Xcode Runtime Logs — {appName}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+        <div className="flex flex-1 flex-col overflow-hidden px-4 py-3">
+          <p className="mb-2 text-xs text-[var(--text-secondary)]">
+            Run the app on your iPhone via Xcode, reproduce the issue, then copy all output from the Xcode debug console (Cmd+A in the console area, then Cmd+C) and paste it here.
+          </p>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Paste your Xcode console output here..."
+            className="min-h-[200px] flex-1 resize-y rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--primary-default)] focus:outline-none focus:ring-1 focus:ring-[var(--primary-default)]"
+            rows={12}
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t border-[var(--border-default)] px-4 py-3">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              onAnalyzeFix(draft);
+            }}
+            className="gap-1.5"
+          >
+            Analyze & Fix
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ResultRow({
   result,
   index,
@@ -694,7 +1069,13 @@ function ResultRow({
   onToggleSelect,
   onUpdate,
   onCancel,
+  onOpenPasteLogs,
+  onRunVisionTest,
+  onStopVisionTest,
   running,
+  visionTestRunning,
+  visionTestStep,
+  visionTestCostUsd,
 }: {
   result: TestResult;
   index: number;
@@ -703,7 +1084,13 @@ function ResultRow({
   onToggleSelect?: () => void;
   onUpdate?: (updates: Partial<TestResult>) => void;
   onCancel?: () => void;
+  onOpenPasteLogs?: () => void;
+  onRunVisionTest?: () => void;
+  onStopVisionTest?: () => void;
   running: boolean;
+  visionTestRunning?: boolean;
+  visionTestStep?: number;
+  visionTestCostUsd?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [xcodeLoading, setXcodeLoading] = useState(false);
@@ -934,6 +1321,77 @@ function ResultRow({
             </span>
           )}
 
+          {(result.status === "succeeded" || result.status === "failed" || result.status === "error") && onOpenPasteLogs && (
+            <button
+              type="button"
+              onClick={onOpenPasteLogs}
+              className="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--button-secondary-bg)] px-2 py-1 text-xs font-medium text-[var(--button-secondary-text)] transition-colors hover:bg-[var(--button-secondary-hover)]"
+              title={result.runtimeLogs ? "Runtime logs attached — click to edit or re-paste" : "Paste Xcode console logs to analyze"}
+            >
+              <ClipboardPaste className="h-3 w-3" aria-hidden />
+              Paste Logs
+              {result.runtimeLogs && (
+                <span className="ml-0.5 inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--semantic-success)]" aria-label="Logs attached" />
+              )}
+            </button>
+          )}
+
+          {(result.status === "succeeded" || result.status === "failed" || result.status === "error") && onRunVisionTest && (
+            <div className="inline-flex items-center gap-2">
+              <button
+                type="button"
+                disabled={visionTestRunning || !result.projectId}
+                onClick={onRunVisionTest}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--button-secondary-bg)] px-2 py-1 text-xs font-medium text-[var(--button-secondary-text)] transition-colors hover:bg-[var(--button-secondary-hover)] disabled:opacity-50"
+                title="Run Claude vision automated test (requires Appetize preview)"
+              >
+                {visionTestRunning ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                    Claude testing… ({visionTestStep ?? 0}/30)
+                    {typeof visionTestCostUsd === "number" && (
+                      <span className="text-[var(--text-tertiary)]"> · ${visionTestCostUsd.toFixed(4)}</span>
+                    )}
+                  </>
+                ) : result.visionTestReport ? (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(true); } }}
+                    className={`inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                      result.visionTestReport.recommendation === "Stopped"
+                        ? "bg-[var(--text-tertiary)]/20 text-[var(--text-secondary)]"
+                        : result.visionTestReport.overallScore >= 85
+                          ? "bg-[var(--semantic-success)]/20 text-[var(--semantic-success)]"
+                          : result.visionTestReport.overallScore >= 60
+                            ? "bg-amber-500/20 text-amber-600"
+                            : result.visionTestReport.overallScore >= 30
+                              ? "bg-orange-500/20 text-orange-600"
+                              : "bg-[var(--semantic-error)]/20 text-[var(--semantic-error)]"
+                    }`}
+                    title={`${result.visionTestReport.recommendation} — click to expand`}
+                  >
+                    {result.visionTestReport.recommendation === "Stopped" ? "Stopped" : result.visionTestReport.overallScore}
+                  </span>
+                ) : (
+                  "Auto Test"
+                )}
+              </button>
+              {visionTestRunning && onStopVisionTest && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onStopVisionTest(); }}
+                  className="inline-flex items-center rounded border border-[var(--semantic-error)]/50 bg-[var(--semantic-error)]/15 px-1.5 py-0.5 text-[10px] font-medium text-[var(--semantic-error)] hover:bg-[var(--semantic-error)]/25"
+                  title="Stop vision test"
+                  aria-label="Stop vision test"
+                >
+                  <Square className="h-2.5 w-2.5 fill-current" aria-hidden />
+                </button>
+              )}
+            </div>
+          )}
+
           {!running && onExclude && (
             <button
               type="button"
@@ -1055,7 +1513,7 @@ function ResultRow({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-[var(--text-tertiary)]">Function</span>
+                  <span className="text-xs font-medium text-[var(--text-tertiary)]">Works as expected</span>
                   <div className="flex gap-0.5">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
@@ -1094,6 +1552,56 @@ function ResultRow({
               )}
             </div>
           )}
+
+          {result.visionTestReport && (
+            <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-3 space-y-3">
+              <p className="text-xs font-medium text-[var(--text-secondary)]">
+                Auto test: {result.visionTestReport.overallScore}/100 — {result.visionTestReport.recommendation}
+              </p>
+              {typeof result.visionTestReport.total_cost_usd === "number" && (
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  Claude API cost: ${result.visionTestReport.total_cost_usd.toFixed(4)}
+                  {typeof result.visionTestReport.total_input_tokens === "number" && typeof result.visionTestReport.total_output_tokens === "number" && (
+                    <> ({result.visionTestReport.total_input_tokens} input tokens, {result.visionTestReport.total_output_tokens} output tokens)</>
+                  )}
+                </p>
+              )}
+              {result.visionTestReport.allIssues.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-[var(--text-tertiary)] mb-1">Issues found</p>
+                  <ul className="list-disc list-inside text-xs text-[var(--text-secondary)] space-y-0.5">
+                    {result.visionTestReport.allIssues.map((issue, i) => (
+                      <li key={i}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {result.visionTestReport.featuresTestedSuccessfully.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-[var(--text-tertiary)] mb-1">Features tested</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{result.visionTestReport.featuresTestedSuccessfully.join(", ")}</p>
+                </div>
+              )}
+              {result.visionTestReport.screenshots.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {result.visionTestReport.screenshots.slice(0, 8).map((b64, i) => (
+                    <img key={i} src={`data:image/png;base64,${b64}`} alt="" className="h-20 w-auto shrink-0 rounded border border-[var(--border-default)]" />
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(result.visionTestReport!.cursorPrompt);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+                className="rounded-[var(--radius-md)] bg-[var(--button-secondary-bg)] px-2 py-1 text-xs font-medium text-[var(--button-secondary-text)]"
+              >
+                Copy fix prompt
+              </button>
+            </div>
+          )}
         </div>
       )}
     </article>
@@ -1107,6 +1615,7 @@ function SummaryPanel({
   target,
   running,
   runStartTime,
+  activeMilestone,
   onStop,
   onPauseAfterNext,
   pauseAfterNext,
@@ -1117,6 +1626,7 @@ function SummaryPanel({
   target?: number;
   running?: boolean;
   runStartTime?: number | null;
+  activeMilestone?: string;
   onStop?: () => void;
   onPauseAfterNext?: () => void;
   pauseAfterNext?: boolean;
@@ -1128,11 +1638,61 @@ function SummaryPanel({
   );
   if (completed.length === 0) return null;
 
+  const isM6 = activeMilestone === "m6-integration";
+  const isM7 = activeMilestone === "m7-regression";
   const compiled = completed.filter((r) => r.compiled).length;
+  const integrationPassCount = isM6
+    ? completed.filter(
+        (r) =>
+          r.compiled &&
+          r.integrationChecks &&
+          r.integrationChecks.plistComments &&
+          r.integrationChecks.summaryWarnings &&
+          r.integrationChecks.requestAuth &&
+          r.integrationChecks.errorHandling,
+      ).length
+    : compiled;
   const totalAttempts = completed.reduce((s, r) => s + r.attempts, 0);
   const totalDuration = completed.reduce((s, r) => s + r.durationMs, 0);
   const allErrors = completed.flatMap((r) => r.compilerErrors);
-  const grouped = groupErrors(allErrors);
+  const grouped = groupErrorsByPattern(completed);
+  const [expandedPatterns, setExpandedPatterns] = useState<Set<ErrorCategory>>(() => new Set());
+  const maxOccurrence = grouped.length > 0 ? Math.max(...grouped.map((g) => g.occurrenceCount)) : 0;
+
+  const runLabel =
+    runStartTime != null
+      ? new Date(runStartTime).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
+      : new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+  const passCount = isM6 ? integrationPassCount : compiled;
+  const passPct = completed.length > 0 ? Math.round((passCount / completed.length) * 100) : 0;
+  const avgAttempts = completed.length > 0 ? (totalAttempts / completed.length).toFixed(1) : "—";
+
+  const handleCopyAllErrors = useCallback(() => {
+    const header = [
+      "# Vibetree Test Suite - Error Report",
+      `# Run: ${runLabel} | Compile: ${compiled}/${completed.length} | Pass: ${passPct}% | Avg Attempts: ${avgAttempts}`,
+      "# Fix these errors by updating SYSTEM_PROMPT_SWIFT or INTEGRATIONS.md",
+      "---",
+      "",
+    ].join("\n");
+    const blocks: string[] = [];
+    for (const g of grouped) {
+      for (const { appName, rawMessage } of g.items) {
+        blocks.push(`App: ${appName}\nType: ${g.displayName}\n${rawMessage}\n---`);
+      }
+    }
+    const text = header + blocks.join("\n\n");
+    void navigator.clipboard.writeText(text);
+  }, [grouped, runLabel, compiled, completed.length, passPct, avgAttempts]);
+
+  const togglePattern = (cat: ErrorCategory) => {
+    setExpandedPatterns((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-3">
@@ -1144,14 +1704,14 @@ function SummaryPanel({
           </p>
         </div>
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Pass rate</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">{isM6 ? "Integration pass rate" : "Pass rate"}</p>
           {(() => {
-            const rate = completed.length > 0 ? Math.round((compiled / completed.length) * 100) : 0;
+            const rate = passPct;
             const t = target ?? 70;
             const rateColor = rate >= t + 5 ? "text-[var(--semantic-success)]" : rate >= t - 5 ? "text-yellow-400" : "text-[var(--semantic-error)]";
             return (
               <p className={`mt-1 text-2xl font-semibold tabular-nums ${rateColor}`}>
-                {rate}%
+                {passCount}/{completed.length} ({rate}%)
                 {target !== undefined && (
                   <span className="ml-1 text-sm font-normal text-[var(--text-tertiary)]">/ {target}%</span>
                 )}
@@ -1182,6 +1742,105 @@ function SummaryPanel({
         </div>
       </div>
 
+      {isM6 && completed.some((r) => r.integrationChecks != null) && (
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">Integration checks per app</p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-left text-xs">
+              <thead>
+                <tr className="border-b border-[var(--border-default)] text-[var(--text-tertiary)]">
+                  <th className="pb-2 pr-2 font-medium">App</th>
+                  <th className="pb-2 pr-2 font-medium text-center">Compile</th>
+                  <th className="pb-2 pr-2 font-medium text-center">PLIST comments</th>
+                  <th className="pb-2 pr-2 font-medium text-center">Summary warnings</th>
+                  <th className="pb-2 pr-2 font-medium text-center">Request auth</th>
+                  <th className="pb-2 pr-2 font-medium text-center">Error handling</th>
+                  <th className="pb-2 font-medium text-center">Pass</th>
+                </tr>
+              </thead>
+              <tbody className="text-[var(--text-secondary)]">
+                {completed.map((r) => {
+                  const c = r.integrationChecks;
+                  const pass =
+                    Boolean(r.compiled) &&
+                    Boolean(c?.plistComments && c?.summaryWarnings && c?.requestAuth && c?.errorHandling);
+                  return (
+                    <tr key={r.idea.title} className="border-b border-[var(--border-subtle)]">
+                      <td className="py-1.5 pr-2 font-medium text-[var(--text-primary)]">{r.idea.title}</td>
+                      <td className="py-1.5 pr-2 text-center">{r.compiled ? "✓" : "✗"}</td>
+                      <td className="py-1.5 pr-2 text-center">{c ? (c.plistComments ? "✓" : "✗") : "—"}</td>
+                      <td className="py-1.5 pr-2 text-center">
+                        {c ? (c.summaryWarnings ? "✓" : (
+                          <span className="inline-flex items-center justify-center gap-0.5" title={!(r.generationSummary?.trim()) ? "No summary captured — check failed due to missing summary" : undefined}>
+                            ✗
+                            {!(r.generationSummary?.trim()) && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[var(--semantic-warning)]" aria-hidden />}
+                          </span>
+                        )) : "—"}
+                      </td>
+                      <td className="py-1.5 pr-2 text-center">{c ? (c.requestAuth ? "✓" : "✗") : "—"}</td>
+                      <td className="py-1.5 pr-2 text-center">{c ? (c.errorHandling ? "✓" : "✗") : "—"}</td>
+                      <td className={`py-1.5 text-center font-semibold ${pass ? "text-[var(--semantic-success)]" : "text-[var(--text-tertiary)]"}`}>
+                        {pass ? "✓" : "✗"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {(isM6 || isM7) && completed.some((r) => r.visionTestReport) && (
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">Auto test (Claude vision)</p>
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <span className="text-[var(--text-secondary)]">
+              {completed.filter((r) => r.visionTestReport).length}/{completed.length} apps tested
+            </span>
+            <span className="text-[var(--text-secondary)]">
+              Avg score:{" "}
+              {(() => {
+                const withReport = completed.filter((r) => r.visionTestReport);
+                if (withReport.length === 0) return "—";
+                const sum = withReport.reduce((s, r) => s + (r.visionTestReport?.overallScore ?? 0), 0);
+                return `${Math.round(sum / withReport.length)}/100`;
+              })()}
+            </span>
+            <span className="text-[var(--text-secondary)]">
+              Total issues: {completed.reduce((s, r) => s + (r.visionTestReport?.allIssues?.length ?? 0), 0)}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const runLabel =
+                  runStartTime != null
+                    ? new Date(runStartTime).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
+                    : new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+                const milestoneLabel = isM6 ? "M6: Integration" : "M7: Regression";
+                const appsWithIssues = completed.filter((r) => (r.visionTestReport?.allIssues?.length ?? 0) > 0);
+                const lines = [
+                  `The following UI and functionality issues were automatically detected by Claude vision testing across ${appsWithIssues.length} apps in the ${milestoneLabel} test suite run on ${runLabel}. For each issue:`,
+                  "1. Update SYSTEM_PROMPT_SWIFT in claudeAdapter.ts to prevent this from occurring in future generated apps",
+                  "2. Update INTEGRATIONS.md if the issue relates to an integration",
+                  "3. Show before/after for each change",
+                  "4. Explain which error pattern each fix addresses",
+                  "",
+                  "Issues found:",
+                  ...appsWithIssues.flatMap((r) =>
+                    (r.visionTestReport!.allIssues).map((issue) => `${r.idea.title} — ${issue}`)
+                  ),
+                ];
+                navigator.clipboard.writeText(lines.join("\n"));
+              }}
+              className="rounded-[var(--radius-md)] bg-[var(--button-primary-bg)] px-3 py-1.5 text-xs font-medium text-[var(--button-primary-text)] hover:opacity-90"
+            >
+              Fix all issues
+            </button>
+          </div>
+        </div>
+      )}
+
       {running && (onStop || onPauseAfterNext) && (
         <div className="flex items-center gap-2">
           {onStop && (
@@ -1205,28 +1864,65 @@ function SummaryPanel({
 
       {grouped.length > 0 && (
         <div>
-          <button
-            type="button"
-            onClick={onToggleErrors}
-            className="flex w-full items-center justify-between rounded-[var(--radius-md)] px-1 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
-          >
-            <span>Error patterns ({allErrors.length})</span>
-            {errorsExpanded ? <Minimize2 className="h-3.5 w-3.5" aria-hidden /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden />}
-          </button>
+          <div className="flex w-full items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onToggleErrors}
+              className="flex flex-1 items-center justify-between rounded-[var(--radius-md)] px-1 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+            >
+              <span>Error patterns ({allErrors.length})</span>
+              {errorsExpanded ? <Minimize2 className="h-3.5 w-3.5" aria-hidden /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden />}
+            </button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleCopyAllErrors}
+              className="shrink-0 gap-1 px-2 py-1 min-h-0 text-xs"
+              aria-label="Copy all errors for Cursor"
+            >
+              <Copy className="h-3.5 w-3.5" aria-hidden />
+              Copy all errors
+            </Button>
+          </div>
           {errorsExpanded && (
-            <div className="mt-1.5 space-y-1">
-              {grouped.map(({ category, count }) => (
-                <div key={category} className="flex items-center gap-2 text-xs">
-                  <span className="w-8 text-right font-semibold tabular-nums text-[var(--text-primary)]">{count}x</span>
-                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--background-tertiary)]">
-                    <div
-                      className="h-full rounded-full bg-[var(--semantic-error)] transition-all"
-                      style={{ width: `${Math.min(100, (count / allErrors.length) * 100)}%` }}
-                    />
+            <div className="mt-1.5 space-y-0.5">
+              {grouped.map((g) => {
+                const isExpanded = expandedPatterns.has(g.category);
+                return (
+                  <div key={g.category} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--background-tertiary)]/30 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => togglePattern(g.category)}
+                      className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-[var(--background-tertiary)]/50"
+                    >
+                      {isExpanded ? <ChevronUp className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" aria-hidden /> : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" aria-hidden />}
+                      <span className="w-6 text-right font-semibold tabular-nums text-[var(--text-primary)]">{g.appCount}</span>
+                      <span className="text-[var(--text-tertiary)]">apps</span>
+                      <span className="w-10 text-right font-semibold tabular-nums text-[var(--text-primary)]">{g.occurrenceCount}x</span>
+                      <div className="h-1.5 min-w-[4rem] flex-1 max-w-24 overflow-hidden rounded-full bg-[var(--background-tertiary)]">
+                        <div
+                          className="h-full rounded-full bg-[var(--semantic-error)] transition-all"
+                          style={{ width: `${maxOccurrence > 0 ? Math.min(100, (g.occurrenceCount / maxOccurrence) * 100) : 0}%` }}
+                        />
+                      </div>
+                      <span className="shrink-0 font-medium text-[var(--text-secondary)]">{g.displayName}</span>
+                    </button>
+                    {isExpanded && (
+                      <div className="max-h-48 overflow-y-auto border-t border-[var(--border-subtle)] px-2 py-1.5">
+                        <ul className="space-y-1.5 font-mono text-[10px] text-[var(--text-secondary)]">
+                          {g.items.map((item, i) => (
+                            <li key={i} className="rounded bg-[var(--background-primary)]/80 px-2 py-1 break-words">
+                              <span className="font-sans font-medium text-[var(--text-tertiary)]">App: {item.appName}</span>
+                              <pre className="mt-0.5 whitespace-pre-wrap text-[var(--text-primary)]">{item.rawMessage}</pre>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                  <span className="text-[var(--text-secondary)]">{CATEGORY_LABELS[category]}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1441,6 +2137,13 @@ function loadPersistedState(storageKey: string = TEST_SUITE_STORAGE_KEY): {
         functionalityRating: typeof row.functionalityRating === "number" ? (row.functionalityRating as number) : undefined,
         notes: typeof row.notes === "string" ? (row.notes as string) : undefined,
         issueTags: Array.isArray(row.issueTags) ? (row.issueTags as string[]) : undefined,
+        generationSummary: typeof row.generationSummary === "string" ? (row.generationSummary as string) : undefined,
+        integrationChecks:
+          row.integrationChecks && typeof row.integrationChecks === "object"
+            ? (row.integrationChecks as { plistComments: boolean; summaryWarnings: boolean; requestAuth: boolean; errorHandling: boolean })
+            : undefined,
+        runtimeLogs: typeof row.runtimeLogs === "string" ? row.runtimeLogs : undefined,
+        visionTestReport: row.visionTestReport && typeof row.visionTestReport === "object" ? row.visionTestReport as TestResult["visionTestReport"] : undefined,
       };
     });
     const computedCompletedCount = results.filter((r) => !r.excluded && r.status !== "pending").length;
@@ -1506,11 +2209,29 @@ export default function TestSuitePage() {
   const [copiedReport, setCopiedReport] = useState(false);
   const [runStartTime, setRunStartTime] = useState<number | null>(null);
   const [runElapsed, setRunElapsed] = useState(0);
+  const [pasteLogsModalIndex, setPasteLogsModalIndex] = useState<number | null>(null);
+  const [visionTestRunningIndex, setVisionTestRunningIndex] = useState<number | null>(null);
+  const [visionTestStep, setVisionTestStep] = useState(0);
+  const [visionTestCostUsd, setVisionTestCostUsd] = useState(0);
+  const [visionTestTapMode, setVisionTestTapMode] = useState<"coordinates" | "elements">("elements");
+  const [autoVisionEnabled, setAutoVisionEnabled] = useState(true);
+  const autoVisionEnabledRef = useRef(true);
+  const visionQueueRef = useRef<Array<{ idx: number; projectId: string }>>([]);
+  const visionWorkerRunningRef = useRef(false);
+  const processVisionQueueRef = useRef<() => Promise<void>>(async () => {});
+  const visionTestAbortControllerRef = useRef<AbortController | null>(null);
+  const visionTestStopRequestedRef = useRef(false);
+  const [pasteLogsCopied, setPasteLogsCopied] = useState(false);
+  const [runnerOnline, setRunnerOnline] = useState<boolean | null>(null);
+  const [runPausedByRunner, setRunPausedByRunner] = useState(false);
   const [concurrency, setConcurrency] = useState<1 | 2>(() => {
     if (typeof window === "undefined") return 1;
     try { return localStorage.getItem(CONCURRENCY_STORAGE_KEY) === "2" ? 2 : 1; } catch { return 1; }
   });
   const concurrencyRef = useRef(concurrency);
+  useEffect(() => {
+    autoVisionEnabledRef.current = autoVisionEnabled;
+  }, [autoVisionEnabled]);
 
   function setConcurrencyAndSave(n: 1 | 2) {
     setConcurrency(n);
@@ -1575,6 +2296,23 @@ export default function TestSuitePage() {
       msKey(activeMilestone),
     );
   }, [model, results, currentRunId, completedCount, running, activeMilestone, msKey]);
+
+  useEffect(() => {
+    const poll = () => {
+      fetch("/api/runner/status", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && typeof data.online === "boolean") {
+            setRunnerOnline(data.online);
+            if (data.online && runPausedByRunner) setRunPausedByRunner(false);
+          }
+        })
+        .catch(() => setRunnerOnline(false));
+    };
+    poll();
+    const id = setInterval(poll, 15 * 1000);
+    return () => clearInterval(id);
+  }, [runPausedByRunner]);
 
   useEffect(() => {
     setCompletedCount(results.filter((r) => !r.excluded && r.status !== "pending").length);
@@ -1806,17 +2544,23 @@ export default function TestSuitePage() {
         if (config?.ideas?.length) {
           setMilestoneTarget(config.target ?? 70);
 
-          const saved = loadPersistedState(msKey(newMilestone));
+          const newIdeas = config.ideas as AppIdea[];
+          setIdeas(newIdeas);
 
+          const saved = loadPersistedState(msKey(newMilestone));
           if (saved && saved.results.length > 0) {
-            setIdeas(saved.results.map((r) => r.idea));
-            setResults(saved.results);
+            const mergedResults: TestResult[] = newIdeas.map((idea, idx) => {
+              const match = saved.results.find(
+                (r) => r.idea.title === idea.title && (r.idea.prompt === idea.prompt || !r.idea.prompt),
+              );
+              if (match) return { ...match, idea };
+              return makeInitialResults([idea])[0]!;
+            });
+            setResults(mergedResults);
             setCurrentRunId(saved.currentRunId);
-            setCompletedCount(saved.completedCount);
+            setCompletedCount(mergedResults.filter((r) => !r.excluded && r.status !== "pending").length);
             setModel(saved.model);
           } else {
-            const newIdeas = config.ideas as AppIdea[];
-            setIdeas(newIdeas);
             setResults(makeInitialResults(newIdeas));
             setCurrentRunId(null);
             setCompletedCount(0);
@@ -1845,13 +2589,14 @@ export default function TestSuitePage() {
         pushLiveEvent(index, "Starting generation…");
 
         const genStart = Date.now();
-        const project = await fetch("/api/projects", {
+        const projectRes = await fetch("/api/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: `[Test] ${idea.title}` }),
-        }).then((r) => r.json());
-
-        const projectId = project.id;
+        });
+        const projectData = await projectRes.json();
+        const projectId = (projectData.project?.id ?? projectData.id) as string;
+        if (!projectId) throw new Error("No project id from API");
         updateResult(index, { projectId });
 
         const GEN_TIMEOUT_MS = 6 * 60 * 1000;
@@ -1902,7 +2647,42 @@ export default function TestSuitePage() {
         entryControllersRef.current.delete(index);
 
         if (!done) throw new Error("No 'done' event in stream");
-        projectFiles = (done.projectFiles as Array<{ path: string; content: string }>) ?? null;
+        let generationSummary: string | undefined;
+        const contentRaw = (done as { assistantMessage?: { content?: string } }).assistantMessage?.content;
+        if (typeof contentRaw === "string") {
+          const trimmed = contentRaw.trim();
+          try {
+            const parsed = JSON.parse(contentRaw) as { summary?: string; files?: unknown };
+            if (parsed.summary != null && String(parsed.summary).trim()) {
+              generationSummary = String(parsed.summary).trim();
+            } else if (trimmed) {
+              generationSummary = trimmed;
+            }
+          } catch {
+            if (trimmed) generationSummary = trimmed;
+          }
+        }
+        if (activeMilestone === "m6-integration") {
+          if (generationSummary != null && generationSummary.length > 0) {
+            const preview = generationSummary.slice(0, 200) + (generationSummary.length > 200 ? "..." : "");
+            console.log(`M6 Summary captured for ${idea.title}: ${preview}`);
+          } else {
+            console.warn(`M6 Summary NOT captured for ${idea.title} (summary empty or parse failed)`);
+          }
+        }
+        const filesFromDone = (done as { projectFiles?: Array<{ path: string; content: string }> }).projectFiles;
+        if (Array.isArray(filesFromDone) && filesFromDone.length > 0) projectFiles = filesFromDone;
+        if (!projectFiles?.length) {
+          try {
+            const filesRes = await fetch(`/api/projects/${projectId}/files`);
+            if (filesRes.ok) {
+              const data = (await filesRes.json()) as { files?: Array<{ path: string; content: string }> };
+              if (Array.isArray(data.files) && data.files.length > 0) projectFiles = data.files;
+            }
+          } catch {
+            /* ignore */
+          }
+        }
         if (!projectFiles?.length) throw new Error("No files generated");
 
         const generationMs = Date.now() - genStart;
@@ -1929,6 +2709,16 @@ export default function TestSuitePage() {
             ...(developmentTeam ? { developmentTeam } : {}),
           }),
         }).then((r) => r.json());
+
+        if (buildRes?.error === "mac_runner_offline") {
+          const msg = typeof buildRes.message === "string" ? buildRes.message : "Build server is offline. Builds are paused until the server comes back online.";
+          updateResult(index, { status: "failed", errorMessage: msg, compiled: false });
+          setRunPausedByRunner(true);
+          abortRef.current = true;
+          setRunning(false);
+          const r = results[index];
+          return { ...r, status: "failed", errorMessage: msg, compiled: false };
+        }
 
         if (!buildRes.job?.id) throw new Error("No build job created");
 
@@ -2013,6 +2803,10 @@ export default function TestSuitePage() {
           }).catch(() => {});
         }
 
+        const filesForChecks = (builtFiles?.length ? builtFiles : projectFiles) ?? [];
+        const isM6 = activeMilestone === "m6-integration";
+        const integrationChecks = isM6 && filesForChecks.length > 0 ? evaluateIntegrationChecks(filesForChecks, generationSummary) : undefined;
+
         const finalResult: Partial<TestResult> = {
           status: compiled ? "succeeded" : "failed",
           compiled,
@@ -2025,9 +2819,12 @@ export default function TestSuitePage() {
           fileCount,
           model: config.model,
           buildResultId,
+          projectId,
           liveStatus: undefined,
           startedAt: undefined,
           ...(builtFiles?.length ? { projectFiles: builtFiles } : {}),
+          ...(generationSummary != null ? { generationSummary } : {}),
+          ...(integrationChecks != null ? { integrationChecks } : {}),
         };
 
         updateResult(index, finalResult);
@@ -2049,6 +2846,7 @@ export default function TestSuitePage() {
         updateResult(index, {
           status: "error",
           compiled: false,
+          attempts: 0,
           errorMessage: isAborted ? "Stopped by user" : msg,
           durationMs,
           liveStatus: undefined,
@@ -2067,7 +2865,7 @@ export default function TestSuitePage() {
         };
       }
     },
-    [ideas, pushLiveEvent, updateResult],
+    [ideas, pushLiveEvent, updateResult, activeMilestone],
   );
 
   const runAllTests = useCallback(async () => {
@@ -2136,6 +2934,9 @@ export default function TestSuitePage() {
               errors: r.compilerErrors,
               fileCount: r.fileCount,
               model: r.model ?? config.model,
+              ...(r.integrationChecks ? { integrationChecks: r.integrationChecks } : {}),
+              ...(r.runtimeLogs ? { runtimeLogs: r.runtimeLogs } : {}),
+              ...(r.visionTestReport ? { visionTestReport: r.visionTestReport } : {}),
             })),
             summary,
           }),
@@ -2156,6 +2957,10 @@ export default function TestSuitePage() {
           finalResults.push(result);
           setCompletedCount(baseDone + finalResults.length);
           await saveProgress(cursor >= pending.length);
+          if (result.compiled && result.projectId && autoVisionEnabledRef.current) {
+            visionQueueRef.current.push({ idx, projectId: result.projectId });
+            processVisionQueueRef.current?.();
+          }
           if (pauseAfterNextRef.current) break;
           if (cursor < pending.length && !abortRef.current) {
             await sleep(lanes > 1 ? 500 : 2000);
@@ -2317,6 +3122,7 @@ export default function TestSuitePage() {
       .map((_, i) => i)
       .filter((i) => results[i].status === "pending" && !results[i].excluded && results[i].selected !== false);
     if (pending.length === 0) return;
+    setRunPausedByRunner(false);
     abortRef.current = false;
     setRunning(true);
     setRunStartTime(Date.now());
@@ -2414,6 +3220,20 @@ export default function TestSuitePage() {
     }
   }, [model, results, runSingleTest, loadPastRuns]);
 
+  const runFirstAppOnly = useCallback(async () => {
+    setRunning(true);
+    setRunStartTime(Date.now());
+    abortRef.current = false;
+    try {
+      await runSingleTest(0, { model, projectType: "pro" }, () => abortRef.current);
+      setCompletedCount((prev) => prev + 1);
+    } finally {
+      setRunning(false);
+      setRunStartTime(null);
+      loadPastRuns();
+    }
+  }, [model, runSingleTest]);
+
   const toggleExclude = useCallback((index: number) => {
     setResults((prev) => {
       const next = [...prev];
@@ -2443,6 +3263,7 @@ export default function TestSuitePage() {
         if (!match) return { ...row, status: "pending" as const, compiled: undefined, attempts: 0, compilerErrors: [], durationMs: 0, errorMessage: undefined, buildResultId: undefined };
         const compiled = Boolean(match.compiled);
         const errors = Array.isArray(match.errors) ? match.errors : [];
+        const matchWithChecks = match as typeof match & { integrationChecks?: { plistComments: boolean; summaryWarnings: boolean; requestAuth: boolean; errorHandling: boolean } };
         return {
           ...row,
           status: compiled ? ("succeeded" as const) : ("failed" as const),
@@ -2454,10 +3275,580 @@ export default function TestSuitePage() {
           projectId: typeof match.projectId === "string" ? match.projectId : row.projectId,
           buildResultId: typeof match.buildResultId === "string" ? match.buildResultId : row.buildResultId,
           errorMessage: compiled ? undefined : row.errorMessage,
+          ...(matchWithChecks.integrationChecks ? { integrationChecks: matchWithChecks.integrationChecks } : {}),
+          runtimeLogs: typeof (match as { runtimeLogs?: string }).runtimeLogs === "string" ? (match as { runtimeLogs: string }).runtimeLogs : undefined,
+          visionTestReport: (match as { visionTestReport?: TestResult["visionTestReport"] }).visionTestReport,
         };
       }),
     );
   }, [pastRuns]);
+
+  const handlePasteLogsAnalyze = useCallback(
+    (content: string) => {
+      if (pasteLogsModalIndex == null) return;
+      const r = results[pasteLogsModalIndex];
+      if (!r) return;
+      const milestoneLabel = milestoneTabs.find((t) => t.id === activeMilestone)?.label ?? activeMilestone;
+      const designStr = r.designRating != null ? `${r.designRating}/5 stars` : "Not rated";
+      const worksStr = r.functionalityRating != null ? `${r.functionalityRating}/5 stars` : "Not rated";
+      const notesStr = (r.notes ?? "").trim() || "No notes";
+      const logsStr = content.trim() || "No logs provided";
+      const prompt = `---
+App: ${r.idea.title}
+Milestone: ${milestoneLabel}
+Category: ${r.idea.category}
+
+Manual Test Ratings:
+- Design: ${designStr}
+- Works as expected: ${worksStr}
+- Notes: ${notesStr}
+
+Xcode Logs:
+${logsStr}
+
+Please:
+1. Identify root cause based on the ratings, notes, and logs above
+2. Fix the issue in the system prompt (SYSTEM_PROMPT_SWIFT in claudeAdapter.ts)
+3. Update INTEGRATIONS.md if this reveals a gap
+4. Summarize what you changed and why
+---`;
+      navigator.clipboard.writeText(prompt);
+      updateResult(pasteLogsModalIndex, { runtimeLogs: content });
+      setPasteLogsModalIndex(null);
+      setPasteLogsCopied(true);
+      setTimeout(() => setPasteLogsCopied(false), 2500);
+    },
+    [pasteLogsModalIndex, results, activeMilestone, milestoneTabs, updateResult],
+  );
+
+  const runVisionTestRef = useRef<(index: number) => Promise<void>>(async () => {});
+  const runVisionTest = useCallback(
+    async (index: number) => {
+      const result = results[index];
+      if (!result?.projectId || !result.idea?.title) {
+        console.warn("[vision-test] No projectId or title for index", index);
+        return;
+      }
+      const projectId = result.projectId;
+      const appName = result.idea.title;
+      console.log("[vision-test] Starting for project", projectId);
+
+      let appetizeRes: Response;
+      try {
+        appetizeRes = await fetch(`/api/projects/${projectId}/appetize`, { cache: "no-store" });
+      } catch (e) {
+        console.error("[vision-test] Failed to fetch appetize key", e);
+        return;
+      }
+      const appetizeData = await appetizeRes.json().catch(() => ({}));
+      const publicKey = appetizeData?.publicKey;
+      if (!publicKey) {
+        console.warn("[vision-test] No Appetize public key for project", projectId, "- cannot run vision test");
+        updateResult(index, {
+          visionTestReport: {
+            projectId,
+            appName,
+            recommendation: "Rebuild required",
+            overallScore: 0,
+            allIssues: ["No Appetize key found for this app. Rebuild the app to enable vision testing."],
+            featuresTestedSuccessfully: [],
+            featuresThatCouldNotBeTested: [],
+            totalActions: 0,
+            duration: 0,
+            screenshots: [],
+            cursorPrompt: "No Appetize key for this app. Rebuild the app to enable vision testing.",
+          },
+        });
+        return;
+      }
+      console.log("[vision-test] Appetize key found:", publicKey);
+
+      setVisionTestRunningIndex(index);
+      setVisionTestStep(0);
+      setVisionTestCostUsd(0);
+
+      const containerId = "vision-test-appetize-container";
+      const iframeId = "vision-test-appetize-iframe";
+      let container = document.getElementById(containerId);
+      if (!container) {
+        container = document.createElement("div");
+        container.id = containerId;
+        container.style.cssText = "position:fixed;left:-9999px;top:0;width:378px;height:800px;z-index:1;";
+        const iframe = document.createElement("iframe");
+        iframe.id = iframeId;
+        iframe.src = `https://appetize.io/embed/${publicKey}?grantPermissions=true`;
+        iframe.width = "378";
+        iframe.height = "800";
+        iframe.setAttribute("frameborder", "0");
+        container.appendChild(iframe);
+        document.body.appendChild(container);
+      } else {
+        const iframe = container.querySelector("iframe");
+        if (iframe) (iframe as HTMLIFrameElement).src = `https://appetize.io/embed/${publicKey}?grantPermissions=true`;
+      }
+
+      const SDK_TIMEOUT_MS = 10000;
+      const loadScript = (): Promise<void> => {
+        const win = window as unknown as { appetize?: { getClient: (s: string) => Promise<unknown> } };
+        if (typeof win.appetize?.getClient === "function") {
+          return Promise.resolve();
+        }
+        if (document.querySelector('script[src="https://js.appetize.io/embed.js"]')) {
+          return new Promise((resolve, reject) => {
+            const deadline = Date.now() + SDK_TIMEOUT_MS;
+            const check = () => {
+              if (typeof win.appetize?.getClient === "function") {
+                resolve();
+                return;
+              }
+              if (Date.now() >= deadline) {
+                reject(new Error("[vision-test] SDK did not load within 10 seconds"));
+                return;
+              }
+              setTimeout(check, 100);
+            };
+            setTimeout(check, 300);
+          });
+        }
+        return new Promise((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            reject(new Error("[vision-test] SDK did not load within 10 seconds"));
+          }, SDK_TIMEOUT_MS);
+          const script = document.createElement("script");
+          script.src = "https://js.appetize.io/embed.js";
+          script.async = true;
+          script.onload = () => {
+            const check = () => {
+              if (typeof win.appetize?.getClient === "function") {
+                clearTimeout(timeoutId);
+                resolve();
+                return;
+              }
+              setTimeout(check, 100);
+            };
+            setTimeout(check, 500);
+          };
+          script.onerror = () => {
+            clearTimeout(timeoutId);
+            reject(new Error("Appetize script failed to load"));
+          };
+          document.head.appendChild(script);
+        });
+      };
+
+      const start = Date.now();
+      const steps: Array<{ observation?: string; issues_found?: string[]; features_tested_so_far?: string[]; screenshot_base64?: string; logs_captured?: string[] }> = [];
+      const messages: VisionMessage[] = [];
+      let lastFeatures: string[] = [];
+      let lastIssues: string[] = [];
+      let allIssues: string[] = [];
+      let featuresThatCouldNotBeTested: string[] = [];
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      const lastTapCoords: Array<{ x: number; y: number }> = [];
+      const STUCK_SAME_COORD_THRESHOLD = 3;
+
+      try {
+        visionTestAbortControllerRef.current = new AbortController();
+        visionTestStopRequestedRef.current = false;
+        console.log("[vision-test] Loading Appetize SDK...");
+        await loadScript();
+        console.log("[vision-test] SDK loaded");
+        await new Promise((r) => setTimeout(r, 2500));
+
+        type AppetizeSession = {
+          tap: (o: unknown) => Promise<void>;
+          type: (t: string) => Promise<void>;
+          keypress?: (key: string) => Promise<void>;
+          swipe: (o: unknown) => Promise<void>;
+          screenshot: (fmt?: string) => Promise<{ data: string }>;
+          getUI?: () => Promise<unknown>;
+          end: () => Promise<void>;
+          on?: (event: string, cb: (log: unknown) => void) => void;
+          heartbeat?: () => Promise<void>;
+        };
+        type AppetizeClient = { startSession: (config?: { grantPermissions?: boolean; debug?: boolean }) => Promise<AppetizeSession> };
+        type AppetizeGlobal = { getClient: (selector: string) => Promise<AppetizeClient> };
+        const win = window as unknown as { appetize?: AppetizeGlobal };
+        console.log("[vision-test] Starting session...");
+        const client = await win.appetize?.getClient(`#${iframeId}`);
+        if (!client) {
+          console.error("[vision-test] Appetize client not found - getClient returned null/undefined");
+          throw new Error("Appetize client not found");
+        }
+        const session = await client.startSession({ grantPermissions: true, debug: true });
+        if (!session) {
+          console.error("[vision-test] Session failed to start - startSession returned null/undefined");
+          throw new Error("Session not started");
+        }
+        console.log("[vision-test] Session started");
+
+        const pendingLogs: string[] = [];
+        if (typeof session.on === "function") {
+          session.on("log", (log: unknown) => {
+            const line = typeof log === "string" ? log : (log && typeof (log as { message?: string }).message === "string" ? (log as { message: string }).message : JSON.stringify(log));
+            pendingLogs.push(line);
+          });
+          session.on("inactivityWarning", () => {
+            session.heartbeat?.().catch((e) => console.warn("[vision-test] heartbeat failed", e));
+          });
+        }
+
+        console.log("[vision-test] Waiting for app to load...");
+        await new Promise((r) => setTimeout(r, 3000));
+        let appLoaded = false;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            const shot = await session.screenshot("base64");
+            const base64 = typeof shot?.data === "string" ? shot.data : "";
+            if (base64) {
+              const blank = await isScreenshotMostlyBlank(base64.replace(/^data:image\/\w+;base64,/, ""));
+              if (!blank) {
+                appLoaded = true;
+                console.log("[vision-test] App loaded, starting test loop");
+                break;
+              }
+            }
+          } catch (_) {
+            // ignore
+          }
+          if (attempt < 4) {
+            console.log("[vision-test] Screen still blank, waiting 2s...");
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+        }
+        if (!appLoaded) {
+          console.log("[vision-test] Proceeding anyway after 5 retries");
+        }
+        await session.heartbeat?.().catch(() => {});
+
+        const maxSteps = 30;
+        let stoppedByUser = false;
+        for (let step = 0; step < maxSteps; step++) {
+          if (visionTestStopRequestedRef.current) {
+            stoppedByUser = true;
+            console.log("[vision-test] Stop requested, exiting loop");
+            break;
+          }
+          await session.heartbeat?.().catch(() => {});
+          setVisionTestStep(step + 1);
+          console.log("[vision-test] Step", step + 1, ": taking screenshot");
+          let screenshotBase64: string;
+          try {
+            const shot = await session.screenshot("base64");
+            screenshotBase64 = typeof shot?.data === "string" ? shot.data : "";
+          } catch (e) {
+            console.warn("[vision-test] Screenshot failed", e);
+            break;
+          }
+          if (!screenshotBase64) break;
+
+          let screenshotWidth = VISION_TAP_DIP_WIDTH;
+          let screenshotHeight = VISION_TAP_DIP_HEIGHT;
+          try {
+            const dims = await getImageDimensionsFromBase64(screenshotBase64);
+            screenshotWidth = dims.width;
+            screenshotHeight = dims.height;
+          } catch {
+            // keep defaults if decode fails
+          }
+
+          let uiTree: unknown = undefined;
+          try {
+            uiTree = await session.getUI?.();
+          } catch (e) {
+            console.warn("[vision-test] getUI failed", e);
+          }
+          const uiTreeString = uiTree !== undefined && uiTree !== null ? (typeof uiTree === "string" ? uiTree : JSON.stringify(uiTree)) : "";
+          const truncatedUiTree = uiTreeString.slice(0, 3000);
+
+          const logsSinceLastAction = [...pendingLogs];
+          pendingLogs.length = 0;
+
+          const lastThree = lastTapCoords.slice(-STUCK_SAME_COORD_THRESHOLD);
+          const allSame =
+            lastThree.length >= STUCK_SAME_COORD_THRESHOLD &&
+            lastThree.every((c) => c.x === lastThree[0].x && c.y === lastThree[0].y);
+          const stuckWarning = allSame
+            ? "WARNING: You have tapped the same coordinate 3 times in a row with no change. That location is not responding. You MUST try a completely different action - tap a different area of the screen, scroll, or return done if nothing is working."
+            : undefined;
+
+          console.log("[vision-test] Step", step + 1, ": sending to Claude");
+          const rawBase64 = screenshotBase64.replace(/^data:image\/\w+;base64,/, "");
+          const logsText = logsSinceLastAction.length > 0 ? `\n\nConsole logs since last action:\n${logsSinceLastAction.map((l) => `[${l}]`).join("\n")}` : "";
+          const userText =
+            step === 0
+              ? `App: ${appName}. Step 1. This is the first step. Describe what you see and choose the first action to start testing. Current screenshot is attached.${truncatedUiTree ? `\n\nHere is the UI element tree for this screen:\n${truncatedUiTree}` : ""}${logsText}\n\nRespond with a single JSON object only (no markdown, no explanation).`
+              : `${stuckWarning ? stuckWarning + "\n\n" : ""}Here is the screen after your last action. What do you do next?${logsText}`;
+          const userContent: VisionMessage["content"] = [
+            { type: "text", text: userText },
+            { type: "image", source: { type: "base64", media_type: "image/png", data: rawBase64 } },
+          ];
+          messages.push({ role: "user", content: userContent });
+
+          let stepRes: Response | null = null;
+          try {
+            stepRes = await fetch(`/api/projects/${projectId}/vision-test-step`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ messages: stripOldImages(messages), tapMode: visionTestTapMode }),
+              signal: visionTestAbortControllerRef.current?.signal,
+            });
+          } catch (e) {
+            const err = e as { name?: string; message?: string };
+            if (err?.name === "AbortError" || err?.message?.includes("abort")) {
+              stoppedByUser = true;
+              console.log("[vision-test] Stop requested, exiting loop");
+            }
+          }
+          if (stoppedByUser) break;
+          if (!stepRes?.ok) {
+            console.warn("[vision-test] Step API failed", stepRes?.status);
+            break;
+          }
+
+          const actionData = await stepRes.json().catch(() => ({}));
+          if (Array.isArray(actionData?.assistantContent)) {
+            messages.push({ role: "assistant", content: actionData.assistantContent });
+          }
+          const action = actionData?.action;
+          const obs = actionData?.observation;
+          const issues = Array.isArray(actionData?.issues_found) ? actionData.issues_found : [];
+          const features = Array.isArray(actionData?.features_tested_so_far) ? actionData.features_tested_so_far : [];
+
+          totalInputTokens += typeof actionData?.input_tokens === "number" ? actionData.input_tokens : 0;
+          totalOutputTokens += typeof actionData?.output_tokens === "number" ? actionData.output_tokens : 0;
+          const costUsd = totalInputTokens / 1_000_000 * 3 + totalOutputTokens / 1_000_000 * 15;
+          setVisionTestCostUsd(costUsd);
+
+          const x = actionData?.x;
+          const y = actionData?.y;
+          console.log("[vision-test] Step", step + 1, ": Claude says", action, actionData?.target?.text ? `target "${actionData.target.text}"` : typeof x === "number" && typeof y === "number" ? `at ${x},${y}` : "");
+
+          const target = actionData?.target as { text?: string; elementText?: string; elementLabel?: string; x?: number; y?: number } | undefined;
+          const tapByText = actionData?.target?.text;
+          const tapByElementText = typeof target?.elementText === "string" && target.elementText.length > 0 ? target.elementText : undefined;
+          const tapByElementLabel = typeof target?.elementLabel === "string" && target.elementLabel.length > 0 ? target.elementLabel : undefined;
+          let tapX: number | undefined;
+          let tapY: number | undefined;
+          const rawX = typeof x === "number" ? x : target?.x;
+          const rawY = typeof y === "number" ? y : target?.y;
+          if (action === "tap" && typeof rawX === "number" && typeof rawY === "number") {
+            if (visionTestTapMode === "coordinates") {
+              tapX = Math.max(0, Math.min(VISION_TAP_DIP_WIDTH, Math.round(rawX / 2)));
+              tapY = Math.max(0, Math.min(VISION_TAP_DIP_HEIGHT, Math.round(rawY / 2)));
+            } else {
+              const scaleX = VISION_TAP_DIP_WIDTH / screenshotWidth;
+              const scaleY = VISION_TAP_DIP_HEIGHT / screenshotHeight;
+              tapX = Math.max(0, Math.min(VISION_TAP_DIP_WIDTH, Math.round(rawX * scaleX)));
+              tapY = Math.max(0, Math.min(VISION_TAP_DIP_HEIGHT, Math.round(rawY * scaleY)));
+              if (screenshotWidth !== VISION_TAP_DIP_WIDTH || screenshotHeight !== VISION_TAP_DIP_HEIGHT) {
+                console.log("[vision-test] Scaled tap from screenshot", screenshotWidth, "×", screenshotHeight, "to DIP:", tapX, tapY);
+              }
+            }
+            lastTapCoords.push({ x: tapX, y: tapY });
+            if (lastTapCoords.length > STUCK_SAME_COORD_THRESHOLD) lastTapCoords.shift();
+            const lastThree = lastTapCoords.slice(-STUCK_SAME_COORD_THRESHOLD);
+            const threeSame =
+              lastThree.length >= STUCK_SAME_COORD_THRESHOLD &&
+              lastThree.every((c) => c.x === lastThree[0].x && c.y === lastThree[0].y);
+            if (threeSame) {
+              console.log("[vision-test] Same coordinate tapped 3 times in a row, ending as done");
+              break;
+            }
+          } else if (action === "tap" && (tapByText || tapByElementText || tapByElementLabel)) {
+            lastTapCoords.length = 0;
+          } else {
+            lastTapCoords.length = 0;
+          }
+
+          lastFeatures = features;
+          lastIssues = issues;
+          allIssues = [...new Set([...allIssues, ...issues])];
+          steps.push({
+            observation: obs,
+            issues_found: issues,
+            features_tested_so_far: features,
+            screenshot_base64: step === 0 || step === maxSteps - 1 || issues.length > 0 ? screenshotBase64 : undefined,
+            logs_captured: logsSinceLastAction,
+          });
+
+          const runningLog = steps
+            .map((s, i) => {
+              const obsText = s.observation ?? "—";
+              const issuePart = (s.issues_found?.length ?? 0) > 0 ? ` Issue: ${(s.issues_found ?? []).join("; ")}.` : "";
+              return `Step ${i + 1}: ${obsText}.${issuePart}`;
+            })
+            .join("\n");
+          updateResult(index, { notes: runningLog });
+
+          if (action === "done") {
+            if (Array.isArray(actionData?.features_that_could_not_be_tested)) featuresThatCouldNotBeTested = actionData.features_that_could_not_be_tested;
+            break;
+          }
+
+          console.log("[vision-test] Step", step + 1, ": executing action");
+          try {
+            if (action === "tap") {
+              if (visionTestTapMode === "elements" && (tapByElementText ?? tapByElementLabel ?? tapByText)) {
+                const text = tapByElementText ?? tapByText;
+                if (text) {
+                  await session.tap({ element: { attributes: { text } } });
+                } else if (tapByElementLabel) {
+                  await session.tap({ element: { attributes: { accessibilityLabel: tapByElementLabel } } });
+                }
+              } else if (typeof tapX === "number" && typeof tapY === "number") {
+                await session.tap({ coordinates: { x: tapX, y: tapY } });
+              }
+            } else if (action === "type" && typeof actionData.text === "string") {
+              await session.type(actionData.text);
+            } else if (action === "keypress" && typeof actionData.key === "string") {
+              const key = actionData.key.toLowerCase() === "return" ? "\n" : actionData.key;
+              await session.keypress?.(key);
+            } else if ((action === "swipe" || action === "scroll") && actionData.direction) {
+              await session.swipe({ position: { x: "50%", y: "50%" }, gesture: actionData.direction });
+            }
+          } catch (e) {
+            console.warn("[vision-test] Action failed", action, e);
+          }
+          try {
+            await (session as { waitForAnimations?: (opts?: { timeout?: number }) => Promise<void> }).waitForAnimations?.({ timeout: 3000 });
+          } catch (_) {}
+          await new Promise((r) => setTimeout(r, 500));
+        }
+
+        console.log("[vision-test] Loop complete after", steps.length, "steps");
+
+        await session.end().catch(() => {});
+
+        let finalNotes = steps
+          .map((s, i) => {
+            const obsText = s.observation ?? "—";
+            const issuePart = (s.issues_found?.length ?? 0) > 0 ? ` Issue: ${(s.issues_found ?? []).join("; ")}.` : "";
+            return `Step ${i + 1}: ${obsText}.${issuePart}`;
+          })
+          .join("\n");
+        if (steps.length > 0) {
+          try {
+            const sumRes = await fetch(`/api/projects/${projectId}/vision-test-summarize`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                steps: steps.map((s) => ({ observation: s.observation, issues_found: s.issues_found })),
+              }),
+            });
+            if (sumRes.ok) {
+              const sumData = (await sumRes.json()) as { summary?: string };
+              if (typeof sumData.summary === "string" && sumData.summary.trim()) {
+                finalNotes = sumData.summary.trim();
+              }
+            }
+          } catch (e) {
+            console.warn("[vision-test] Summarize failed, keeping running log", e);
+          }
+        }
+
+        const duration = Math.round((Date.now() - start) / 1000);
+        const totalActions = steps.length;
+        const score = Math.max(0, 100 - allIssues.length * 15);
+        let recommendation: "Pass" | "Minor issues" | "Major issues" | "Fail" | "Stopped" = "Pass";
+        if (stoppedByUser) recommendation = "Stopped";
+        else if (score >= 85) recommendation = "Pass";
+        else if (score >= 60) recommendation = "Minor issues";
+        else if (score >= 30) recommendation = "Major issues";
+        else recommendation = "Fail";
+
+        const keyScreenshots = steps.map((s) => s.screenshot_base64).filter(Boolean) as string[];
+        const allLogs = steps.flatMap((s) => s.logs_captured ?? []);
+        const consoleErrorsRe = /error|fatal|warning|failed|crash/i;
+        const console_errors = [...new Set(allLogs.filter((line) => consoleErrorsRe.test(line)))];
+
+        const cursorPrompt = allIssues.length > 0
+          ? `Auto-test issues for **${appName}**:\n\n${allIssues.map((i) => `- ${i}`).join("\n")}\n\nFix these in SYSTEM_PROMPT_SWIFT and/or INTEGRATIONS.md.`
+          : `No issues found for ${appName}.`;
+
+        const total_cost_usd = totalInputTokens / 1_000_000 * 3 + totalOutputTokens / 1_000_000 * 15;
+
+        const report = {
+          projectId,
+          appName,
+          totalActions,
+          duration,
+          allIssues,
+          featuresTestedSuccessfully: lastFeatures,
+          featuresThatCouldNotBeTested,
+          screenshots: keyScreenshots,
+          overallScore: score,
+          recommendation,
+          cursorPrompt,
+          console_errors,
+          total_cost_usd,
+          total_input_tokens: totalInputTokens,
+          total_output_tokens: totalOutputTokens,
+        };
+
+        console.log("[vision-test] Saving report...");
+        await fetch(`/api/projects/${projectId}/vision-test-report`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(report),
+        }).catch((err) => console.warn("[vision-test] Failed to POST report", err));
+
+        updateResult(index, { visionTestReport: report, notes: finalNotes });
+        console.log("[vision-test] Done. Score:", score);
+      } catch (e) {
+        console.error("[vision-test] Error", e);
+      } finally {
+        setVisionTestRunningIndex(null);
+        setVisionTestStep(0);
+        setVisionTestCostUsd(0);
+        visionTestStopRequestedRef.current = false;
+        const el = document.getElementById(containerId);
+        if (el?.parentNode) el.parentNode.removeChild(el);
+      }
+    },
+    [results, updateResult, visionTestTapMode],
+  );
+  runVisionTestRef.current = runVisionTest;
+
+  const processVisionQueue = useCallback(async () => {
+    if (visionWorkerRunningRef.current) return;
+    const item = visionQueueRef.current.shift();
+    if (!item) return;
+    visionWorkerRunningRef.current = true;
+    try {
+      const pollIntervalMs = 3000;
+      const pollMaxMs = 30000;
+      const start = Date.now();
+      let publicKey: string | null = null;
+      while (Date.now() - start < pollMaxMs) {
+        const res = await fetch(`/api/projects/${item.projectId}/appetize`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (data?.publicKey) {
+          publicKey = data.publicKey;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+      }
+      if (publicKey) {
+        await runVisionTestRef.current(item.idx);
+      } else {
+        console.warn("[vision-test] No Appetize key after 30s, skipping vision test for app at index", item.idx);
+      }
+    } finally {
+      visionWorkerRunningRef.current = false;
+      if (visionQueueRef.current.length > 0) {
+        processVisionQueue();
+      }
+    }
+  }, []);
+  processVisionQueueRef.current = processVisionQueue;
+
+  const handleStopVisionTest = useCallback(() => {
+    console.log("[vision-test] Stop button clicked");
+    visionTestStopRequestedRef.current = true;
+    visionTestAbortControllerRef.current?.abort();
+  }, []);
 
   const avgDuration = results.filter((r) => r.durationMs > 0).length > 0
     ? results.filter((r) => r.durationMs > 0).reduce((s, r) => s + r.durationMs, 0) /
@@ -2494,8 +3885,36 @@ export default function TestSuitePage() {
             <h1 className="text-lg font-semibold text-[var(--text-primary)]">
               Test Suite
             </h1>
+            <span
+              className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)]"
+              title={runnerOnline === true ? "Mac runner is connected" : runnerOnline === false ? "Mac runner is offline — builds unavailable" : "Checking runner status…"}
+            >
+              <span
+                className={`h-2 w-2 shrink-0 rounded-full ${
+                  runnerOnline === true ? "bg-emerald-500" : runnerOnline === false ? "bg-red-500" : "bg-[var(--text-tertiary)]"
+                }`}
+                aria-hidden
+              />
+              {runnerOnline === true ? "Runner online" : runnerOnline === false ? "Runner offline" : "Runner…"}
+            </span>
           </div>
         </div>
+        {runnerOnline === false && (
+          <div
+            className="mx-auto max-w-5xl px-4 py-2 sm:px-6 border-t border-amber-500/30 bg-amber-500/10 text-sm text-amber-800 dark:text-amber-200"
+            role="status"
+          >
+            Mac runner offline — builds are currently unavailable.
+          </div>
+        )}
+        {runPausedByRunner && (
+          <div
+            className="mx-auto max-w-5xl px-4 py-2 sm:px-6 border-t border-amber-500/30 bg-amber-500/10 text-sm text-amber-800 dark:text-amber-200"
+            role="status"
+          >
+            Run paused — Mac runner went offline. Remaining apps will resume when you click Resume after the runner is back online.
+          </div>
+        )}
 
         {milestoneTabs.length > 0 && (
           <nav className="mx-auto max-w-5xl px-4 sm:px-6">
@@ -2552,10 +3971,45 @@ export default function TestSuitePage() {
             </div>
             {!running ? (
               <>
-                <Button onClick={runAllTests} className="gap-2" disabled={pendingIndices.length === 0} title={pendingIndices.length === 0 ? "No pending apps to run" : "Run only pending, non-excluded apps"}>
+                <Button onClick={runAllTests} className="gap-2" disabled={pendingIndices.length === 0 || runnerOnline === false} title={runnerOnline === false ? "Build server is offline" : pendingIndices.length === 0 ? "No pending apps to run" : "Run only pending, non-excluded apps"}>
                   <Play className="h-4 w-4" aria-hidden />
                   Run pending ({pendingIndices.length})
                 </Button>
+                <label className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+                  <input
+                    type="checkbox"
+                    checked={autoVisionEnabled}
+                    onChange={(e) => setAutoVisionEnabled(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-[var(--border-default)] bg-[var(--input-bg)] text-[var(--button-primary-bg)] focus:ring-[var(--button-primary-bg)]/50"
+                    aria-label="Auto Vision: run Claude vision test after each app compiles"
+                  />
+                  Auto Vision
+                </label>
+                <span className="text-xs text-[var(--text-tertiary)]">Tap mode:</span>
+                <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-tertiary)]/50 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setVisionTestTapMode("coordinates")}
+                    className={`rounded px-2 py-1 text-xs font-medium transition-colors ${visionTestTapMode === "coordinates" ? "bg-[var(--button-primary-bg)] text-white" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+                    aria-pressed={visionTestTapMode === "coordinates"}
+                  >
+                    Coordinates
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVisionTestTapMode("elements")}
+                    className={`rounded px-2 py-1 text-xs font-medium transition-colors ${visionTestTapMode === "elements" ? "bg-[var(--button-primary-bg)] text-white" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+                    aria-pressed={visionTestTapMode === "elements"}
+                  >
+                    Elements
+                  </button>
+                </div>
+                {activeMilestone === "m6-integration" && (
+                  <Button variant="secondary" onClick={runFirstAppOnly} className="gap-2" disabled={running} title="Run only the first app (Apple Music Playlist Creator) to verify M6 summary capture before running all 10">
+                    <Play className="h-4 w-4" aria-hidden />
+                    Run first app only
+                  </Button>
+                )}
                 {canResume && (
                   <Button variant="secondary" onClick={resumeRun} className="gap-2" title="Run only the apps still pending (skips excluded)">
                     <RefreshCw className="h-4 w-4" aria-hidden />
@@ -2704,7 +4158,7 @@ export default function TestSuitePage() {
               if (!running && milestoneRuns.length > 0) {
                 const modelLabel = (m: string) => m === "opus-4.6" ? "Opus" : "Sonnet";
                 const runOptions: SelectOption[] = [
-                  { value: "", label: `History (${milestoneRuns.length} run${milestoneRuns.length !== 1 ? "s" : ""})` },
+                  { value: "", label: "Select a past run..." },
                   ...milestoneRuns.map((r, idx) => ({
                     value: r.id,
                     label: `${formatTimestamp(r.timestamp)} — ${modelLabel(r.model)} ${r.summary.compiled}/${r.summary.total} (${r.summary.compileRate}%)${idx === 0 ? " (latest)" : ""}`,
@@ -2718,7 +4172,7 @@ export default function TestSuitePage() {
                       value={currentRunId ?? ""}
                       onChange={(v) => { if (v) loadRun(v); }}
                       className="min-w-[260px]"
-                      aria-label="Load a past run"
+                      aria-label={`Load a past run (${milestoneRuns.length} run${milestoneRuns.length !== 1 ? "s" : ""} in history)`}
                     />
                   </div>
                 );
@@ -2806,6 +4260,7 @@ export default function TestSuitePage() {
                 target={milestoneTarget}
                 running={running}
                 runStartTime={runStartTime}
+                activeMilestone={activeMilestone}
                 onStop={running ? stopRun : undefined}
                 onPauseAfterNext={running ? () => { pauseAfterNextRef.current = !pauseAfterNextRef.current; setPauseAfterNext(pauseAfterNextRef.current); } : undefined}
                 pauseAfterNext={pauseAfterNext}
@@ -2831,6 +4286,12 @@ export default function TestSuitePage() {
                 onToggleSelect={() => toggleSelect(i)}
                 onUpdate={(updates) => updateResult(i, updates)}
                 onCancel={() => cancelEntry(i)}
+                onOpenPasteLogs={() => setPasteLogsModalIndex(i)}
+                onRunVisionTest={() => runVisionTest(i)}
+                onStopVisionTest={visionTestRunningIndex === i ? handleStopVisionTest : undefined}
+                visionTestRunning={visionTestRunningIndex === i}
+                visionTestStep={visionTestRunningIndex === i ? visionTestStep : 0}
+                visionTestCostUsd={visionTestRunningIndex === i ? visionTestCostUsd : undefined}
               />
             ))}
           </div>
@@ -2841,6 +4302,25 @@ export default function TestSuitePage() {
           <RunComparison runs={pastRuns} />
         </section>
       </main>
+
+      {pasteLogsModalIndex != null && results[pasteLogsModalIndex] && (
+        <PasteLogsModal
+          appName={results[pasteLogsModalIndex].idea.title}
+          initialLogs={results[pasteLogsModalIndex].runtimeLogs ?? ""}
+          onClose={() => setPasteLogsModalIndex(null)}
+          onAnalyzeFix={handlePasteLogsAnalyze}
+        />
+      )}
+
+      {pasteLogsCopied && (
+        <div
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-secondary)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] shadow-lg"
+          role="status"
+          aria-live="polite"
+        >
+          Copied to clipboard — paste into Cursor to fix
+        </div>
+      )}
     </div>
   );
 }

@@ -22,6 +22,7 @@ The Mac runner is a Node.js script (`scripts/mac-runner.mjs`) that polls the Vib
 - `MAC_RUNNER_TOKEN` set in `.env.local` (shared secret between server and runner)
 - Server running on `localhost:3001` (or any reachable URL)
 - For device installs: iPhone connected via USB or same network
+- Optional: `APPETIZE_API_KEY` in `.env.local` (from [Appetize Organization → API Token](https://appetize.io/organization/api-token)) so simulator builds are uploaded to Appetize and the editor shows an interactive browser preview instead of a static screenshot
 
 **Limitations:**
 - 1 build at a time (sequential queue)

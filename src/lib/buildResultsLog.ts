@@ -6,6 +6,26 @@ import { classifyNotes } from "@/lib/qa/issueClassifier";
 
 const LOG_PATH = join(process.cwd(), "data", "build-results.jsonl");
 
+/** Stored vision test report (persisted on build result). */
+export type VisionTestReportStored = {
+  projectId: string;
+  appName: string;
+  totalActions: number;
+  duration: number;
+  allIssues: string[];
+  featuresTestedSuccessfully: string[];
+  featuresThatCouldNotBeTested: string[];
+  screenshots: string[];
+  overallScore: number;
+  recommendation: string;
+  cursorPrompt: string;
+  total_cost_usd?: number;
+  total_input_tokens?: number;
+  total_output_tokens?: number;
+  /** Issue type tags from every step (e.g. broken_button, keyboard_blocking). */
+  issueTags?: string[];
+};
+
 export type BuildResult = {
   id: string;
   timestamp: string;
@@ -30,6 +50,8 @@ export type BuildResult = {
   skillsUsed: string[];
   /** Auto-classified issue tags derived from userNotes. */
   issueTags: string[];
+  /** Claude vision test report (saved when vision test completes). */
+  visionTestReport?: VisionTestReportStored | null;
 };
 
 function generateId(): string {
@@ -85,6 +107,7 @@ export function getAllBuildResults(): BuildResult[] {
       if (r.userImagePath === undefined) r.userImagePath = null;
       if (!Array.isArray(r.skillsUsed)) r.skillsUsed = [];
       if (!Array.isArray(r.issueTags)) r.issueTags = [];
+      if (r.visionTestReport === undefined) r.visionTestReport = null;
       return r;
     }).reverse();
   } catch {
@@ -98,7 +121,14 @@ export function getBuildResult(id: string): BuildResult | null {
 
 export function updateBuildResult(
   id: string,
-  updates: { userNotes?: string; userDesignScore?: number | null; userFunctionalScore?: number | null; userImagePath?: string | null; issueTags?: string[] }
+  updates: {
+    userNotes?: string;
+    userDesignScore?: number | null;
+    userFunctionalScore?: number | null;
+    userImagePath?: string | null;
+    issueTags?: string[];
+    visionTestReport?: VisionTestReportStored | null;
+  }
 ): BuildResult | null {
   if (!existsSync(LOG_PATH)) return null;
   try {
@@ -116,6 +146,7 @@ export function updateBuildResult(
         if (updates.userDesignScore !== undefined) r.userDesignScore = updates.userDesignScore;
         if (updates.userFunctionalScore !== undefined) r.userFunctionalScore = updates.userFunctionalScore;
         if (updates.userImagePath !== undefined) r.userImagePath = updates.userImagePath;
+        if (updates.visionTestReport !== undefined) r.visionTestReport = updates.visionTestReport;
         found = r;
       }
       return JSON.stringify(r);
