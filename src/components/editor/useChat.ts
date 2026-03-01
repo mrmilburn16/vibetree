@@ -450,11 +450,11 @@ export function useChat(
       ]);
 
       const steps: { delay: number; id: string; content: string }[] = [
-        { delay: 800, id: `stream-phase-${streamRunId}-thinking`, content: "Thinking…" },
-        { delay: 1800, id: `stream-file-${streamRunId}-1`, content: "Creating App.swift" },
-        { delay: 2800, id: `stream-file-${streamRunId}-2`, content: "Creating ContentView.swift" },
-        { delay: 3800, id: `stream-phase-${streamRunId}-finalizing`, content: "Finalizing" },
-        { delay: 4800, id: `stream-phase-${streamRunId}-done`, content: "Done" },
+        { delay: 4000, id: `stream-phase-${streamRunId}-thinking`, content: "Thinking…" },
+        { delay: 6500, id: `stream-file-${streamRunId}-1`, content: "Creating App.swift" },
+        { delay: 9000, id: `stream-file-${streamRunId}-2`, content: "Creating ContentView.swift" },
+        { delay: 11500, id: `stream-phase-${streamRunId}-finalizing`, content: "Finalizing" },
+        { delay: 14000, id: `stream-phase-${streamRunId}-done`, content: "Done" },
       ];
       steps.forEach(({ delay, id, content }) => {
         const t = setTimeout(() => {
@@ -469,28 +469,18 @@ export function useChat(
       const tSummary = setTimeout(() => {
         setMessages((prev) => [
           ...prev,
-          { id: `assistant-${Date.now()}-summary`, role: "assistant" as const, content: mock.content },
-        ]);
-      }, 6000);
-      timeoutIdsRef.current.push(tSummary);
-
-      const tFiles = setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
           {
-            id: `assistant-${Date.now()}-files`,
+            id: `assistant-${Date.now()}-summary`,
             role: "assistant" as const,
-            content: "",
+            content: mock.content,
             editedFiles: mock.editedFiles,
           },
         ]);
         setIsTyping(false);
         setCanSend(true);
-      }, 6500);
-      timeoutIdsRef.current.push(tFiles);
-
-      const tLive = setTimeout(() => setBuildStatus("live"), 7000);
-      timeoutIdsRef.current.push(tLive);
+        setBuildStatus("live");
+      }, 16500);
+      timeoutIdsRef.current.push(tSummary);
     },
     []
   );

@@ -32,6 +32,15 @@ const CHAT_PLACEHOLDERS = [
   "e.g. A recipe app with ingredients list",
 ];
 
+/** 5 one-click scenario prompts for demos / testing. */
+const SCENARIO_BUTTONS: { label: string; prompt: string }[] = [
+  { label: "Counter", prompt: "Build a simple counter app. One screen: large number and a + button. Persist the count in UserDefaults so it survives restarts. Clean, minimal." },
+  { label: "Todo list", prompt: "Build a todo list app. One screen: text field to add a task, a list of tasks with delete, and persist the list in UserDefaults." },
+  { label: "Fitness tracker", prompt: "Build a fitness tracking app with activity rings and a list of workouts." },
+  { label: "Timer", prompt: "Build a countdown timer app. One screen: pick minutes, Start button, and a large countdown display. When it hits zero, show an alert. Simple and clear." },
+  { label: "Mood tracker", prompt: "Build a mood tracker. One screen: pick today's mood (e.g. 5 emoji buttons), save with date, show last 7 entries in a list. Persist in UserDefaults." },
+];
+
 const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
   ...opt,
   icon:
@@ -248,7 +257,9 @@ export function ChatPanel({
     preflightChecks.runner.ok &&
     preflightChecks.device.ok &&
     preflightChecks.teamId.ok;
-  const blockSendUntilPreflight = projectType === "pro" && !proPreflightReady;
+  // In mock mode (useRealLLM false) allow sending without runner/device/teamId so dev:mock works without Mac runner.
+  const blockSendUntilPreflight =
+    featureFlags.useRealLLM && projectType === "pro" && !proPreflightReady;
 
   // Auto-send a pending prompt from the dashboard (stored in localStorage before redirect).
   const pendingPromptSent = useRef(false);
@@ -304,6 +315,24 @@ export function ChatPanel({
       sendMessage(enrichedPrompt, llm, projectType);
     },
     [blockSendUntilPreflight, sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
+  );
+
+  const handleScenarioClick = useCallback(
+    (prompt: string) => {
+      const text = prompt.trim();
+      if (!text || !canSend) return;
+      if (blockSendUntilPreflight) return;
+      if (!hasCreditsForMessage) {
+        onOutOfCredits?.();
+        return;
+      }
+      if (!featureFlags.useRealLLM && !deduct(1)) {
+        onOutOfCredits?.();
+        return;
+      }
+      sendMessage(text, llm, projectType);
+    },
+    [canSend, blockSendUntilPreflight, hasCreditsForMessage, deduct, onOutOfCredits, sendMessage, llm, projectType]
   );
 
   const showGuidedWizard = guidedMode && messages.length === 0 && !isTyping;
@@ -531,16 +560,33 @@ export function ChatPanel({
               </span>
             </Button>
           </div>
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setInput(getRandomAppIdeaPrompt())}
-              className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--link-default)] transition-colors"
-              aria-label="Fill with a random app idea from the list of 100"
-            >
-              <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              Mystery app
-            </button>
+          <div className="mt-2 flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-xs text-[var(--text-tertiary)]">Scenarios:</span>
+              {SCENARIO_BUTTONS.map(({ label, prompt }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => handleScenarioClick(prompt)}
+                  disabled={busy || blockSendUntilPreflight || !canSendWithCredits}
+                  className="inline-flex cursor-pointer items-center rounded-full border border-[var(--border-default)] bg-[var(--background-secondary)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:border-[var(--button-primary-bg)]/50 hover:bg-[var(--button-primary-bg)]/10 hover:text-[var(--text-primary)] transition-colors disabled:pointer-events-none disabled:opacity-50"
+                  aria-label={`Run scenario: ${label}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setInput(getRandomAppIdeaPrompt())}
+                className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--link-default)] transition-colors"
+                aria-label="Fill with a random app idea from the list of 100"
+              >
+                <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Mystery app
+              </button>
+            </div>
           </div>
           {showCharCount && (
 <p className="mt-1.5 overflow-x-auto px-4 text-caption text-[var(--text-tertiary)]" role="status" aria-live="polite">

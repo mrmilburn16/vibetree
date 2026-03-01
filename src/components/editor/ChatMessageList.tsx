@@ -89,6 +89,22 @@ function stepDisplayLabel(content: string): string {
   return content.replace(/\s*·\s*\d+s?\s*$/i, "").replace(/\s*\(file \d+\)\s*$/i, "").trim() || content;
 }
 
+/** Strip trailing ellipsis (unicode … or ...) so we show only the animated dots. */
+function stripTrailingEllipsis(text: string): string {
+  return text.replace(/\s*(…|\.{3})\s*$/, "").trim() || text;
+}
+
+/** Use past tense for completed to-do items (Creating → Created, Editing → Edited). */
+function toPastTense(label: string): string {
+  if (/^Creating\s+/i.test(label)) return label.replace(/^Creating\s+/i, "Created ");
+  if (/^Editing\s+/i.test(label)) return label.replace(/^Editing\s+/i, "Edited ");
+  return label;
+}
+
+function isFileStep(msg: ChatMessage): boolean {
+  return typeof msg.id === "string" && msg.id.startsWith("stream-file-");
+}
+
 function StreamTodoCard({
   steps,
   isTyping,
@@ -96,44 +112,101 @@ function StreamTodoCard({
   steps: ChatMessage[];
   isTyping: boolean;
 }) {
-  const total = steps.length;
-  const completed = isTyping ? Math.max(0, total - 1) : total;
+  const fileSteps = steps.filter(isFileStep);
+  const firstFileIdx = steps.findIndex(isFileStep);
+  const lastFileIdx = firstFileIdx >= 0 ? steps.length - 1 - [...steps].reverse().findIndex(isFileStep) : -1;
+  const statusBeforeFiles = firstFileIdx < 0 ? steps : steps.slice(0, firstFileIdx);
+  const statusAfterFiles = lastFileIdx >= 0 ? steps.slice(lastFileIdx + 1) : [];
+  const lastStep = steps[steps.length - 1];
+  const currentIsFile = lastStep ? isFileStep(lastStep) : false;
+  const currentFileIndex = lastStep && currentIsFile ? fileSteps.findIndex((s) => s.id === lastStep.id) : -1;
+  const totalTasks = fileSteps.length;
+  const completedTasks = isTyping
+    ? (currentIsFile ? currentFileIndex : fileSteps.length)
+    : totalTasks;
+  const lastBefore = statusBeforeFiles.filter((s) => !isFileStep(s)).pop();
+  const lastAfter = statusAfterFiles.filter((s) => !isFileStep(s)).pop();
+  const statusAbove =
+    fileSteps.length === 0 && steps.length > 0
+      ? (lastBefore ? stepDisplayLabel(lastBefore.content) : "Creating to-do list…")
+      : lastBefore
+        ? stepDisplayLabel(lastBefore.content)
+        : null;
+  const statusBelow = lastAfter ? stepDisplayLabel(lastAfter.content) : null;
+  const isOnStatusAbove =
+    fileSteps.length === 0
+      ? isTyping
+      : isTyping && lastBefore && lastStep?.id === lastBefore.id;
+  const isOnStatusBelow = isTyping && lastAfter && lastStep?.id === lastAfter.id;
 
   return (
-    <div className="mb-2 rounded-xl border border-[var(--border-default)]/60 bg-[var(--background-secondary)]/80 px-4 py-3 shadow-sm chat-accent-full-box-v2">
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-[var(--text-tertiary)]">
-        <span>Creating to-do list</span>
-        <span className="font-medium text-[var(--text-secondary)]">
-          {completed} of {total} tasks
-        </span>
+    <div className="mb-2">
+      {statusAbove != null && (
+        <p
+          key={statusAbove}
+          className={
+            "mb-2 text-xs text-[var(--text-tertiary)] " +
+            (isOnStatusAbove ? "chat-step-current text-[var(--text-secondary)]" : "")
+          }
+        >
+          {isOnStatusAbove ? stripTrailingEllipsis(statusAbove) : statusAbove}
+          {isOnStatusAbove && <span className="chat-step-dots ml-0.5 inline-block w-4" aria-hidden />}
+        </p>
+      )}
+      <div className="rounded-lg border border-[var(--border-default)]/50 bg-[var(--background-secondary)]/40 px-3 py-2">
+        <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-[var(--text-tertiary)]">
+          <span>To-do</span>
+          <span className="font-medium text-[var(--text-secondary)]">
+            {totalTasks === 0 ? (isTyping ? "0 tasks" : "—") : `${completedTasks} of ${totalTasks} tasks`}
+          </span>
+        </div>
+        <ul className="space-y-1.5" aria-live="polite">
+          {fileSteps.map((step, idx) => {
+            const isCurrent = isTyping && currentIsFile && currentFileIndex === idx;
+            const isDone = !isCurrent && (!isTyping || currentFileIndex < 0 || idx < currentFileIndex);
+            const label = stepDisplayLabel(step.content);
+            return (
+              <li
+                key={step.id}
+                className={
+                  "flex items-center gap-2 text-sm transition-colors " +
+                  (isCurrent
+                    ? "chat-step-current text-[var(--text-primary)]"
+                    : "text-[var(--text-secondary)]")
+                }
+              >
+                {isDone ? (
+                  <span
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-[var(--semantic-success)] bg-[var(--semantic-success)]/20 text-[10px] font-bold text-[var(--semantic-success)]"
+                    aria-hidden
+                  >
+                    ✓
+                  </span>
+                ) : (
+                  <span
+                    className="h-4 w-4 shrink-0 rounded-full border-2 border-white/50 bg-transparent"
+                    aria-hidden
+                  />
+                )}
+                <span>{isCurrent ? stripTrailingEllipsis(label) : isDone ? toPastTense(label) : label}</span>
+                {isCurrent && <span className="chat-step-dots ml-0.5 inline-block w-4" aria-hidden />}
+              </li>
+            );
+          })}
+        </ul>
       </div>
-      <ul className="space-y-1.5" aria-live="polite">
-        {steps.map((step, idx) => {
-          const isLast = idx === steps.length - 1;
-          const isCurrent = isLast && isTyping;
-          const label = stepDisplayLabel(step.content);
-          return (
-            <li
-              key={step.id}
-              className={
-                "flex items-center gap-2 text-sm transition-colors " +
-                (isCurrent
-                  ? "chat-step-current text-[var(--text-primary)]"
-                  : "text-[var(--text-secondary)]")
-              }
-            >
-              {isCurrent ? (
-                <span className="chat-step-dots inline-block w-5 text-left" aria-hidden />
-              ) : (
-                <span className="text-[var(--semantic-success)] shrink-0" aria-hidden>
-                  ✓
-                </span>
-              )}
-              <span>{label}</span>
-            </li>
-          );
-        })}
-      </ul>
+      {statusBelow != null && (
+        <p
+          key={statusBelow}
+          className={
+            "mt-2 text-xs text-[var(--text-tertiary)] " +
+            (isOnStatusBelow ? "chat-step-current text-[var(--text-secondary)]" : "")
+          }
+        >
+          {isOnStatusBelow ? stripTrailingEllipsis(statusBelow) : statusBelow}
+          {isOnStatusBelow && <span className="chat-step-dots ml-0.5 inline-block w-4" aria-hidden />}
+        </p>
+      )}
     </div>
   );
 }
@@ -436,18 +509,6 @@ export function ChatMessageList({
                 )}
                 <span className={isStepLine ? "block pl-3" : ""}>{displayContentForMessage}</span>
               </p>
-            )}
-            {msg.editedFiles && msg.editedFiles.length > 0 && (isFilesOnly || streamingComplete) && msg.elapsedMs == null && (
-              <div className={isFilesOnly ? "mt-0" : "mt-3"}>
-                <p className="text-xs text-[var(--text-tertiary)]">
-                  {msg.editedFiles.map((file, i) => (
-                    <span key={file}>
-                      {i > 0 && ", "}
-                      <span className="font-mono text-[var(--text-secondary)]">{file}</span>
-                    </span>
-                  ))}
-                </p>
-              </div>
             )}
             {msg.role === "assistant" && streamingComplete && (() => {
               const timeAgo = msg.createdAt ? formatTimeAgo(msg.createdAt) : null;
