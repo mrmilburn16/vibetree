@@ -118,6 +118,7 @@ This file is the **source of truth** for every integration VibeTree supports. Th
 
 **Agent Behavior:**
 - For any app that uses the camera (AVCaptureDevice, AVCaptureSession, camera preview, face/body detection from camera), always add the REQUIRES PLIST comment and request permission before use. In the summary, do not warn about developer portal—camera does not require a capability—but do ensure the plist key is documented in code.
+- **ARKit / RealityKit:** The build system auto-adds \`NSCameraUsageDescription\` when it detects \`import ARKit\` or ARKit/AR types (e.g. ARSession, ARSCNView, ARView). You do not need to add the REQUIRES PLIST comment for AR-only apps; the key is injected automatically. You may still add the comment for consistency.
 
 ---
 

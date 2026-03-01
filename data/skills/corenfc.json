@@ -1,0 +1,36 @@
+{
+  "id": "corenfc",
+  "name": "NFC (CoreNFC)",
+  "frameworks": ["CoreNFC"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "nfc",
+      "corenfc",
+      "nfc tag",
+      "read nfc",
+      "nfc reader",
+      "scan nfc",
+      "nfctagreadersession",
+      "tap to read",
+      "rfid"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "## CoreNFC\n\n**Type:** Apple Native (on-device)\n\n**Cost:** No keys; requires NFC capability on the App ID.\n\n**Apple Identifier Required:** App ID with **NFC Tag Reading** capability (and optionally \"NFC Tag Reader Session\" usage description).\n\n**Key/Token Required:** No.\n\n**User Setup Steps:** Enable NFC capability on the App ID in the Apple Developer portal. Add `NFCReaderUsageDescription` to Info.plist (handled by the agent via `// REQUIRES PLIST: NFCReaderUsageDescription`).\n\n**Common Errors:**\n- NFC not available — Check `NFCTagReaderSession.readingAvailable` before starting a session; show a clear message when false (e.g. \"NFC is not available on this device\"). NFC reading is only available on a physical device; the simulator typically does not support it, so always guard with `readingAvailable` and do not assume the session can start.\n- Missing entitlement — User must enable NFC on the App ID in the Apple Developer portal.\n\n**Swift Code Pattern:**\n- Add `// REQUIRES PLIST: NFCReaderUsageDescription` above the code that starts the NFC session.\n- Check `NFCTagReaderSession.readingAvailable` before starting a session; if false, show a helpful message and do not start the session.\n- Use `NFCTagReaderSession` for reading tags; handle errors and cancellation in the delegate. Delegate callbacks run on a background queue—if you update UI or observable state from the delegate, dispatch to the main actor (e.g. `await MainActor.run { }` or `DispatchQueue.main.async`) so the UI updates correctly.\n\n**Agent Behavior:**\n- In the app summary, warn that the user must enable NFC on the App ID in the Apple Developer portal if the app uses CoreNFC.",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Starting NFCTagReaderSession without checking readingAvailable first",
+    "Updating UI or observable state from delegate without dispatching to main actor"
+  ],
+  "requiredPermissions": ["NFCReaderUsageDescription"],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

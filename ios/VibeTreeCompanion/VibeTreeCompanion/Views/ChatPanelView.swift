@@ -411,11 +411,10 @@ struct ChatPanelView: View {
                 }
 
                 LazyVStack(spacing: 4) {
-                    ForEach(Array(chatService.messages.enumerated()), id: \.element.id) { index, message in
-                        MessageBubbleView(message: message, isLast: index == chatService.messages.count - 1)
-                            .id(message.id)
-                            .transition(.opacity)
-                    }
+                    MessageListContent(
+                        messages: chatService.messages,
+                        isStreaming: chatService.isStreaming
+                    )
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.horizontal, Forest.space5)
@@ -662,5 +661,32 @@ struct ChatPanelView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { justSent = false }
 
         chatService.sendMessage(text, model: selectedModel.modelValue, projectType: selectedProjectType)
+    }
+}
+
+// MARK: - Message list with stream blocks (matches web: StreamTodoCard for stream-phase/stream-file groups)
+
+private struct MessageListContent: View {
+    let messages: [ChatMessage]
+    let isStreaming: Bool
+
+    private var blocks: [StreamBlock] { getAllStreamBlocks(messages: messages) }
+
+    var body: some View {
+        ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
+            if let block = blocks.first(where: { index >= $0.start && index < $0.start + $0.steps.count }) {
+                if index == block.start {
+                    StreamTodoCardView(steps: block.steps, isTyping: block.isActive && isStreaming)
+                        .id("stream-block-\(block.runId)")
+                        .transition(.opacity)
+                } else {
+                    Color.clear.frame(height: 0).id("stream-skip-\(block.runId)-\(index)")
+                }
+            } else {
+                MessageBubbleView(message: message, isLast: index == messages.count - 1)
+                    .id(message.id)
+                    .transition(.opacity)
+            }
+        }
     }
 }

@@ -6,8 +6,6 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
 import type { LLMResponse } from "./mockAdapter";
 import {
   parseStructuredResponse,
@@ -15,17 +13,7 @@ import {
 } from "./parseStructuredResponse";
 import { buildAppliedRulesPromptBlock } from "@/lib/qa/appliedRules";
 
-/** INTEGRATIONS.md as a prompt block so the agent has the source of truth when generating Swift apps. */
-function getIntegrationsBlock(): string {
-  const path = join(process.cwd(), "INTEGRATIONS.md");
-  if (!existsSync(path)) return "";
-  try {
-    const content = readFileSync(path, "utf8");
-    return `\n\n---\n\nINTEGRATIONS.md (source of truth — follow setup patterns, Swift code patterns, and agent behavior for each integration):\n\n${content}`;
-  } catch {
-    return "";
-  }
-}
+/** Integrations are injected via skills (data/skills/*.json) when the user's message matches; INTEGRATIONS.md is no longer appended to every request. */
 
 /** Map UI model values to Anthropic API model IDs. GPT 5.2 is disabled in the UI until OpenAI is wired. */
 const MODEL_MAP: Record<string, string> = {
@@ -65,6 +53,8 @@ Output format: Respond with a single JSON object only. No other text before or a
 Shape: { "summary": "1-2 sentence description of what you built or changed", "files": [ { "path": "App.swift", "content": "full Swift source..." }, { "path": "ContentView.swift", "content": "..." }, ... ] }
 
 - Integrations: Before generating any app that uses an integration (MusicKit, WeatherKit, MapKit, CoreLocation, HealthKit, Sign in with Apple, Camera, Microphone, Photos/Photo Library, Speech Recognition, Contacts, Calendar/Reminders, Bluetooth, Motion, WidgetKit/Live Activities, etc.), check INTEGRATIONS.md for the correct setup pattern, common errors, and agent behavior instructions for that integration. Always follow the Swift code pattern documented there.
+
+- AR ruler / measurement apps: For any AR measurement or ruler app, use the standard UX pattern: (1) tap to place first anchor point, (2) tap again to place second anchor point, (3) draw a visible line between the two points, (4) show distance in both inches and centimeters, (5) include a Reset button to start over. Tapping should lock the cursor dot's current AR raycast position as the anchor point — not place a point at the screen touch coordinates. The cursor dot tracks the AR surface continuously; tap confirms its current position. This is the standard AR ruler UX pattern.
 
 Critical — Follow user requests: Whatever the user asks for, you MUST do it and output the full updated JSON with all project files. This includes any change: change a word, add a button, change a color, rename something, move a view, add a screen, etc. Do not return empty files. Do not say "no change needed" or leave the app unchanged. Apply the user's request and return the complete modified files. User requests override default style or design guidance. Color changes are the most common edit request. When a user says "change X to Y color", find the exact modifier and update only that value. Never regenerate the whole file for a color change.
 
@@ -245,6 +235,53 @@ function previewText(text: string, max = 240): string {
   return s.slice(0, max) + "…";
 }
 
+/** ~4 chars per token is a common heuristic for English/code (Anthropic, OpenAI). */
+export function estimatePromptTokens(text: string): number {
+  return Math.ceil((text?.length ?? 0) / 4);
+}
+
+export interface SystemPromptTokenBreakdown {
+  basePrompt: { chars: number; tokensEstimate: number };
+  skillPromptBlock: { chars: number; tokensEstimate: number };
+  qaRulesBlock: { chars: number; tokensEstimate: number };
+  integrationsBlock: { chars: number; tokensEstimate: number };
+  totalChars: number;
+  totalTokensEstimate: number;
+}
+
+/**
+ * Build the same system prompt as getClaudeResponse/getClaudeResponseStream and return
+ * character counts and token estimates. Use for monitoring prompt size (e.g. logging or admin).
+ */
+export function getSystemPromptTokenBreakdown(options: {
+  projectType: ProjectType;
+  skillPromptBlock?: string;
+}): SystemPromptTokenBreakdown {
+  const basePrompt =
+    options.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
+  const qaRulesBlock = buildAppliedRulesPromptBlock();
+  const skillPromptBlock = options.skillPromptBlock ?? "";
+  // Integrations are injected via skills only; no longer appended from INTEGRATIONS.md
+  const integrationsBlock = "";
+
+  const baseChars = basePrompt.length;
+  const skillChars = skillPromptBlock.length;
+  const qaChars = qaRulesBlock.length;
+  const intChars = integrationsBlock.length;
+  const totalChars = baseChars + skillChars + qaChars + intChars;
+
+  return {
+    basePrompt: { chars: baseChars, tokensEstimate: estimatePromptTokens(basePrompt) },
+    skillPromptBlock: { chars: skillChars, tokensEstimate: estimatePromptTokens(skillPromptBlock) },
+    qaRulesBlock: { chars: qaChars, tokensEstimate: estimatePromptTokens(qaRulesBlock) },
+    integrationsBlock: { chars: intChars, tokensEstimate: estimatePromptTokens(integrationsBlock) },
+    totalChars,
+    totalTokensEstimate: estimatePromptTokens(
+      basePrompt + skillPromptBlock + qaRulesBlock + integrationsBlock,
+    ),
+  };
+}
+
 export type ProjectType = "standard" | "pro";
 
 export interface GetClaudeResponseOptions {
@@ -295,10 +332,8 @@ export async function getClaudeResponse(
   const basePrompt =
     options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
   const qaRulesBlock = buildAppliedRulesPromptBlock();
-  const integrationsBlock =
-    options?.projectType === "pro" ? getIntegrationsBlock() : "";
   const systemPrompt =
-    basePrompt + (options?.skillPromptBlock ?? "") + qaRulesBlock + integrationsBlock;
+    basePrompt + (options?.skillPromptBlock ?? "") + qaRulesBlock;
 
   const response = await client.messages.create({
     model,
@@ -385,10 +420,8 @@ async function getClaudeResponseStream(
   const basePrompt =
     options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
   const qaRulesBlock = buildAppliedRulesPromptBlock();
-  const integrationsBlock =
-    options?.projectType === "pro" ? getIntegrationsBlock() : "";
   const systemPrompt =
-    basePrompt + (options?.skillPromptBlock ?? "") + qaRulesBlock + integrationsBlock;
+    basePrompt + (options?.skillPromptBlock ?? "") + qaRulesBlock;
 
   let lastReported = 0;
   const throttleChars = 80;

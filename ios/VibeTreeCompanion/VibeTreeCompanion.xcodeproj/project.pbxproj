@@ -42,6 +42,7 @@
 		BA22130E56E7909BCD664E0D /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189566E8C10F624FDB69B658 /* APIService.swift */; };
 		C24ED61B91E9D98C24F03AFF /* CreditsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D23547693987332EDA69896E /* CreditsService.swift */; };
 		CC03DEF1D56190A80102038A /* MessageBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE76CBEEC68DB33BFC80ABC /* MessageBubbleView.swift */; };
+		S7R3E4AM7OD0C4RD00000001 /* StreamTodoCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = S7R3E4AM7OD0C4RD00000002 /* StreamTodoCardView.swift */; };
 		D07B899FC3654A441969B29A /* InstallOnDeviceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 869C22C982600E34268299AE /* InstallOnDeviceSheet.swift */; };
 		D2903033EF6B53F097753375 /* SharedColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF487C87149418845C46BCB /* SharedColors.swift */; };
 		D3FF3E39196ED052AB972816 /* OutOfCreditsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC3DC52263CE631385F08B2 /* OutOfCreditsSheet.swift */; };
@@ -101,6 +102,7 @@
 		5A94C98DB0ED32D8F97A47C7 /* BuildActivityLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildActivityLiveActivity.swift; sourceTree = "<group>"; };
 		5DE76CBEEC68DB33BFC80ABC /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
 		63F4D22F66D3D3D000B0399E /* CreditBalanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditBalanceView.swift; sourceTree = "<group>"; };
+		S7R3E4AM7OD0C4RD00000002 /* StreamTodoCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamTodoCardView.swift; sourceTree = "<group>"; };
 		65F466220D236593D2C720CB /* BuildMonitorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildMonitorService.swift; sourceTree = "<group>"; };
 		6687F22AB0D5F25CE9DE637F /* ProjectListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectListView.swift; sourceTree = "<group>"; };
 		66D6E9396B03B06208CB1D11 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 				869C22C982600E34268299AE /* InstallOnDeviceSheet.swift */,
 				91079938785C568D4D591097 /* MainTabView.swift */,
 				5DE76CBEEC68DB33BFC80ABC /* MessageBubbleView.swift */,
+				S7R3E4AM7OD0C4RD00000002 /* StreamTodoCardView.swift */,
 				9AC3DC52263CE631385F08B2 /* OutOfCreditsSheet.swift */,
 				A765E58624370349E3AC5E42 /* PreviewWebView.swift */,
 				FBE7F19BDFCCD81AB931B5AA /* ProBuildPreviewView.swift */,
@@ -367,6 +370,7 @@
 				D07B899FC3654A441969B29A /* InstallOnDeviceSheet.swift in Sources */,
 				710C8A00190400EE7719B64E /* MainTabView.swift in Sources */,
 				CC03DEF1D56190A80102038A /* MessageBubbleView.swift in Sources */,
+				S7R3E4AM7OD0C4RD00000001 /* StreamTodoCardView.swift in Sources */,
 				B2099CD892849D5ABFD65B1C /* NotificationService.swift in Sources */,
 				D3FF3E39196ED052AB972816 /* OutOfCreditsSheet.swift in Sources */,
 				7803C29D1B547AF17799E2BE /* Preflight.swift in Sources */,

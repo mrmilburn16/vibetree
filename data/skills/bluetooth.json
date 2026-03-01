@@ -1,0 +1,39 @@
+{
+  "id": "bluetooth",
+  "name": "Bluetooth (CoreBluetooth)",
+  "frameworks": ["CoreBluetooth"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "bluetooth",
+      "ble",
+      "corebluetooth",
+      "bluetooth le",
+      "bluetooth device",
+      "scan bluetooth",
+      "bluetooth peripheral",
+      "bluetooth central",
+      "cbcentralmanager",
+      "cbperipheralmanager",
+      "connect device",
+      "pair device"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "## Bluetooth (CoreBluetooth)\n\n**Type:** Apple Native (on-device)\n\n**Cost:** No keys; on-device only.\n\n**Apple Identifier Required:** None.\n\n**Key/Token Required:** No.\n\n**User Setup Steps:** None beyond Info.plist usage description (handled by the agent).\n\n**Common Errors:**\n- **App crashes when accessing Bluetooth** — Add `NSBluetoothAlwaysUsageDescription` to Info.plist and `// REQUIRES PLIST: NSBluetoothAlwaysUsageDescription` above the first use of CBCentralManager or CBPeripheralManager. Request or check authorization before scanning or advertising.\n- Bluetooth off or unavailable — Handle powered-off and unauthorized states; show a clear message when Bluetooth is not available.\n\n**Swift Code Pattern:**\n- Add `// REQUIRES PLIST: NSBluetoothAlwaysUsageDescription` above the first CoreBluetooth usage. Do not assume Bluetooth is powered on or authorized; check state and handle accordingly.\n\n**Agent Behavior:**\n- For any app that uses CoreBluetooth (BLE scanning, peripherals), always add the REQUIRES PLIST comment and handle unavailable/denied states.",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Using CBCentralManager or CBPeripheralManager without NSBluetoothAlwaysUsageDescription",
+    "Assuming Bluetooth is powered on or authorized without checking state"
+  ],
+  "requiredPermissions": ["NSBluetoothAlwaysUsageDescription"],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

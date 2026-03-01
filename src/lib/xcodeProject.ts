@@ -58,7 +58,19 @@ interface PrivacyRule {
 
 const PRIVACY_RULES: PrivacyRule[] = [
   {
-    patterns: [/\bAVCaptureSession\b/, /\bAVCaptureDevice\b/, /\.camera\b/, /\bCaptureSession\b/],
+    patterns: [
+      /\bAVCaptureSession\b/,
+      /\bAVCaptureDevice\b/,
+      /\.camera\b/,
+      /\bCaptureSession\b/,
+      // ARKit uses the camera for AR experiences but may not reference AVCaptureDevice
+      /\bimport ARKit\b/,
+      /\bARSession\b/,
+      /\bARSCNView\b/,
+      /\bARWorldTrackingConfiguration\b/,
+      /\bARView\b/,
+      /\bRealityView\b/,
+    ],
     key: "NSCameraUsageDescription",
     description: "This app uses the camera for its features.",
   },

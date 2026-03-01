@@ -1,0 +1,38 @@
+{
+  "id": "contacts",
+  "name": "Contacts (CNContactStore)",
+  "frameworks": ["Contacts"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "contacts",
+      "contact list",
+      "address book",
+      "phone contacts",
+      "cncontactstore",
+      "contact picker",
+      "import contacts",
+      "sync contacts",
+      "add contact",
+      "read contacts",
+      "contact access"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "## Contacts (CNContactStore)\n\n**Type:** Apple Native (on-device)\n\n**Cost:** No keys; on-device only.\n\n**Apple Identifier Required:** None.\n\n**Key/Token Required:** No.\n\n**User Setup Steps:** None beyond Info.plist usage description (handled by the agent).\n\n**Common Errors:**\n- **App crashes when accessing contacts** — Add `NSContactsUsageDescription` to Info.plist and `// REQUIRES PLIST: NSContactsUsageDescription` above the first access to CNContactStore. Request `requestAccess(for: .contacts)` before reading or presenting a contact picker.\n\n**Swift Code Pattern:**\n- Add `// REQUIRES PLIST: NSContactsUsageDescription` above the first CNContactStore usage. Call `store.requestAccess(for: .contacts)` and check the result before fetching contacts.\n\n**Agent Behavior:**\n- For any app that uses the contacts API, always add the REQUIRES PLIST comment and request authorization before use.",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Accessing CNContactStore without requesting requestAccess(for: .contacts) first",
+    "Missing // REQUIRES PLIST: NSContactsUsageDescription comment above first contact access"
+  ],
+  "requiredPermissions": ["NSContactsUsageDescription"],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

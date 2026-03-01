@@ -269,8 +269,8 @@ export function EditorLayout({
       )}
       <LowCreditBanner />
       {/* Top bar */}
-      <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b-2 border-[var(--border-default)] px-5 sm:px-6">
-        <div className="flex items-center gap-4">
+      <header className="grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b-2 border-[var(--border-default)] px-5 sm:px-6 py-2">
+        <div className="flex min-w-0 items-center gap-4">
           <BetaBadge />
           <Link
             href="/dashboard"
@@ -285,7 +285,7 @@ export function EditorLayout({
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="cursor-pointer text-left text-sm font-medium text-[var(--text-primary)] hover:underline"
+            className="cursor-pointer truncate text-left text-sm font-medium text-[var(--text-primary)] hover:underline"
           >
             {projectName}
           </button>
@@ -293,23 +293,14 @@ export function EditorLayout({
         <div className="flex justify-center">
           <CreditsWidget />
         </div>
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            variant="secondary"
-            className="!px-2 text-xs"
-            onClick={() => setSettingsOpen(true)}
-            title="Project settings"
-            aria-label="Project settings"
-          >
-            <Settings className="h-4 w-4" aria-hidden />
-          </Button>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <Button
             variant="secondary"
             className="gap-1.5 text-xs"
             onClick={() => setRunOnDeviceOpen(true)}
             title="Preview on your iPhone with Expo Go"
           >
-            <Smartphone className="h-3.5 w-3.5" aria-hidden />
+            <Smartphone className="h-3.5 w-3.5 shrink-0" aria-hidden />
             Run on device
           </Button>
           <Button
@@ -318,7 +309,7 @@ export function EditorLayout({
             onClick={() => setShareOpen(true)}
             title="Share, distribute, or publish your app"
           >
-            <Share2 className="h-3.5 w-3.5" aria-hidden />
+            <Share2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
             Share
           </Button>
           <div className="relative">
@@ -343,6 +334,15 @@ export function EditorLayout({
               </div>
             )}
           </div>
+          <Button
+            variant="secondary"
+            className="!px-2 text-xs"
+            onClick={() => setSettingsOpen(true)}
+            title="Project settings — name, bundle ID, install to iPhone"
+            aria-label="Project settings"
+          >
+            <Settings className="h-4 w-4" aria-hidden />
+          </Button>
         </div>
       </header>
 

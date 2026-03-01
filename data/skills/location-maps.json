@@ -51,8 +51,8 @@
     "NSLocationWhenInUseUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 53,
-    "firstAttemptCompile": 34,
+    "totalBuilds": 55,
+    "firstAttemptCompile": 35,
     "compileRate": 64,
     "functionalSuccesses": 2,
     "functionalRate": 4,

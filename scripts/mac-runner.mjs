@@ -663,7 +663,31 @@ async function validateJob(job) {
           logs.push(`[install] Found device: ${device.name} (${device.identifier})`);
           await flush(true);
           const bundleId = job.request.bundleId || "com.vibetree.app";
-          const installed = await installAppOnDevice(appPath, device.identifier, bundleId, logs, flush);
+          const INSTALL_TIMEOUT_MS = 60 * 1000;
+          let installed;
+          try {
+            installed = await Promise.race([
+              installAppOnDevice(appPath, device.identifier, bundleId, logs, flush),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("INSTALL_TIMEOUT")), INSTALL_TIMEOUT_MS)
+              ),
+            ]);
+          } catch (e) {
+            if (e?.message === "INSTALL_TIMEOUT") {
+              logs.push(
+                "[install] ❌ Install timed out (60s) — make sure your iPhone is unlocked and connected via USB."
+              );
+              await flush(true);
+              await updateJob(job.id, {
+                status: "failed",
+                error:
+                  "Install timed out — make sure your iPhone is unlocked and connected via USB.",
+                logs: [],
+              });
+              return;
+            }
+            throw e;
+          }
           await updateJob(job.id, {
             status: "succeeded",
             exitCode: 0,

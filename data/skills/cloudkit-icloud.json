@@ -1,0 +1,38 @@
+{
+  "id": "cloudkit-icloud",
+  "name": "CloudKit / iCloud",
+  "frameworks": ["CloudKit", "Foundation"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "icloud",
+      "cloudkit",
+      "cloud kit",
+      "icloud sync",
+      "sync across devices",
+      "cloud sync",
+      "ckcontainer",
+      "nsubiquitouskeyvaluestore",
+      "icloud backup",
+      "cloud storage"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "## CloudKit / iCloud\n\n**Type:** Apple Native (sync)\n\n**Cost:** No per-call fee for typical usage; iCloud account required.\n\n**Apple Identifier Required:** App ID with **iCloud** capability (and optionally CloudKit container).\n\n**Key/Token Required:** No.\n\n**User Setup Steps:** Enable iCloud capability on the App ID in the Apple Developer portal. No plist usage-description key is required for CloudKit.\n\n**Common Errors:**\n- Missing entitlement — User must enable iCloud (and CloudKit if used) on the App ID in the Apple Developer portal.\n- Unavailable — When iCloud is unavailable (e.g. not signed in, no network), handle gracefully and work offline if the app supports it. Always check account status (e.g. `CKContainer.accountStatus`) and do not assume iCloud is available; show a clear message or disable sync when unavailable.\n\n**Swift Code Pattern:**\n- Use `NSUbiquitousKeyValueStore` or `CKContainer` as appropriate. Handle account status and errors; do not assume iCloud is always available. When using `NSUbiquitousKeyValueStore`, do not assume keys exist—check for the key and provide a default or handle missing values; `object(forKey:)` can return `nil`. When using `CKContainer`, use the correct container identifier (typically from your app's entitlements, e.g. `CKContainer.default()` or the container ID that matches the App ID capability); a wrong or missing container ID causes \"container not found\" or permission errors.\n- For offline-first apps, persist locally (e.g. Core Data) and sync when iCloud is available.\n\n**Agent Behavior:**\n- In the app summary, warn that the user must enable iCloud (and the capability used) on the App ID in the Apple Developer portal when the app uses CloudKit or iCloud sync.",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Assuming iCloud is always available without checking account status",
+    "Force-unwrapping NSUbiquitousKeyValueStore.object(forKey:) which can return nil",
+    "Using wrong or missing CKContainer identifier"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

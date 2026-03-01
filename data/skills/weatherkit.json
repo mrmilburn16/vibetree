@@ -1,0 +1,43 @@
+{
+  "id": "weatherkit",
+  "name": "Weather (WeatherKit)",
+  "frameworks": ["WeatherKit"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "weather",
+      "forecast",
+      "temperature",
+      "weatherkit",
+      "weather kit",
+      "current weather",
+      "daily forecast",
+      "hourly forecast",
+      "humidity",
+      "wind",
+      "rain",
+      "snow",
+      "weather app",
+      "weather widget",
+      "local weather"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "## WeatherKit\n\n**Type:** Apple Native + VibeTree Hosted (token)\n\n**Cost:** Apple provides 500,000 free API calls per month; after that, $0.0002 per call. VibeTree absorbs cost; agent can use WeatherKit freely without requiring user setup.\n\n**Apple Identifier Required:** App ID with **WeatherKit** capability enabled under the App Services tab.\n\n**Key/Token Required:** Yes. Uses the same `.p8` key as MusicKit if both are enabled on the same key. JWT requires **subject (sub) claim set to bundle ID**, unlike MusicKit. Token stored in VibeTree App Secrets as `weatherkit_token`.\n\n**User Setup Steps:**\n- No user setup required for standard use; VibeTree provides the token. If self-hosting or custom key: ensure App ID has WeatherKit capability; generate JWT with `sub` set to the app's bundle ID; store as `weatherkit_token`.\n\n**Common Errors:**\n- Invalid or expired token — Regenerate JWT with correct `sub` (bundle ID) and key.\n- Rate limit or too many requests — Calling the weather API on every view appearance or every render causes rate limiting. You must cache responses for at least 30 minutes and never call the API from a view body or on every .onAppear without checking the cache first.\n\n**Swift Code Pattern:**\n- Always **cache** weather responses for at least **30 minutes** in generated code; never call the API on every render or every view appearance.\n- Use `WeatherService.shared` (or equivalent) with the appropriate request type; check cache before issuing a new request. Use a single shared service instance (e.g. `WeatherService.shared`); do not create a new `WeatherService` on every request or in every view. The response type (e.g. `Weather`) may have optional properties (e.g. `dailyForecast`); handle `nil` for optional fields instead of force-unwrapping to avoid runtime crashes.\n\n**Agent Behavior:**\n- Use WeatherKit freely in apps when the user asks for weather; do not require user setup since VibeTree absorbs cost.\n- Always generate code that caches weather for at least 30 minutes and never calls on every render.",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Calling weather API on every view appearance or every render without caching",
+    "Creating a new WeatherService instance on every request or in every view",
+    "Force-unwrapping optional Weather response properties (e.g. dailyForecast)"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "id": "calendar-reminders",
+  "name": "Calendar & Reminders (EventKit)",
+  "frameworks": ["EventKit"],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "calendar",
+      "calendars",
+      "reminders",
+      "eventkit",
+      "events",
+      "add event",
+      "calendar event",
+      "reminder",
+      "todo list",
+      "schedule",
+      "ekeventstore",
+      "calendar access",
+      "reminders access"
+    ],
+    "excludeKeywords": []
+  },
+  "promptInjection": "## Calendar / Reminders (EventKit)\n\n**Type:** Apple Native (on-device)\n\n**Cost:** No keys; on-device only.\n\n**Apple Identifier Required:** None.\n\n**Key/Token Required:** No.\n\n**User Setup Steps:** None beyond Info.plist usage description. Use `NSCalendarsUsageDescription` for calendar and `NSRemindersUsageDescription` for reminders if the app uses both.\n\n**Common Errors:**\n- **App crashes when accessing calendar or reminders** — Add the appropriate usage description to Info.plist and `// REQUIRES PLIST: NSCalendarsUsageDescription` (or NSRemindersUsageDescription) above the first EKEventStore access. Call `requestAccess(to: .event)` or `requestAccess(to: .reminder)` before reading or writing.\n\n**Swift Code Pattern:**\n- Add the REQUIRES PLIST comment(s) above the first EKEventStore usage. Request access for .event or .reminder and check the result before querying.\n\n**Agent Behavior:**\n- For any app that uses EventKit, always add the required plist comment(s) and request authorization before use.",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Accessing EKEventStore without requestAccess(to: .event) or requestAccess(to: .reminder)",
+    "Missing // REQUIRES PLIST: NSCalendarsUsageDescription or NSRemindersUsageDescription"
+  ],
+  "requiredPermissions": ["NSCalendarsUsageDescription", "NSRemindersUsageDescription"],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}
