@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
+    "dev:webpack": "next dev -p 3001 --webpack",
     "dev:mock": "NEXT_PUBLIC_USE_REAL_LLM=false next dev -p 3002",
     "dev:full:mock": "NEXT_PUBLIC_USE_REAL_LLM=false node scripts/run-dev-with-runner.mjs",
     "build": "next build",

@@ -22,6 +22,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  console.log("[message/stream] POST invoked", { path: request.url });
   const { id: projectId } = await params;
 
   const body = await request.json().catch(() => ({}));
