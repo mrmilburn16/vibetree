@@ -41,7 +41,8 @@ export async function POST() {
     const result = await sendBuildNotification(
       "Test",
       "succeeded",
-      "Sent from Vibetree — no build required."
+      "Sent from Vibetree — no build required.",
+      { projectId: undefined }
     );
     if (result === null) {
       return Response.json({ ok: false, message: "No devices or APNs not configured." }, { status: 400 });

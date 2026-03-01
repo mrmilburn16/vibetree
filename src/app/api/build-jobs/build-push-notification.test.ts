@@ -57,7 +57,10 @@ describe("Build completion push notifications", () => {
 
     expect(res.status).toBe(200);
     expect(sendBackgroundRefreshPush).toHaveBeenCalledWith(`build_succeeded:${job.id}`);
-    expect(sendBuildNotification).toHaveBeenCalledWith(projectName, "succeeded", undefined, { installedOnDevice: false });
+    expect(sendBuildNotification).toHaveBeenCalledWith(projectName, "succeeded", undefined, {
+      installedOnDevice: false,
+      projectId,
+    });
   });
 
   it("awaits push before responding so notification is sent instantly when build succeeds", async () => {
@@ -86,7 +89,10 @@ describe("Build completion push notifications", () => {
     );
 
     await new Promise((r) => setTimeout(r, 20));
-    expect(sendBuildNotification).toHaveBeenCalledWith(projectName, "succeeded", undefined, { installedOnDevice: false });
+    expect(sendBuildNotification).toHaveBeenCalledWith(projectName, "succeeded", undefined, {
+      installedOnDevice: false,
+      projectId,
+    });
     let responded = false;
     responsePromise.then(() => {
       responded = true;
@@ -120,11 +126,9 @@ describe("Build completion push notifications", () => {
 
     expect(res.status).toBe(200);
     expect(sendBackgroundRefreshPush).toHaveBeenCalledWith(`build_failed:${job.id}`);
-    expect(sendBuildNotification).toHaveBeenCalledWith(
-      projectName,
-      "failed",
-      errorDetail
-    );
+    expect(sendBuildNotification).toHaveBeenCalledWith(projectName, "failed", errorDetail, {
+      projectId,
+    });
   });
 
   it("does not send notification when status is only running", async () => {
@@ -180,7 +184,10 @@ describe("Build completion push notifications", () => {
       { params: Promise.resolve({ id: jobId }) }
     );
     expect(updateRes.status).toBe(200);
-    expect(sendBuildNotification).toHaveBeenCalledWith(projectName, "succeeded", undefined, { installedOnDevice: false });
+    expect(sendBuildNotification).toHaveBeenCalledWith(projectName, "succeeded", undefined, {
+      installedOnDevice: false,
+      projectId,
+    });
   });
 });
 
@@ -233,7 +240,10 @@ describe("Push notification uses current project title (not Untitled app)", () =
     );
 
     expect(res.status).toBe(200);
-    expect(sendBuildNotification).toHaveBeenCalledWith("My Cool App", "succeeded", undefined, { installedOnDevice: false });
+    expect(sendBuildNotification).toHaveBeenCalledWith("My Cool App", "succeeded", undefined, {
+      installedOnDevice: false,
+      projectId,
+    });
     expect(sendBuildNotification).not.toHaveBeenCalledWith("Untitled app", expect.anything());
   });
 });

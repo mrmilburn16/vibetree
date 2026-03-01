@@ -103,6 +103,8 @@ export type SendBuildNotificationResult =
 export type SendBuildNotificationOptions = {
   /** When true, use "successfully launched" wording (installed + launched on device). */
   installedOnDevice?: boolean;
+  /** Project ID for deep link; included in payload so iOS can open that project when notification is tapped. */
+  projectId?: string;
 };
 
 export async function sendBuildNotification(
@@ -140,13 +142,16 @@ export async function sendBuildNotification(
     body = `${displayName} build failed.${detail ? " " + detail : ""}`;
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     aps: {
       alert: { title, body },
       sound: "default",
       badge: status === "failed" ? 1 : 0,
     },
   };
+  if (options?.projectId) {
+    payload.projectId = options.projectId;
+  }
 
   console.log(`[apns] Sending push to ${devices.length} device(s): ${title} (${config.useSandbox ? "sandbox" : "production"})`);
 

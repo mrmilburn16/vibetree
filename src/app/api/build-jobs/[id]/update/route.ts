@@ -105,7 +105,10 @@ export async function POST(
     console.log(`[build-jobs] Job ${id} succeeded, sending push notification for "${displayName}"${installedOnDevice ? " (installed on device)" : ""}…`);
     try {
       await sendBackgroundRefreshPush(`build_succeeded:${id}`);
-      await sendBuildNotification(displayName, "succeeded", undefined, { installedOnDevice });
+      await sendBuildNotification(displayName, "succeeded", undefined, {
+        installedOnDevice,
+        projectId: freshJob.request.projectId,
+      });
     } catch (err) {
       console.error("[apns] Error sending build success push:", err);
     }
@@ -142,7 +145,9 @@ export async function POST(
       : (freshJob.error ?? "Build failed after all attempts");
     try {
       await sendBackgroundRefreshPush(`build_failed:${id}`);
-      await sendBuildNotification(displayName, "failed", detail);
+      await sendBuildNotification(displayName, "failed", detail, {
+        projectId: freshJob.request.projectId,
+      });
     } catch (err) {
       console.error("[apns] Error sending build failure push:", err);
     }

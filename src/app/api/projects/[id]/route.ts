@@ -1,16 +1,30 @@
 import { NextResponse } from "next/server";
-import { getProject, updateProject, deleteProject, uniquifyProjectName } from "@/lib/projectStore";
+import {
+  getProject,
+  setProject,
+  updateProject,
+  deleteProject,
+  uniquifyProjectName,
+  type ProjectRecord,
+} from "@/lib/projectStore";
 import { getProjectFilePaths } from "@/lib/projectFileStore";
-import { updateProjectInFirestore, deleteProjectFromFirestore } from "@/lib/projectsFirestore";
+import { getProjectFromFirestore, updateProjectInFirestore, deleteProjectFromFirestore } from "@/lib/projectsFirestore";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const project = getProject(id);
+  let project = getProject(id);
   if (!project) {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    const fromFirestoreDoc = await getProjectFromFirestore(id);
+    if (!fromFirestoreDoc) {
+      console.log(`[projects][GET] ${id} not in memory or Firestore → 404`);
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    setProject(fromFirestoreDoc as ProjectRecord);
+    project = fromFirestoreDoc as ProjectRecord;
+    console.log(`[projects][GET] ${id} loaded from Firestore (deep link / single-fetch)`);
   }
   const filePaths = getProjectFilePaths(id);
   return NextResponse.json({

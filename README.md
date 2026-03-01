@@ -39,6 +39,20 @@ The app includes a **credit system** and **three plans** (Creator, Pro, Team) wi
 - `NEXT_PUBLIC_USE_REAL_LLM=true` — Use real LLM for chat (default: mock)
 - `NEXT_PUBLIC_USE_REAL_MAC=true` — Use real Mac fleet for build/streaming (default: mock)
 
+### Testing the chat UX with mock (no API key)
+
+You **don’t need to remove or disable** your API key. To try the new checklist/step UX without calling the real API:
+
+1. **Easiest:** Run the app in mock mode so the client never uses the real LLM:
+   ```bash
+   npm run dev:mock
+   ```
+   This sets `NEXT_PUBLIC_USE_REAL_LLM=false` and starts the app on **port 3002**. Open http://localhost:3002, send a message, and you’ll see the same step list (Planning next moves, Thinking…, Creating files, Finalizing, Done) and summary as with the real API, but driven by the in-app mock.
+
+2. **Alternative:** Leave your `.env.local` as-is and either:
+   - Omit `NEXT_PUBLIC_USE_REAL_LLM` (or set it to anything other than the string `"true"`). Then `npm run dev` uses the mock.
+   - Or keep `NEXT_PUBLIC_USE_REAL_LLM=true` when you want real API calls; switch to `false` or unset when you want to test the UI with mock only.
+
 ## Next steps (Phase C/D)
 
 - **Real LLM:** Replace mock in `useChat` or API `message` route with Claude/OpenAI; parse edits, run xcodebuild on Mac.

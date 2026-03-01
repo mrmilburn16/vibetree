@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01FE45E3E3A7CA6E38BB5BD6 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731EE663BC9493CE53320C /* ShareSheet.swift */; };
+		AUTHROOT0000000000000002 /* AuthenticatedRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUTHROOT0000000000000001 /* AuthenticatedRootView.swift */; };
 		07D286F23F943D7791D694C9 /* CreditsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D387383822D7E75BFAC5E0 /* CreditsView.swift */; };
 		0F726B26A336512F0D06B712 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C6405D7C6E05BEB87C8672 /* Project.swift */; };
 		10898404EA7D4B1A05FC8165 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CD4869FE21CD800B7861AF /* AuthService.swift */; };
@@ -37,6 +38,7 @@
 		A0A396FD92E018051A3F0E06 /* BuildMonitorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65F466220D236593D2C720CB /* BuildMonitorService.swift */; };
 		A6D9BBB7F7728A6A6BC787C2 /* BuildActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C44A2D16F0A761667BFA1383 /* BuildActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B2099CD892849D5ABFD65B1C /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0ED858E18B1F05FD393CBCF /* NotificationService.swift */; };
+		D1EEPL1NK0000000000000002 /* DeepLinkController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1EEPL1NK0000000000000001 /* DeepLinkController.swift */; };
 		BA22130E56E7909BCD664E0D /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189566E8C10F624FDB69B658 /* APIService.swift */; };
 		C24ED61B91E9D98C24F03AFF /* CreditsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D23547693987332EDA69896E /* CreditsService.swift */; };
 		CC03DEF1D56190A80102038A /* MessageBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE76CBEEC68DB33BFC80ABC /* MessageBubbleView.swift */; };
@@ -86,8 +88,10 @@
 		24F5500EBA23C8530FC0FFB6 /* BuildActivityExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BuildActivityExtension.entitlements; sourceTree = "<group>"; };
 		E8A1B2C3D4E5F67890123456 /* VibeTreeCompanion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VibeTreeCompanion.entitlements; sourceTree = "<group>"; };
 		3FEF5B45B4C2284D0C52A33D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		AUTHROOT0000000000000001 /* AuthenticatedRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticatedRootView.swift; sourceTree = "<group>"; };
 		40C6405D7C6E05BEB87C8672 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
 		42B04B6FBAC82870527B724C /* ProjectService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectService.swift; sourceTree = "<group>"; };
+		D1EEPL1NK0000000000000001 /* DeepLinkController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkController.swift; sourceTree = "<group>"; };
 		A7B8C9D0E1F2A3B4C5D6E7F8 /* HapticService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticService.swift; sourceTree = "<group>"; };
 		481429A5C8D3D216F2FAF35B /* DeviceFrameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceFrameView.swift; sourceTree = "<group>"; };
 		4D0504AF9B88680980739A32 /* DeviceRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
@@ -154,6 +158,7 @@
 			isa = PBXGroup;
 			children = (
 				18854FD95F88E0E0F21C701F /* BuildDetailView.swift */,
+				AUTHROOT0000000000000001 /* AuthenticatedRootView.swift */,
 				2413CF1E00CD87249E5D958E /* ChatPanelView.swift */,
 				A99B1B411A1D0711F3346E7A /* ContentView.swift */,
 				63F4D22F66D3D3D000B0399E /* CreditBalanceView.swift */,
@@ -234,6 +239,7 @@
 				95A5FC0D844CF6C8C5250178 /* ChatService.swift */,
 				D23547693987332EDA69896E /* CreditsService.swift */,
 				D0ED858E18B1F05FD393CBCF /* NotificationService.swift */,
+				D1EEPL1NK0000000000000001 /* DeepLinkController.swift */,
 				42B04B6FBAC82870527B724C /* ProjectService.swift */,
 				A7B8C9D0E1F2A3B4C5D6E7F8 /* HapticService.swift */,
 			);
@@ -335,6 +341,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AUTHROOT0000000000000002 /* AuthenticatedRootView.swift in Sources */,
 				BA22130E56E7909BCD664E0D /* APIService.swift in Sources */,
 				10898404EA7D4B1A05FC8165 /* AuthService.swift in Sources */,
 				E97BF5FA18154D8469EF70A4 /* BuildActivityAttributes.swift in Sources */,
@@ -352,6 +359,7 @@
 				07D286F23F943D7791D694C9 /* CreditsView.swift in Sources */,
 				D4C343677B017978F44DBE9F /* DeviceFrameView.swift in Sources */,
 				2E9316E1D49B916CE5670710 /* DeviceRegistration.swift in Sources */,
+				D1EEPL1NK0000000000000002 /* DeepLinkController.swift in Sources */,
 				363A621ACFED275B23283E49 /* EditorView.swift in Sources */,
 				7BB8DE76A8593B087DEAAE51 /* ForestTheme.swift in Sources */,
 				1A2B3C4D5E6F7A8B9C0D1E2F /* HapticService.swift in Sources */,

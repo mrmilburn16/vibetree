@@ -71,13 +71,15 @@ function loadChatMessagesFromLocalStorage(projectId: string): ChatMessage[] | nu
         ...(typeof m.createdAt === "number" ? { createdAt: m.createdAt } : {}),
       }));
 
-    // Drop stale in-flight progress messages on restore.
+    // Drop stale in-flight progress and step messages on restore.
     return msgs.filter((m) => {
-      if (m.id.startsWith("stream-progress-")) return false;
+      if (m.id.startsWith("stream-progress-") || m.id.startsWith("stream-phase-") || m.id.startsWith("stream-file-")) return false;
       const c = (m.content ?? "").trim();
       const looksLikeLiveProgress =
         c.startsWith("Connecting…") ||
+        c.startsWith("Planning next moves…") ||
         c.startsWith("Validating build on Mac…") ||
+        c.startsWith("Finalizing…") ||
         c.startsWith("Thinking…");
       const hasMeta =
         (m.editedFiles?.length ?? 0) > 0 ||
@@ -296,10 +298,15 @@ export function useChat(
   const hydratedRef = useRef(false);
   const serverPersistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const isTypingRef = useRef(false);
 
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    isTypingRef.current = isTyping;
+  }, [isTyping]);
 
   useEffect(() => {
     return () => {
@@ -397,6 +404,26 @@ export function useChat(
     };
   }, [projectId]);
 
+  // Poll for chat updates so messages sent from iOS (or another tab) appear without refresh.
+  const POLL_INTERVAL_MS = 4000;
+  useEffect(() => {
+    if (!projectId) return;
+    const intervalId = setInterval(() => {
+      if (!projectId || isTypingRef.current) return;
+      fetch(`/api/projects/${projectId}/chat`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const serverMsgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
+          if (serverMsgs.length > messagesRef.current.length) {
+            setMessages(serverMsgs);
+            saveChatMessagesToLocalStorage(projectId, serverMsgs);
+          }
+        })
+        .catch(() => {});
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [projectId]);
+
   // Persist chat history per project id.
   useEffect(() => {
     if (!hydratedRef.current) return;
@@ -412,25 +439,30 @@ export function useChat(
   const runClientMock = useCallback(
     (trimmed: string) => {
       const mock = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
+      const streamRunId = Date.now();
 
       const t1 = setTimeout(() => setBuildStatus("building"), 400);
       timeoutIdsRef.current.push(t1);
 
-      const stepMessages = [
-        "Reading files.",
-        "Explored.",
-        "Grepped.",
-        "Analyzed.",
-        "Planning next moves…",
-        "Writing code…",
+      setMessages((prev) => [
+        ...prev,
+        { id: `stream-progress-${streamRunId}`, role: "assistant" as const, content: "Planning next moves…" },
+      ]);
+
+      const steps: { delay: number; id: string; content: string }[] = [
+        { delay: 800, id: `stream-phase-${streamRunId}-thinking`, content: "Thinking…" },
+        { delay: 1800, id: `stream-file-${streamRunId}-1`, content: "Creating App.swift" },
+        { delay: 2800, id: `stream-file-${streamRunId}-2`, content: "Creating ContentView.swift" },
+        { delay: 3800, id: `stream-phase-${streamRunId}-finalizing`, content: "Finalizing" },
+        { delay: 4800, id: `stream-phase-${streamRunId}-done`, content: "Done" },
       ];
-      stepMessages.forEach((stepText, i) => {
+      steps.forEach(({ delay, id, content }) => {
         const t = setTimeout(() => {
           setMessages((prev) => [
             ...prev,
-            { id: `assistant-${Date.now()}-${i}`, role: "assistant" as const, content: stepText },
+            { id, role: "assistant" as const, content },
           ]);
-        }, 1000 + i * 1000);
+        }, delay);
         timeoutIdsRef.current.push(t);
       });
 
@@ -439,7 +471,7 @@ export function useChat(
           ...prev,
           { id: `assistant-${Date.now()}-summary`, role: "assistant" as const, content: mock.content },
         ]);
-      }, 7000);
+      }, 6000);
       timeoutIdsRef.current.push(tSummary);
 
       const tFiles = setTimeout(() => {
@@ -454,10 +486,10 @@ export function useChat(
         ]);
         setIsTyping(false);
         setCanSend(true);
-      }, 7500);
+      }, 6500);
       timeoutIdsRef.current.push(tFiles);
 
-      const tLive = setTimeout(() => setBuildStatus("live"), 8000);
+      const tLive = setTimeout(() => setBuildStatus("live"), 7000);
       timeoutIdsRef.current.push(tLive);
     },
     []
@@ -508,7 +540,7 @@ export function useChat(
       {
         id: progressMessageId,
         role: "assistant",
-        content: "Connecting…",
+        content: "Planning next moves…",
       },
     ]);
 
@@ -560,10 +592,10 @@ export function useChat(
           if (m.id !== progressMessageId) return m;
           if (!sawServerProgress) {
             const elapsedStr = ` · ${formatDurationShort(Math.max(1, Math.floor(elapsedMs / 1000)))}`;
-            return { ...m, content: `Connecting…${elapsedStr}` };
+            return { ...m, content: `Planning next moves…${elapsedStr}` };
           }
-          // Keep the UI moving even if stream chunks are buffered.
-          return { ...m, content: renderProgressLine() };
+          // Once we have phase/file steps, don't overwrite the progress line (checklist shows steps).
+          return m;
         })
       );
     }, 1000);
@@ -684,34 +716,33 @@ export function useChat(
               if (event.type === "phase" && typeof event.phase === "string") {
                 sawServerProgress = true;
                 const phaseMap: Record<string, string> = {
-                  starting_request: "Connecting…",
-                  waiting_for_first_tokens: "Waiting for first tokens…",
+                  starting_request: "Thinking…",
+                  waiting_for_first_tokens: "Thinking…",
                   receiving_output: "Receiving output…",
-                  validating_structured_output: "Validating output…",
-                  saving_files: "Saving files…",
-                  done_preview_updating: "Done / Preview updating",
+                  validating_structured_output: "Finalizing",
+                  saving_files: "Finalizing",
+                  done_preview_updating: "Done",
                   retrying_request: "Retrying request…",
                 };
                 currentPhaseLabel = phaseMap[event.phase] ?? "Working";
-                // Don't insert a separate message for receiving_output — the progress line already shows it with files/tokens/cost
-                if (!emittedPhases.has(event.phase)) {
-                  emittedPhases.add(event.phase);
-                  if (event.phase !== "receiving_output") {
-                    const phaseMsg: ChatMessage = {
-                      id: `stream-phase-${streamRunId}-${event.phase}`,
-                      role: "assistant",
-                      content: `${currentPhaseLabel} · ${formatDurationShort(
-                        Math.max(1, Math.floor((Date.now() - localStartedAt) / 1000))
-                      )}`,
-                    };
-                    setMessages((prev) => {
-                      const idx = prev.findIndex((m) => m.id === progressMessageId);
-                      if (idx === -1) return [...prev, phaseMsg];
-                      const next = prev.slice();
-                      next.splice(idx, 0, phaseMsg);
-                      return next;
-                    });
-                  }
+                const emitKey = (event.phase === "starting_request" || event.phase === "waiting_for_first_tokens") ? "thinking" : event.phase;
+                if (!emittedPhases.has(emitKey)) {
+                  emittedPhases.add(emitKey);
+                  if (event.phase === "receiving_output") continue;
+                  if (event.phase === "saving_files") continue;
+                  const label = phaseMap[event.phase] ?? event.phase;
+                  const phaseMsg: ChatMessage = {
+                    id: `stream-phase-${streamRunId}-${emitKey}`,
+                    role: "assistant",
+                    content: label,
+                  };
+                  setMessages((prev) => {
+                    const idx = prev.findIndex((m) => m.id === progressMessageId);
+                    if (idx === -1) return [...prev, phaseMsg];
+                    const next = prev.slice();
+                    next.splice(idx, 0, phaseMsg);
+                    return next;
+                  });
                 }
               }
               if (event.type === "file" && typeof event.path === "string") {
@@ -881,13 +912,18 @@ export function useChat(
           if (isProBuild && onProBuildComplete) {
             deferLive = true;
             setIsValidating(true);
-            // Remove progress + stream-file messages, show validation with file list.
+            // Remove progress + stream steps (phase/file), show single validation line.
             setMessages((prev) => [
-              ...prev.filter((m) => m.id !== progressMessageId && !m.id.startsWith("stream-file-")),
+              ...prev.filter(
+                (m) =>
+                  m.id !== progressMessageId &&
+                  !m.id.startsWith("stream-phase-") &&
+                  !m.id.startsWith("stream-file-")
+              ),
               {
                 id: validateMessageId,
                 role: "assistant",
-                content: `Validating build on Mac… Waiting for runner… (${formatDurationShort(0)})`,
+                content: `Finalizing… Waiting for runner… (${formatDurationShort(0)})`,
                 editedFiles,
                 ...(usage && { usage }),
                 ...(estimatedCostUsd !== undefined && { estimatedCostUsd }),
@@ -895,7 +931,7 @@ export function useChat(
                 createdAt: Date.now(),
               },
             ]);
-            const progressBase = "Validating build on Mac… Waiting for runner…";
+            const progressBase = "Finalizing… Waiting for runner…";
             validateTickRef.current = {
               messageId: validateMessageId,
               startTime: Date.now(),
@@ -1017,7 +1053,7 @@ export function useChat(
               });
           } else {
             setMessages((prev) => [
-              ...prev.filter((m) => m.id !== progressMessageId && !m.id.startsWith("stream-file-")),
+              ...prev.filter((m) => m.id !== progressMessageId),
               realMessage,
             ]);
             if (editedFiles.length > 0) onAppBuilt?.();

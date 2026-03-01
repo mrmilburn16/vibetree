@@ -30,14 +30,17 @@ function getStreamTokens(text: string): string[] {
   return text.split(/(\s+)/).filter(Boolean);
 }
 
-/** Short status phrases from useChat step messages — rendered muted (same as "Writing...", "Validating structured output") */
+/** Short status phrases from useChat step messages — rendered muted */
 const REASONING_PHRASES = new Set([
   "Reading files.",
   "Explored.",
   "Grepped.",
   "Analyzed.",
+  "Planning next moves",
   "Planning next moves…",
   "Writing code…",
+  "Thinking…",
+  "Finalizing…",
   "Validating build on Mac…",
 ]);
 
@@ -52,31 +55,85 @@ function isStreamFileMessage(msg: ChatMessage): boolean {
   return typeof msg.id === "string" && msg.id.startsWith("stream-file-");
 }
 
-function StreamProgressBar({ messages }: { messages: ChatMessage[] }) {
-  const fileMessages = messages.filter(isStreamFileMessage);
-  if (fileMessages.length === 0) return null;
+function isStreamStepMessage(msg: ChatMessage): boolean {
+  if (typeof msg.id !== "string") return false;
+  return (
+    msg.id.startsWith("stream-progress-") ||
+    msg.id.startsWith("stream-phase-") ||
+    msg.id.startsWith("stream-file-")
+  );
+}
 
-  const lastFile = fileMessages[fileMessages.length - 1];
-  const countMatch = lastFile.content.match(/\(file (\d+)\)/);
-  const currentCount = countMatch ? parseInt(countMatch[1], 10) : fileMessages.length;
-  const fileNames = fileMessages.map((m) => {
-    const match = m.content.match(/^(?:Writing|Creating|Editing) (.+?)(?:\s*\(file \d+\))?$/);
-    return match ? match[1].trim() : null;
-  }).filter(Boolean) as string[];
-  const displayNames = fileNames.length > 0 ? fileNames.join(", ") : `${currentCount} ${currentCount === 1 ? "file" : "files"}`;
+function getStreamRunId(msg: ChatMessage): string | null {
+  if (typeof msg.id !== "string") return null;
+  const parts = msg.id.split("-");
+  if (parts[0] !== "stream" || !parts[2]) return null;
+  return parts[2];
+}
+
+/** Returns [startIndex, steps] for the most recent block of stream steps (same runId), or [length, []] if none. */
+function getStreamBlock(messages: ChatMessage[]): { start: number; steps: ChatMessage[] } {
+  let i = messages.length - 1;
+  while (i >= 0 && !isStreamStepMessage(messages[i])) i--;
+  if (i < 0) return { start: messages.length, steps: [] };
+  const runId = getStreamRunId(messages[i]);
+  if (!runId) return { start: messages.length, steps: [] };
+  let start = i;
+  while (start >= 0 && isStreamStepMessage(messages[start]) && getStreamRunId(messages[start]) === runId) start--;
+  start++;
+  return { start, steps: messages.slice(start, i + 1) };
+}
+
+/** Strip trailing " · Ns" for display in checklist. */
+function stepDisplayLabel(content: string): string {
+  return content.replace(/\s*·\s*\d+s?\s*$/i, "").replace(/\s*\(file \d+\)\s*$/i, "").trim() || content;
+}
+
+function StreamTodoCard({
+  steps,
+  isTyping,
+}: {
+  steps: ChatMessage[];
+  isTyping: boolean;
+}) {
+  const total = steps.length;
+  const completed = isTyping ? Math.max(0, total - 1) : total;
 
   return (
-    <div className="mb-1 rounded-lg border border-[var(--border-default)]/50 bg-[var(--background-secondary)]/50 px-3 py-2">
-      <div className="flex items-center justify-between gap-2 text-xs text-[var(--text-tertiary)]">
-        <span>Building app…</span>
-        <span className="font-mono truncate" title={displayNames}>{displayNames}</span>
+    <div className="mb-2 rounded-xl border border-[var(--border-default)]/60 bg-[var(--background-secondary)]/80 px-4 py-3 shadow-sm chat-accent-full-box-v2">
+      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-[var(--text-tertiary)]">
+        <span>Creating to-do list</span>
+        <span className="font-medium text-[var(--text-secondary)]">
+          {completed} of {total} tasks
+        </span>
       </div>
-      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-[var(--border-default)]/40">
-        <div
-          className="h-full rounded-full bg-[var(--button-primary-bg)] transition-all duration-300 ease-out"
-          style={{ width: "100%" }}
-        />
-      </div>
+      <ul className="space-y-1.5" aria-live="polite">
+        {steps.map((step, idx) => {
+          const isLast = idx === steps.length - 1;
+          const isCurrent = isLast && isTyping;
+          const label = stepDisplayLabel(step.content);
+          return (
+            <li
+              key={step.id}
+              className={
+                "flex items-center gap-2 text-sm transition-colors " +
+                (isCurrent
+                  ? "chat-step-current text-[var(--text-primary)]"
+                  : "text-[var(--text-secondary)]")
+              }
+            >
+              {isCurrent ? (
+                <span className="chat-step-dots inline-block w-5 text-left" aria-hidden />
+              ) : (
+                <span className="text-[var(--semantic-success)] shrink-0" aria-hidden>
+                  ✓
+                </span>
+              )}
+              <span>{label}</span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -251,7 +308,7 @@ export function ChatMessageList({
     if (streamStartedKeyRef.current === streamKey) return;
 
     // Validation status updates every second — show immediately so it doesn't retype on each tick
-    if (last.content.startsWith("Validating build on Mac…")) {
+    if (last.content.startsWith("Validating build on Mac…") || last.content.startsWith("Finalizing…")) {
       setStreamedContent(full);
       streamStartedKeyRef.current = streamKey;
       return;
@@ -311,11 +368,20 @@ export function ChatMessageList({
           </div>
         )}
         <div className="space-y-1">
-          {/* Consolidated progress bar for streaming file discovery */}
-          {messages.some(isStreamFileMessage) && (
-            <StreamProgressBar messages={messages} />
-          )}
-          {messages.map((msg, index) => {
+          {(() => {
+            const streamBlock = getStreamBlock(messages);
+            return messages.map((msg, index) => {
+              if (streamBlock.steps.length > 0 && index >= streamBlock.start && index < streamBlock.start + streamBlock.steps.length) {
+                if (index === streamBlock.start) {
+                  return (
+                    <div key={`stream-block-${streamBlock.start}`} className="animate-chat-step-in">
+                      <StreamTodoCard steps={streamBlock.steps} isTyping={isTyping} />
+                    </div>
+                  );
+                }
+                return null;
+              }
+
           const isStreamFile = isStreamFileMessage(msg);
           const isStreamingThis = msg.role === "assistant" && msg.id === streamingMessageId;
           const displayContent = isStreamingThis ? streamedContent : msg.content;
@@ -327,7 +393,6 @@ export function ChatMessageList({
           const isReasoning = isReasoningMessage(msg);
           const isAssistantSummary = msg.role === "assistant" && !isReasoning && !isStreamFile;
           const showAccent = isAssistantSummary;
-          // Show "Creating App.swift" (strip " (file N)" for display)
           const displayContentForMessage = isStreamFile
             ? (msg.content.replace(/\s*\(file \d+\)\s*$/, "").trim())
             : displayContent;
@@ -408,7 +473,8 @@ export function ChatMessageList({
             )}
           </div>
           );
-        })}
+            });
+          })()}
         </div>
         <div ref={bottomRef} />
       </div>

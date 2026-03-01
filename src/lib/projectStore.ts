@@ -88,3 +88,8 @@ export function setProjects(records: ProjectRecord[]): void {
     store.set(r.id, { ...r });
   }
 }
+
+/** Set a single project in the store (e.g. after loading from Firestore for GET /api/projects/[id]). */
+export function setProject(record: ProjectRecord): void {
+  store.set(record.id, { ...record });
+}

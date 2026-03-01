@@ -8,6 +8,7 @@ struct VibeTreeCompanionApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environmentObject(DeepLinkController.shared)
         }
     }
 }
@@ -89,5 +90,23 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         return [.banner, .sound, .badge]
+    }
+
+    // When user taps the notification, open the project's conversation (deep link).
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        let projectId = userInfo["projectId"] as? String
+        print("[DeepLink] Notification tapped, userInfo keys:", userInfo.keys.map { "\($0)" }, "projectId:", projectId ?? "nil")
+        if let projectId, !projectId.isEmpty {
+            Task { @MainActor in
+                DeepLinkController.shared.setPending(projectId: projectId)
+                print("[DeepLink] setPending(projectId: \(projectId))")
+            }
+        }
+        completionHandler()
     }
 }

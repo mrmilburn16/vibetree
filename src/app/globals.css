@@ -332,6 +332,26 @@ textarea:-webkit-autofill:active {
   animation: chat-step-dot-pulse 1.6s ease-in-out infinite;
 }
 
+/* Chat: current step in to-do list — subtle shimmer so active row stands out */
+@keyframes chat-step-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+.chat-step-current {
+  animation: chat-step-shimmer 2s ease-in-out infinite;
+}
+
+/* Chat: animated ellipsis on active step (three dots) */
+@keyframes chat-step-dots-blink {
+  0%, 20% { opacity: 0.2; }
+  40%, 100% { opacity: 1; }
+}
+.chat-step-dots::after {
+  content: "...";
+  animation: chat-step-dots-blink 1.2s ease-in-out infinite;
+  margin-left: 0.15rem;
+}
+
 /* Chat: per-word reveal when streaming — smooth fade, no bounce */
 @keyframes chat-word-in {
   from { opacity: 0; }

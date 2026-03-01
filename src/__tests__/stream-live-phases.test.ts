@@ -105,9 +105,9 @@ describe("Web: shows actual code files and streaming content in real time", () =
     expect(content).toMatch(/streamedContent|displayContent.*streamingThis \? streamedContent/);
   });
 
-  it("StreamProgressBar shows actual file names (e.g. App.swift) when streaming", () => {
+  it("StreamTodoCard shows step list with file names (e.g. App.swift) when streaming", () => {
     const content = fs.readFileSync(CHAT_MESSAGE_LIST, "utf8");
-    expect(content).toMatch(/StreamProgressBar|Building app|fileNames|displayNames|Creating/);
+    expect(content).toMatch(/StreamTodoCard|getStreamBlock|Creating.*App\.swift|stepDisplayLabel/);
   });
 
   it("ChatMessageList does not show editedFiles list after Done (elapsedMs set) so files are not duplicated", () => {
@@ -118,14 +118,12 @@ describe("Web: shows actual code files and streaming content in real time", () =
 });
 
 describe("Web and iOS: Cursor-style stream behavior (both platforms)", () => {
-  it("Web: Cursor-style phase labels (Connecting…, Validating output…, Saving files…) and step animation", () => {
+  it("Web: Cursor-style phase labels (Planning next moves…, Thinking…, Finalizing, Done) and step animation", () => {
     const useChat = fs.readFileSync(USE_CHAT, "utf8");
-    expect(useChat).toMatch(/Connecting…|starting_request.*Connecting/);
-    expect(useChat).toMatch(/Validating output…|validating_structured_output.*Validating/);
-    expect(useChat).toMatch(/Saving files…/);
+    expect(useChat).toMatch(/Planning next moves|starting_request|Thinking|Finalizing|done_preview_updating.*Done/);
     const chatList = fs.readFileSync(CHAT_MESSAGE_LIST, "utf8");
     expect(chatList).toContain("animate-chat-step-in");
-    expect(chatList).toMatch(/isStepLine|stepStagger/);
+    expect(chatList).toMatch(/StreamTodoCard|getStreamBlock|isStepLine|stepStagger/);
   });
 
   it("Web: Cursor-style step dot (accent + pulse) and staggered step entrance", () => {

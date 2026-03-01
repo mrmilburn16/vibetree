@@ -43,10 +43,17 @@ final class ChatService: ObservableObject {
     @Published var isAwaitingRecovery = false
     /// So we only load from server once per editor session.
     private var hasLoadedHistory = false
+    /// Poll for chat updates so messages sent from the web appear without leaving the editor.
+    private var chatPollTimer: Timer?
 
     init(projectId: String, projectName: String = "Untitled app") {
         self.projectId = projectId
         self.initialProjectName = projectName
+    }
+
+    deinit {
+        chatPollTimer?.invalidate()
+        chatPollTimer = nil
     }
 
     /// Load conversation history from server so web and iOS stay in sync. Call from view .onAppear.
@@ -65,6 +72,30 @@ final class ChatService: ObservableObject {
         } catch {
             hasLoadedHistory = false
             logger.error("loadHistory failed: \(error.localizedDescription)")
+        }
+        startChatPolling()
+    }
+
+    /// Poll for chat updates so messages sent from the web appear in real time.
+    private func startChatPolling() {
+        guard chatPollTimer == nil else { return }
+        chatPollTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                await self?.refetchChatIfNeeded()
+            }
+        }
+        RunLoop.main.add(chatPollTimer!, forMode: .common)
+    }
+
+    private func refetchChatIfNeeded() async {
+        guard !isStreaming else { return }
+        do {
+            let server = try await APIService.shared.fetchChat(projectId: projectId)
+            if server.count > messages.count {
+                messages = server
+            }
+        } catch {
+            // Ignore poll errors (e.g. network)
         }
     }
 
@@ -110,6 +141,8 @@ final class ChatService: ObservableObject {
 
         logger.info("sendMessage: projectId=\(self.projectId) model=\(model) type=\(projectType.rawValue)")
         messages.append(.userMessage(trimmed))
+        // Persist user message immediately so the web app (and other devices) see it without waiting for the stream to complete.
+        persistChat()
         isStreaming = true
         buildStatus = .building
         error = nil
