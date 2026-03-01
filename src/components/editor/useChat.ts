@@ -164,7 +164,8 @@ export function isUntitledName(name: string | undefined | null): boolean {
 }
 
 function getStableMessagesForPersistence(messages: ChatMessage[]): ChatMessage[] {
-  return messages.filter((m) => {
+  const out = messages.filter((m) => {
+    if (m.id.startsWith("stream-phase-") || m.id.startsWith("stream-file-")) return true;
     if (m.id.startsWith("stream-progress-")) return false;
     const c = (m.content ?? "").trim();
     const looksLikeLiveProgress =
@@ -178,6 +179,10 @@ function getStableMessagesForPersistence(messages: ChatMessage[]): ChatMessage[]
     if (m.role === "assistant" && looksLikeLiveProgress && !hasMeta) return false;
     return true;
   });
+  const streamPhase = out.filter((m) => m.id.startsWith("stream-phase-")).length;
+  const streamFile = out.filter((m) => m.id.startsWith("stream-file-")).length;
+  console.log("[getStableMessagesForPersistence] total in:", messages.length, "| total out:", out.length, "| stream-phase:", streamPhase, "| stream-file:", streamFile);
+  return out;
 }
 
 function formatDurationShort(totalSeconds: number): string {
@@ -275,8 +280,9 @@ export function useChat(
   }
 ) {
   const { onError, projectName, onProjectRenamed, onMessageSuccess, onAppBuilt, onProBuildComplete } = options ?? {};
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadChatMessagesFromLocalStorage(projectId) ?? []);
   const [isTyping, setIsTyping] = useState(false);
+  const [isHydrating, setIsHydrating] = useState(true);
   const [isValidating, setIsValidating] = useState(false);
   const [buildStatus, setBuildStatus] = useState<"idle" | "building" | "live" | "failed">("idle");
   const [input, setInput] = useState("");
@@ -299,6 +305,7 @@ export function useChat(
   const serverPersistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const isTypingRef = useRef(false);
+  const STREAM_IN_PROGRESS_KEY = "streamInProgress";
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -320,14 +327,19 @@ export function useChat(
       if (serverPersistTimeoutRef.current) clearTimeout(serverPersistTimeoutRef.current);
       serverPersistTimeoutRef.current = null;
       setCanSend(true);
+      isTypingRef.current = false;
       setIsTyping(false);
       setIsValidating(false);
+      if (typeof window !== "undefined") localStorage.removeItem(STREAM_IN_PROGRESS_KEY);
     };
   }, []);
 
   // Persist chat on pagehide/refresh even if localStorage is full.
   useEffect(() => {
-    const flush = () => persistChatToServer(projectId, messagesRef.current);
+    const flush = () => {
+      persistChatToServer(projectId, messagesRef.current);
+      if (typeof window !== "undefined") localStorage.removeItem(STREAM_IN_PROGRESS_KEY);
+    };
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") flush();
     };
@@ -364,22 +376,38 @@ export function useChat(
   }, []);
 
   // Restore chat history when returning to the editor for the same project.
-  // Prefer server when it has messages so web and iOS stay in sync; else fall back to localStorage.
+  // Show localStorage immediately (already in initial state); fetch from server and replace when done.
   useEffect(() => {
     hydratedRef.current = false;
+    setIsHydrating(true);
     let cancelled = false;
-    setMessages([]);
+    setMessages(loadChatMessagesFromLocalStorage(projectId) ?? []);
 
     fetch(`/api/projects/${projectId}/chat`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (cancelled) return;
         const serverMsgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
-        if (serverMsgs.length > 0) {
-          setMessages(serverMsgs);
-          setBuildStatus("live");
-          saveChatMessagesToLocalStorage(projectId, serverMsgs);
-        } else {
+        console.log("[hydration] streamInProgress:", localStorage.getItem(STREAM_IN_PROGRESS_KEY), "| serverMsgs.length:", serverMsgs.length);
+        const streamInProgress = typeof window !== "undefined" ? localStorage.getItem(STREAM_IN_PROGRESS_KEY) : null;
+        if (!streamInProgress) {
+          if (serverMsgs.length > 0) {
+            setMessages(serverMsgs);
+            setBuildStatus("live");
+            saveChatMessagesToLocalStorage(projectId, serverMsgs);
+          } else {
+            const local = loadChatMessagesFromLocalStorage(projectId);
+            if (local && local.length > 0) {
+              setMessages(local);
+              setBuildStatus("live");
+            }
+          }
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        const streamInProgress = typeof window !== "undefined" ? localStorage.getItem(STREAM_IN_PROGRESS_KEY) : null;
+        if (!streamInProgress) {
           const local = loadChatMessagesFromLocalStorage(projectId);
           if (local && local.length > 0) {
             setMessages(local);
@@ -387,16 +415,11 @@ export function useChat(
           }
         }
       })
-      .catch(() => {
-        if (cancelled) return;
-        const local = loadChatMessagesFromLocalStorage(projectId);
-        if (local && local.length > 0) {
-          setMessages(local);
-          setBuildStatus("live");
-        }
-      })
       .finally(() => {
-        if (!cancelled) hydratedRef.current = true;
+        if (!cancelled) {
+          hydratedRef.current = true;
+          setIsHydrating(false);
+        }
       });
 
     return () => {
@@ -409,15 +432,43 @@ export function useChat(
   useEffect(() => {
     if (!projectId) return;
     const intervalId = setInterval(() => {
+      console.log("[poll] isTypingRef:", isTypingRef.current, "| localStorage:", localStorage.getItem("streamInProgress"));
       if (!projectId || isTypingRef.current) return;
       fetch(`/api/projects/${projectId}/chat`, { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           const serverMsgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
-          if (serverMsgs.length > messagesRef.current.length) {
-            setMessages(serverMsgs);
-            saveChatMessagesToLocalStorage(projectId, serverMsgs);
+          const localLen = messagesRef.current.length;
+          console.log("[poll] serverMsgs.length:", serverMsgs.length, "| messagesRef.current.length:", localLen);
+          if (serverMsgs.length <= localLen) return;
+          const local = messagesRef.current;
+          const serverIds = new Set(serverMsgs.map((m) => m.id));
+          const localOnlyStreamSteps = local.filter(
+            (m) =>
+              (m.id.startsWith("stream-phase-") || m.id.startsWith("stream-file-")) && !serverIds.has(m.id)
+          );
+          console.log("[poll] localOnlyStreamSteps found:", localOnlyStreamSteps.length);
+          let merged: ChatMessage[];
+          if (localOnlyStreamSteps.length === 0) {
+            merged = serverMsgs;
+          } else {
+            const orderMap = new Map<string, number>();
+            local.forEach((m, i) => orderMap.set(m.id, i));
+            const serverWithOrder = serverMsgs.map((m, i) => ({
+              m,
+              order: orderMap.get(m.id) ?? 1e6 + i,
+            }));
+            const stepsWithOrder = localOnlyStreamSteps.map((m) => ({
+              m,
+              order: local.indexOf(m),
+            }));
+            merged = [...serverWithOrder, ...stepsWithOrder]
+              .sort((a, b) => a.order - b.order)
+              .map((x) => x.m);
           }
+          console.log("[poll] merged ids:", merged.map((m) => m.id));
+          setMessages(merged);
+          saveChatMessagesToLocalStorage(projectId, merged);
         })
         .catch(() => {});
     }, POLL_INTERVAL_MS);
@@ -476,6 +527,7 @@ export function useChat(
             editedFiles: mock.editedFiles,
           },
         ]);
+        isTypingRef.current = false;
         setIsTyping(false);
         setCanSend(true);
         setBuildStatus("live");
@@ -488,8 +540,10 @@ export function useChat(
   const processQueue = useCallback(() => {
     if (queueRef.current.length === 0) {
       processingRef.current = false;
+      isTypingRef.current = false;
       setIsTyping(false);
       setBuildStatus((s) => (s === "building" ? "live" : s));
+      if (typeof window !== "undefined") localStorage.removeItem(STREAM_IN_PROGRESS_KEY);
       return;
     }
     const item = queueRef.current.shift()!;
@@ -728,9 +782,8 @@ export function useChat(
                   };
                   setMessages((prev) => {
                     const idx = prev.findIndex((m) => m.id === progressMessageId);
-                    if (idx === -1) return [...prev, phaseMsg];
-                    const next = prev.slice();
-                    next.splice(idx, 0, phaseMsg);
+                    const next = idx === -1 ? [...prev, phaseMsg] : (() => { const n = prev.slice(); n.splice(idx, 0, phaseMsg); return n; })();
+                    persistChatToServer(projectId, next);
                     return next;
                   });
                 }
@@ -748,13 +801,11 @@ export function useChat(
                 };
                 setMessages((prev) => {
                   const idx = prev.findIndex((m) => m.id === progressMessageId);
-                  if (idx === -1) return [...prev, fileMsg];
-                  const next = prev.slice();
-                  next.splice(idx, 0, fileMsg);
-                  // Update progress line immediately so user sees the new file name
+                  const next = idx === -1 ? [...prev, fileMsg] : (() => { const n = prev.slice(); n.splice(idx, 0, fileMsg); return n; })();
                   const progressIdx = next.findIndex((m) => m.id === progressMessageId);
                   if (progressIdx !== -1)
                     next[progressIdx] = { ...next[progressIdx], content: renderProgressLine() };
+                  persistChatToServer(projectId, next);
                   return next;
                 });
               }
@@ -902,25 +953,24 @@ export function useChat(
           if (isProBuild && onProBuildComplete) {
             deferLive = true;
             setIsValidating(true);
-            // Remove progress + stream steps (phase/file), show single validation line.
-            setMessages((prev) => [
-              ...prev.filter(
-                (m) =>
-                  m.id !== progressMessageId &&
-                  !m.id.startsWith("stream-phase-") &&
-                  !m.id.startsWith("stream-file-")
-              ),
-              {
-                id: validateMessageId,
-                role: "assistant",
-                content: `Finalizing… Waiting for runner… (${formatDurationShort(0)})`,
+            // Remove progress (spinner) only; keep stream-phase/stream-file steps, append validate line.
+            setMessages((prev) => {
+              const next = [
+                ...prev.filter((m) => m.id !== progressMessageId),
+                {
+                  id: validateMessageId,
+                  role: "assistant" as const,
+                  content: `Finalizing… Waiting for runner… (${formatDurationShort(0)})`,
                 editedFiles,
                 ...(usage && { usage }),
                 ...(estimatedCostUsd !== undefined && { estimatedCostUsd }),
                 elapsedMs: generationElapsedMs,
                 createdAt: Date.now(),
               },
-            ]);
+              ];
+              console.log("[build complete Pro] messages ids:", next.map((m) => m.id));
+              return next;
+            });
             const progressBase = "Finalizing… Waiting for runner…";
             validateTickRef.current = {
               messageId: validateMessageId,
@@ -993,13 +1043,16 @@ export function useChat(
                     ? `${content}\n\n${validationLine}`
                     : validationLine;
                 const totalElapsedMs = Date.now() - localStartedAt;
-                setMessages((prev) =>
-                  prev.map((m) =>
+                setMessages((prev) => {
+                  const next = prev.map((m) =>
                     m.id === validateMessageId
                       ? { ...m, content: finalContent, editedFiles, ...(usage && { usage }), ...(estimatedCostUsd !== undefined && { estimatedCostUsd }), elapsedMs: totalElapsedMs, createdAt: Date.now() }
                       : m
-                  )
-                );
+                  );
+                  persistChatToServer(projectId, next);
+                  console.log("[build complete after validation] messages ids:", next.map((m) => m.id));
+                  return next;
+                });
                 setBuildStatus(result.status === "succeeded" ? (queueRef.current.length > 0 ? "building" : "live") : "failed");
                 if (result.status === "failed") onError?.(result.message ?? result.error ?? "Build failed");
                 if (result.status === "succeeded") onAppBuilt?.();
@@ -1042,10 +1095,11 @@ export function useChat(
                 setBuildStatus("failed");
               });
           } else {
-            setMessages((prev) => [
-              ...prev.filter((m) => m.id !== progressMessageId),
-              realMessage,
-            ]);
+            setMessages((prev) => {
+              const next = [...prev.filter((m) => m.id !== progressMessageId), realMessage];
+              console.log("[build complete non-Pro] messages ids:", next.map((m) => m.id));
+              return next;
+            });
             if (editedFiles.length > 0) onAppBuilt?.();
           }
         }
@@ -1092,7 +1146,9 @@ export function useChat(
         queueRef.current.push({ text: trimmed, model, projectType });
         if (processingRef.current) return;
         processingRef.current = true;
+        isTypingRef.current = true;
         setIsTyping(true);
+        if (typeof window !== "undefined") localStorage.setItem(STREAM_IN_PROGRESS_KEY, "true");
         processQueue();
         return;
       }
@@ -1102,6 +1158,7 @@ export function useChat(
       timeoutIdsRef.current = [];
       abortControllerRef.current?.abort();
       setCanSend(false);
+      isTypingRef.current = true;
       setIsTyping(true);
       runClientMock(trimmed);
     },
@@ -1112,6 +1169,7 @@ export function useChat(
     messages,
     isTyping,
     isValidating,
+    isHydrating,
     sendMessage,
     cancelCurrent,
     buildStatus,

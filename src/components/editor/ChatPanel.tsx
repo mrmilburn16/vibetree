@@ -201,6 +201,7 @@ export function ChatPanel({
     setInput,
     canSend,
     maxMessageLength,
+    isHydrating,
   } = useChat(projectId, {
     onError,
     projectName,
@@ -335,7 +336,7 @@ export function ChatPanel({
     [canSend, blockSendUntilPreflight, hasCreditsForMessage, deduct, onOutOfCredits, sendMessage, llm, projectType]
   );
 
-  const showGuidedWizard = guidedMode && messages.length === 0 && !isTyping;
+  const showGuidedWizard = guidedMode && messages.length === 0 && !isTyping && !isHydrating;
 
   const canSendWithCredits = canSend && hasCreditsForMessage && !blockSendUntilPreflight;
   const showCharCount = input.length > 0 && input.length >= 0.8 * maxMessageLength;
@@ -484,6 +485,7 @@ export function ChatPanel({
         <ChatMessageList
           messages={messages}
           isTyping={isTyping}
+          isHydrating={isHydrating}
           buildStatus={buildStatus}
           projectId={projectId}
           onEnterGuidedMode={

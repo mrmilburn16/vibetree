@@ -71,17 +71,38 @@ function getStreamRunId(msg: ChatMessage): string | null {
   return parts[2];
 }
 
-/** Returns [startIndex, steps] for the most recent block of stream steps (same runId), or [length, []] if none. */
-function getStreamBlock(messages: ChatMessage[]): { start: number; steps: ChatMessage[] } {
-  let i = messages.length - 1;
-  while (i >= 0 && !isStreamStepMessage(messages[i])) i--;
-  if (i < 0) return { start: messages.length, steps: [] };
-  const runId = getStreamRunId(messages[i]);
-  if (!runId) return { start: messages.length, steps: [] };
-  let start = i;
-  while (start >= 0 && isStreamStepMessage(messages[start]) && getStreamRunId(messages[start]) === runId) start--;
-  start++;
-  return { start, steps: messages.slice(start, i + 1) };
+type StreamBlock = { start: number; steps: ChatMessage[]; runId: string; isActive: boolean };
+
+/** Returns all stream blocks grouped by runId. Only the block containing the last stream-step message has isActive: true. */
+function getAllStreamBlocks(messages: ChatMessage[]): StreamBlock[] {
+  const blocks: StreamBlock[] = [];
+  let i = 0;
+  while (i < messages.length) {
+    const msg = messages[i];
+    if (!isStreamStepMessage(msg)) {
+      i++;
+      continue;
+    }
+    const runId = getStreamRunId(msg);
+    if (!runId) {
+      i++;
+      continue;
+    }
+    const start = i;
+    const steps: ChatMessage[] = [];
+    while (i < messages.length && isStreamStepMessage(messages[i]) && getStreamRunId(messages[i]) === runId) {
+      steps.push(messages[i]);
+      i++;
+    }
+    blocks.push({ start, steps, runId, isActive: false });
+  }
+  let lastStreamIndex = messages.length - 1;
+  while (lastStreamIndex >= 0 && !isStreamStepMessage(messages[lastStreamIndex])) lastStreamIndex--;
+  if (lastStreamIndex >= 0) {
+    const activeBlock = blocks.find((b) => lastStreamIndex >= b.start && lastStreamIndex < b.start + b.steps.length);
+    if (activeBlock) activeBlock.isActive = true;
+  }
+  return blocks;
 }
 
 /** Strip trailing " · Ns" for display in checklist. */
@@ -153,7 +174,7 @@ function StreamTodoCard({
           {isOnStatusAbove && <span className="chat-step-dots ml-0.5 inline-block w-4" aria-hidden />}
         </p>
       )}
-      <div className="rounded-lg border border-[var(--border-default)]/50 bg-[var(--background-secondary)]/40 px-3 py-2">
+      <div className="rounded-lg border border-[var(--border-default)]/70 bg-[var(--background-secondary)]/60 px-3 py-2">
         <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-[var(--text-tertiary)]">
           <span>To-do</span>
           <span className="font-medium text-[var(--text-secondary)]">
@@ -238,7 +259,7 @@ function BuildFeedback({ projectId }: { projectId?: string }) {
   }
 
   return (
-    <div className="mt-2 flex items-center gap-2">
+    <div className="mt-2 flex items-center justify-center gap-2">
       <span className="text-xs text-[var(--text-tertiary)]">How did the build turn out?</span>
       <button
         type="button"
@@ -266,9 +287,11 @@ export function ChatMessageList({
   onEnterGuidedMode,
   buildStatus,
   projectId,
+  isHydrating = false,
 }: {
   messages: ChatMessage[];
   isTyping: boolean;
+  isHydrating?: boolean;
   onEnterGuidedMode?: () => void;
   buildStatus?: string;
   projectId?: string;
@@ -363,6 +386,7 @@ export function ChatMessageList({
 
   // Stream assistant messages that have content (word-by-word)
   const streamStartedKeyRef = useRef<string | null>(null);
+  const isInitialMountRef = useRef(true);
 
   useEffect(() => {
     const last = messages[messages.length - 1];
@@ -379,6 +403,14 @@ export function ChatMessageList({
 
     if (streamedContent === full) return;
     if (streamStartedKeyRef.current === streamKey) return;
+
+    // On reload, messages are restored — show last message immediately, no animation
+    if (isInitialMountRef.current) {
+      setStreamedContent(full);
+      streamStartedKeyRef.current = streamKey;
+      isInitialMountRef.current = false;
+      return;
+    }
 
     // Validation status updates every second — show immediately so it doesn't retype on each tick
     if (last.content.startsWith("Validating build on Mac…") || last.content.startsWith("Finalizing…")) {
@@ -420,7 +452,18 @@ export function ChatMessageList({
         onScroll={updateAutoScrollFlag}
         className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5"
       >
-        {messages.length === 0 && !isTyping && (
+        {messages.length === 0 && !isTyping && isHydrating && (
+          <div className="flex flex-1 flex-col justify-center py-12 animate-fade-in" style={{ animationDelay: "50ms" }} aria-busy="true" aria-label="Loading chat">
+            <div className="mx-auto w-full max-w-md space-y-3 px-2">
+              <div className="h-4 w-3/4 max-w-[14rem] rounded bg-[var(--background-tertiary)] animate-pulse" />
+              <div className="h-3 w-full rounded bg-[var(--background-tertiary)]/80 animate-pulse" />
+              <div className="h-3 w-4/5 rounded bg-[var(--background-tertiary)]/80 animate-pulse" />
+              <div className="mt-6 h-4 w-2/3 max-w-[10rem] rounded bg-[var(--background-tertiary)]/60 animate-pulse" />
+              <div className="h-3 w-full rounded bg-[var(--background-tertiary)]/60 animate-pulse" />
+            </div>
+          </div>
+        )}
+        {messages.length === 0 && !isTyping && !isHydrating && (
           <div className="flex flex-1 flex-col items-center justify-center py-12 text-center animate-fade-in" style={{ animationDelay: "50ms" }}>
             <h2 className="text-xl font-semibold text-[var(--text-primary)] tracking-tight">
               What do you want to build?
@@ -442,13 +485,14 @@ export function ChatMessageList({
         )}
         <div className="space-y-1">
           {(() => {
-            const streamBlock = getStreamBlock(messages);
+            const allBlocks = getAllStreamBlocks(messages);
             return messages.map((msg, index) => {
-              if (streamBlock.steps.length > 0 && index >= streamBlock.start && index < streamBlock.start + streamBlock.steps.length) {
-                if (index === streamBlock.start) {
+              const block = allBlocks.find((b) => index >= b.start && index < b.start + b.steps.length);
+              if (block) {
+                if (index === block.start) {
                   return (
-                    <div key={`stream-block-${streamBlock.start}`} className="animate-chat-step-in">
-                      <StreamTodoCard steps={streamBlock.steps} isTyping={isTyping} />
+                    <div key={`stream-block-${block.runId}`} className="animate-chat-step-in">
+                      <StreamTodoCard steps={block.steps} isTyping={block.isActive && isTyping} />
                     </div>
                   );
                 }
