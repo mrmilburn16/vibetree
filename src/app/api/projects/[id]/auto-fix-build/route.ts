@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import {
   getBuildJob,
   createBuildJob,
@@ -5,6 +6,7 @@ import {
   appendBuildJobLogs,
   setBuildJobAutoFixInProgress,
 } from "@/lib/buildJobs";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { preBuildLint } from "@/lib/preBuildLint";
 import Anthropic from "@anthropic-ai/sdk";
@@ -161,6 +163,8 @@ export async function POST(
 ) {
   const { id: projectId } = await params;
   if (!projectId) return Response.json({ error: "Project ID required" }, { status: 400 });
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
 
   const body = await request.json().catch(() => ({}));
   const failedJobId = typeof body?.failedJobId === "string" ? body.failedJobId : "";

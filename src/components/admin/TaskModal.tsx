@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { Button, DropdownSelect } from "@/components/ui";
+import { Button, DropdownSelect, DatePickerInput } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 import type { Task } from "@/lib/adminCalendarStore";
-import { Trash2, CheckCircle2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
 const PRIORITY_OPTIONS: SelectOption[] = [
   { value: "1", label: "P1: Critical" },
@@ -55,6 +55,7 @@ export function TaskModal({ isOpen, onClose, task, onSave, onDelete, prefillTime
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("3");
   const [minutes, setMinutes] = useState(30);
+  const [durationInput, setDurationInput] = useState("30");
   const [dueDate, setDueDate] = useState("");
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("todo");
@@ -65,6 +66,7 @@ export function TaskModal({ isOpen, onClose, task, onSave, onDelete, prefillTime
       setDescription(task.description || "");
       setPriority(String(task.priority));
       setMinutes(task.estimatedMinutes);
+      setDurationInput(String(task.estimatedMinutes));
       setDueDate(task.dueDate || "");
       setCategory(task.category || "");
       setStatus(task.status);
@@ -73,11 +75,14 @@ export function TaskModal({ isOpen, onClose, task, onSave, onDelete, prefillTime
       setDescription("");
       setPriority("3");
       setMinutes(30);
+      setDurationInput("30");
       setDueDate("");
       setCategory("");
       setStatus("todo");
     }
   }, [task, isOpen]);
+
+  const getDurationMinutes = () => Math.max(15, parseInt(durationInput, 10) || 15);
 
   const handleSave = () => {
     if (!title.trim()) return;
@@ -85,19 +90,20 @@ export function TaskModal({ isOpen, onClose, task, onSave, onDelete, prefillTime
     let scheduledStart: string | undefined;
     let scheduledEnd: string | undefined;
 
+    const mins = getDurationMinutes();
     if (prefillTime && !task) {
       scheduledStart = `${prefillTime.date}T${prefillTime.time}:00`;
       const startMins = parseInt(prefillTime.time.split(":")[0]) * 60 + parseInt(prefillTime.time.split(":")[1]);
-      const endMins = startMins + minutes;
+      const endMins = startMins + mins;
       const hh = String(Math.floor(endMins / 60)).padStart(2, "0");
       const mm = String(endMins % 60).padStart(2, "0");
       scheduledEnd = `${prefillTime.date}T${hh}:${mm}:00`;
     } else if (task) {
       scheduledStart = task.scheduledStart;
       scheduledEnd = task.scheduledEnd;
-      if (scheduledStart && task.estimatedMinutes !== minutes) {
+      if (scheduledStart && task.estimatedMinutes !== mins) {
         const startMins = parseInt(scheduledStart.slice(11, 13)) * 60 + parseInt(scheduledStart.slice(14, 16));
-        const endMins = startMins + minutes;
+        const endMins = startMins + mins;
         const hh = String(Math.floor(endMins / 60)).padStart(2, "0");
         const mm = String(endMins % 60).padStart(2, "0");
         scheduledEnd = `${scheduledStart.slice(0, 10)}T${hh}:${mm}:00`;
@@ -108,13 +114,22 @@ export function TaskModal({ isOpen, onClose, task, onSave, onDelete, prefillTime
       title: title.trim(),
       description: description.trim() || undefined,
       priority: parseInt(priority),
-      estimatedMinutes: minutes,
+      estimatedMinutes: mins,
       dueDate: dueDate || undefined,
       category: category || undefined,
       status,
       scheduledStart,
       scheduledEnd,
     });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter") return;
+    // In description textarea, Enter inserts newline; don't save
+    const target = e.target as HTMLElement;
+    if (target.tagName === "TEXTAREA") return;
+    e.preventDefault();
+    if (title.trim()) handleSave();
   };
 
   return (
@@ -130,25 +145,13 @@ export function TaskModal({ isOpen, onClose, task, onSave, onDelete, prefillTime
               Delete
             </Button>
           )}
-          {task && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                onSave({ title, priority: parseInt(priority), estimatedMinutes: minutes, status: "done" });
-              }}
-              className="gap-1.5 text-[var(--semantic-success)]"
-            >
-              <CheckCircle2 className="h-4 w-4" aria-hidden />
-              Done
-            </Button>
-          )}
           <div className="flex-1" />
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSave} disabled={!title.trim()}>Save</Button>
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4" onKeyDown={handleKeyDown}>
         <div>
           <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Title</label>
           <input
@@ -181,8 +184,13 @@ export function TaskModal({ isOpen, onClose, task, onSave, onDelete, prefillTime
             <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Duration (min)</label>
             <input
               type="number"
-              value={minutes}
-              onChange={(e) => setMinutes(Math.max(15, parseInt(e.target.value) || 15))}
+              value={durationInput}
+              onChange={(e) => setDurationInput(e.target.value)}
+              onBlur={() => {
+                const n = getDurationMinutes();
+                setMinutes(n);
+                setDurationInput(String(n));
+              }}
               min={15}
               step={15}
               className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--button-primary-bg)] focus:outline-none"
@@ -197,11 +205,11 @@ export function TaskModal({ isOpen, onClose, task, onSave, onDelete, prefillTime
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Due date</label>
-            <input
-              type="date"
+            <DatePickerInput
               value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--button-primary-bg)] focus:outline-none"
+              onChange={setDueDate}
+              placeholder="mm/dd/yyyy"
+              aria-label="Due date"
             />
           </div>
         </div>

@@ -8,9 +8,22 @@
     "status": "todo",
     "category": "dev",
     "createdAt": "2026-02-23T12:12:48.396Z",
-    "updatedAt": "2026-02-24T06:31:36.444Z",
+    "updatedAt": "2026-03-02T13:22:16.006Z",
     "scheduledStart": "2026-02-23T09:00:00",
     "scheduledEnd": "2026-02-23T11:00:00",
+    "aiPrioritized": true,
+    "aiEstimated": true
+  },
+  {
+    "id": "task_1772457458791_gg4u7",
+    "title": "Do shipping of the 3 items",
+    "priority": 2,
+    "estimatedMinutes": 45,
+    "status": "todo",
+    "category": "other",
+    "createdAt": "2026-03-02T13:17:38.791Z",
+    "updatedAt": "2026-03-02T13:22:16.007Z",
+    "dueDate": "2026-03-02",
     "aiPrioritized": true,
     "aiEstimated": true
   }

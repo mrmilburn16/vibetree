@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
+import { setProject, type ProjectRecord } from "@/lib/projectStore";
 import { getProjectFiles, getProjectFilePaths } from "@/lib/projectFileStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
+
+function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
+  return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
+}
 
 /**
  * GET /api/projects/[id]/export
@@ -14,7 +20,9 @@ export async function GET(
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
-
+  const auth = await requireProjectAuth(request, id);
+  if (auth instanceof NextResponse) return auth;
+  setProject(toRecord(auth.project));
   const url = new URL(request.url);
   const projectType = url.searchParams.get("projectType") === "pro" ? "pro" : "standard";
 

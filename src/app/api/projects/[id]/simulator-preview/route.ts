@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSimulatorFrame } from "@/lib/simulatorFrameStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 /**
  * GET /api/projects/[id]/simulator-preview
@@ -12,6 +13,8 @@ export async function GET(
 ) {
   const { id: projectId } = await params;
   if (!projectId) return NextResponse.json({ error: "Missing project id" }, { status: 400 });
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
 
   const { searchParams } = new URL(request.url);
   const updatedAfter = searchParams.get("updatedAfter");

@@ -1,7 +1,13 @@
-import { getProject, ensureProject } from "@/lib/projectStore";
+import { NextResponse } from "next/server";
+import { getProject, setProject, type ProjectRecord } from "@/lib/projectStore";
 import { getProjectFiles, getProjectFilePaths, setProjectFiles } from "@/lib/projectFileStore";
 import { createBuildJob } from "@/lib/buildJobs";
 import { isRunnerOnline } from "@/lib/runnerStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
+
+function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
+  return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
+}
 
 function isValidBundleId(value: string): boolean {
   return /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/i.test(value);
@@ -19,7 +25,9 @@ export async function POST(
   if (!projectId) {
     return Response.json({ error: "Project ID required" }, { status: 400 });
   }
-
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
+  setProject(toRecord(auth.project));
   const body = await request.json().catch(() => ({}));
   const providedName =
     typeof body?.projectName === "string" ? body.projectName : "";
@@ -38,9 +46,7 @@ export async function POST(
       )
     : [];
 
-  const project =
-    getProject(projectId) ??
-    ensureProject(projectId, providedName || "Untitled app");
+  const project = getProject(projectId)!;
 
   const candidateBundleId = (
     providedBundleId ||

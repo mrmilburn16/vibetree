@@ -3,7 +3,9 @@
 import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { Button, Input, Card } from "@/components/ui";
+import { getFirebaseAuth } from "@/lib/firebaseClient";
 
 type BackgroundVariant = 1 | 2 | 3;
 
@@ -58,20 +60,40 @@ export default function SignInPage() {
     setError("");
     setLoading(true);
     try {
-      // Mock: accept any email/password and create session
-      await new Promise((r) => setTimeout(r, 5000));
       if (password.length < 1) {
         setError("Please enter your password.");
         setLoading(false);
         return;
       }
-      if (typeof window !== "undefined") {
-        localStorage.setItem("vibetree-session", JSON.stringify({ email, at: Date.now() }));
+      const auth = getFirebaseAuth();
+      if (!auth) {
+        setError("Sign-in is not configured. Set Firebase env vars.");
+        setLoading(false);
+        return;
+      }
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
+      const idToken = await userCred.user.getIdToken();
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError((data as { error?: string }).error ?? "Sign-in failed.");
+        setLoading(false);
+        return;
       }
       router.push("/dashboard");
       router.refresh();
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err: unknown) {
+      const message = err && typeof err === "object" && "code" in err
+        ? (err as { code?: string }).code === "auth/invalid-credential" || (err as { code?: string }).code === "auth/wrong-password"
+          ? "Invalid email or password."
+          : (err as { message?: string }).message ?? "Something went wrong. Please try again."
+        : "Something went wrong. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
     }

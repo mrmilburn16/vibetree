@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProjectIPA } from "@/lib/ipaStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
+  const auth = await requireProjectAuth(req, projectId);
+  if (auth instanceof NextResponse) return auth;
   const ipa = getProjectIPA(projectId);
 
   if (!ipa) {

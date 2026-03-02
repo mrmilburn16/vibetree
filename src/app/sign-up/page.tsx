@@ -3,7 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import { Button, Input, Card } from "@/components/ui";
+import { getFirebaseAuth } from "@/lib/firebaseClient";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -17,19 +19,40 @@ export default function SignUpPage() {
     setError("");
     setLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 600));
       if (password.length < 6) {
         setError("Password must be at least 6 characters.");
         setLoading(false);
         return;
       }
-      if (typeof window !== "undefined") {
-        localStorage.setItem("vibetree-session", JSON.stringify({ email, at: Date.now() }));
+      const auth = getFirebaseAuth();
+      if (!auth) {
+        setError("Sign-up is not configured. Set Firebase env vars.");
+        setLoading(false);
+        return;
+      }
+      const userCred = await createUserWithEmailAndPassword(auth, email, password);
+      const idToken = await userCred.user.getIdToken();
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError((data as { error?: string }).error ?? "Sign-up failed.");
+        setLoading(false);
+        return;
       }
       router.push("/dashboard");
       router.refresh();
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err: unknown) {
+      const message = err && typeof err === "object" && "code" in err
+        ? (err as { code?: string }).code === "auth/email-already-in-use"
+          ? "This email is already in use. Sign in instead."
+          : (err as { message?: string }).message ?? "Something went wrong. Please try again."
+        : "Something went wrong. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
     }

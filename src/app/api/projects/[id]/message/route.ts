@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getProject, ensureProject } from "@/lib/projectStore";
+import { setProject, type ProjectRecord } from "@/lib/projectStore";
 import {
   setProjectFiles,
   getProjectFiles,
@@ -11,18 +11,24 @@ import { estimateCostUsd } from "@/lib/llm/usageCost";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { enrichWithSkills } from "@/lib/llm/promptEnrichment";
 import { detectSkills, buildSkillPromptBlock } from "@/lib/skills/registry";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 const MAX_MESSAGE_LENGTH = 4000;
+
+function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
+  return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
+}
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
-
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
+  const { project } = auth;
+  setProject(toRecord(project));
   const body = await request.json().catch(() => ({}));
-  const name = typeof body.projectName === "string" ? body.projectName.trim() || "Untitled app" : "Untitled app";
-  const project = getProject(projectId) ?? ensureProject(projectId, name);
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
 

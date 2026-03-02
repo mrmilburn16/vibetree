@@ -1,7 +1,9 @@
-import { getProject, ensureProject } from "@/lib/projectStore";
+import { NextResponse } from "next/server";
+import { getProject, setProject, type ProjectRecord } from "@/lib/projectStore";
 import { setProjectFiles } from "@/lib/projectFileStore";
 import { createBuildJob } from "@/lib/buildJobs";
 import { isRunnerOnline } from "@/lib/runnerStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 type SwiftFile = { path: string; content: string };
 
@@ -56,13 +58,19 @@ function normalizeSwiftFiles(files: SwiftFile[]): SwiftFile[] {
   return out;
 }
 
+function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
+  return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
   if (!projectId) return Response.json({ error: "Project ID required" }, { status: 400 });
-
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
+  setProject(toRecord(auth.project));
   const body = await request.json().catch(() => ({}));
   const providedName = typeof body?.projectName === "string" ? body.projectName : "";
   const providedBundleId = typeof body?.bundleId === "string" ? body.bundleId : "";
@@ -73,7 +81,7 @@ export async function POST(
   const files = filesRaw ? normalizeSwiftFiles(filesRaw) : undefined;
   const userPrompt = typeof body?.userPrompt === "string" ? body.userPrompt : undefined;
 
-  const project = getProject(projectId) ?? ensureProject(projectId, providedName || "Untitled app");
+  const project = getProject(projectId)!;
   const candidateBundleId = (providedBundleId || project.bundleId || "com.vibetree.app").trim();
   const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";
 

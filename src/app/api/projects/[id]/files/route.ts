@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
+import { setProject, type ProjectRecord } from "@/lib/projectStore";
 import { getProjectFiles, getProjectFilePaths, setProjectFiles } from "@/lib/projectFileStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
+
+function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
+  return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
+}
 
 /**
  * GET /api/projects/[id]/files
@@ -7,14 +13,16 @@ import { getProjectFiles, getProjectFilePaths, setProjectFiles } from "@/lib/pro
  * projectFiles in the stream "done" event (e.g. iOS to avoid huge payloads).
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
-
+  const auth = await requireProjectAuth(request, id);
+  if (auth instanceof NextResponse) return auth;
+  setProject(toRecord(auth.project));
   const paths = getProjectFilePaths(id);
   const filesMap = getProjectFiles(id);
   if (!filesMap || paths.length === 0) {
@@ -38,6 +46,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const auth = await requireProjectAuth(request, id);
+  if (auth instanceof NextResponse) return auth;
+  setProject(toRecord(auth.project));
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }

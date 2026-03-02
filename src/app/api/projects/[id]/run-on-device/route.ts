@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runExpoPreview } from "@/lib/expoPreview";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 /**
  * GET /api/projects/[id]/run-on-device
@@ -51,6 +52,8 @@ export async function GET(
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
+  const auth = await requireProjectAuth(request, id);
+  if (auth instanceof NextResponse) return auth;
   const url = new URL(request.url);
   const projectType = url.searchParams.get("projectType") === "pro" ? "pro" : "standard";
   return handleRunOnDevice(id, projectType);
@@ -64,6 +67,8 @@ export async function POST(
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
+  const auth = await requireProjectAuth(request, id);
+  if (auth instanceof NextResponse) return auth;
   const url = new URL(request.url);
   const projectType = url.searchParams.get("projectType") === "pro" ? "pro" : "standard";
   let clientFiles: Array<{ path: string; content: string }> | undefined;

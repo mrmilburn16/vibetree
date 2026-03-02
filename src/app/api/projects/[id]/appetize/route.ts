@@ -1,26 +1,28 @@
 import { NextResponse } from "next/server";
-import { getProject, updateProject } from "@/lib/projectStore";
-import { getProjectFromFirestore, updateProjectInFirestore } from "@/lib/projectsFirestore";
+import { setProject, updateProject, type ProjectRecord } from "@/lib/projectStore";
+import { updateProjectInFirestore } from "@/lib/projectsFirestore";
 import { getAppetizePublicKey, setAppetizePublicKey } from "@/lib/appetizeStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
+
+function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
+  return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
+}
 
 /**
  * GET /api/projects/[id]/appetize
  * Returns the Appetize public key for this project. Database (Firestore / projectStore) is source of truth; in-memory appetizeStore is cache fallback.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
   if (!projectId) return NextResponse.json({ error: "Missing project id" }, { status: 400 });
-
-  const fromLocal = getProject(projectId)?.appetizePublicKey;
-  if (typeof fromLocal === "string" && fromLocal.length > 0) {
-    setAppetizePublicKey(projectId, fromLocal);
-    return NextResponse.json({ publicKey: fromLocal });
-  }
-  const fromFirestore = await getProjectFromFirestore(projectId);
-  const fromDb = fromFirestore?.appetizePublicKey;
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
+  const { project } = auth;
+  setProject(toRecord(project));
+  const fromDb = project.appetizePublicKey;
   if (typeof fromDb === "string" && fromDb.length > 0) {
     setAppetizePublicKey(projectId, fromDb);
     return NextResponse.json({ publicKey: fromDb });
@@ -44,6 +46,9 @@ export async function POST(
 ) {
   const { id: projectId } = await params;
   if (!projectId) return NextResponse.json({ error: "Missing project id" }, { status: 400 });
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
+  setProject(toRecord(auth.project));
 
   let body: { publicKey?: string };
   try {
@@ -58,7 +63,7 @@ export async function POST(
   }
 
   updateProject(projectId, { appetizePublicKey: publicKey });
-  await updateProjectInFirestore(projectId, { appetizePublicKey: publicKey });
+  await updateProjectInFirestore(projectId, { appetizePublicKey: publicKey }, auth.user.uid);
   setAppetizePublicKey(projectId, publicKey);
   return NextResponse.json({ publicKey });
 }

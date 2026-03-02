@@ -6,6 +6,8 @@ export { Input, Textarea } from "./Input";
 export { Select } from "./Select";
 export type { SelectProps, SelectOption } from "./Select";
 export { DropdownSelect } from "./DropdownSelect";
+export { DatePickerInput } from "./DatePickerInput";
+export type { DatePickerInputProps } from "./DatePickerInput";
 export type { InputProps, TextareaProps } from "./Input";
 export { Badge } from "./Badge";
 export type { BadgeProps, BadgeVariant } from "./Badge";

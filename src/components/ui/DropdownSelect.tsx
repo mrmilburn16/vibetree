@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 
 import type { SelectOption } from "./Select";
 
@@ -40,17 +41,23 @@ export function DropdownSelect({
   "aria-label": ariaLabel,
 }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
-  const [openUpward, setOpenUpward] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number; width: number; openUpward: boolean } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
 
   const selectedOption = options.find((o) => o.value === value) ?? options[0];
 
   useEffect(() => {
     if (!open) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
+      const target = e.target as Node;
+      if (
+        containerRef.current?.contains(target) ||
+        listRef.current?.contains(target)
+      ) {
+        return;
       }
+      setOpen(false);
     };
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -63,23 +70,85 @@ export function DropdownSelect({
     };
   }, [open]);
 
-  // When opening, measure space below and open upward if there isn't enough room (before paint)
+  // When opening, measure trigger rect and decide placement so dropdown is fully visible (e.g. in modals)
   useLayoutEffect(() => {
-    if (!open || !containerRef.current) return;
+    if (!open || !containerRef.current || typeof document === "undefined") return;
     const rect = containerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom - SPACE_BUFFER;
-    setOpenUpward(spaceBelow < DROPDOWN_MAX_HEIGHT);
+    const openUpward = spaceBelow < DROPDOWN_MAX_HEIGHT;
+    setPosition({
+      top: openUpward ? rect.top : rect.bottom,
+      left: rect.left,
+      width: rect.width,
+      openUpward,
+    });
   }, [open]);
 
-  return (
-    <div ref={containerRef} className={`relative inline-block ${className}`}>
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
+  const listContent =
+    open && position ? (
+      <ul
+        ref={listRef}
+        role="listbox"
         aria-label={ariaLabel}
-        className={`
+        style={{
+          position: "fixed",
+          left: position.left,
+          width: position.width,
+          ...(position.openUpward
+            ? { bottom: window.innerHeight - position.top + 4 }
+            : { top: position.top + 4 }),
+          zIndex: 9999,
+        }}
+        className={
+          "max-h-[280px] min-w-[160px] overflow-auto " +
+          "rounded-[var(--radius-md)] border border-[var(--border-default)] " +
+          "bg-[var(--background-secondary)] py-1 shadow-lg"
+        }
+      >
+        {options.map((opt) => (
+          <li
+            key={opt.value}
+            role="option"
+            aria-selected={opt.value === value && !opt.disabled}
+            aria-disabled={opt.disabled}
+            onClick={() => {
+              if (opt.disabled) return;
+              onChange(opt.value);
+              setOpen(false);
+            }}
+            className={`
+                flex items-center gap-2 px-3 py-2 text-sm
+                transition-colors duration-[var(--transition-fast)]
+                ${opt.disabled ? "cursor-not-allowed opacity-50 text-[var(--text-tertiary)]" : "cursor-pointer text-[var(--text-primary)] hover:bg-[var(--button-primary-bg)]/20 hover:text-[var(--text-primary)]"}
+                ${opt.value === value && !opt.disabled ? "bg-[var(--button-primary-bg)]/15 text-[var(--link-default)]" : ""}
+              `}
+          >
+            {opt.icon && (
+              <span className="flex shrink-0 items-center text-[var(--text-secondary)] [&_svg]:text-current">
+                {opt.icon}
+              </span>
+            )}
+            <span className="flex-1">{opt.label}</span>
+            {opt.disabled && (
+              <span className="ml-1 rounded-full bg-[var(--button-primary-bg)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--button-primary-bg)]">
+                Soon
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    ) : null;
+
+  return (
+    <>
+      <div ref={containerRef} className={`relative inline-block ${className}`}>
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-label={ariaLabel}
+          className={`
           flex min-w-[160px] items-center justify-between gap-2
           rounded-[var(--radius-md)] border-2 cursor-pointer
           bg-[var(--input-bg)] px-3 py-1.5 pr-8
@@ -89,62 +158,19 @@ export function DropdownSelect({
           focus:outline-none focus:border-[var(--button-primary-bg)] focus:ring-2 focus:ring-[var(--button-primary-bg)]/30
           ${open ? "border-[var(--button-primary-bg)] ring-2 ring-[var(--button-primary-bg)]/30" : "border-[var(--input-border)]"}
         `}
-      >
-        {selectedOption.icon && (
-          <span className="flex shrink-0 items-center text-[var(--text-secondary)] [&_svg]:text-current">
-            {selectedOption.icon}
-          </span>
-        )}
-        <span className="min-w-0 flex-1 truncate">{selectedOption.label}</span>
-        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]">
-          <ChevronDown />
-        </span>
-      </button>
-
-      {open && (
-        <ul
-          role="listbox"
-          aria-label={ariaLabel}
-          className={
-            "absolute left-0 right-0 z-50 w-full max-h-[280px] min-w-[160px] overflow-auto " +
-            "rounded-[var(--radius-md)] border border-[var(--border-default)] " +
-            "bg-[var(--background-secondary)] py-1 shadow-lg " +
-            (openUpward ? "bottom-full mb-1" : "top-full mt-1")
-          }
         >
-          {options.map((opt) => (
-            <li
-              key={opt.value}
-              role="option"
-              aria-selected={opt.value === value && !opt.disabled}
-              aria-disabled={opt.disabled}
-              onClick={() => {
-                if (opt.disabled) return;
-                onChange(opt.value);
-                setOpen(false);
-              }}
-              className={`
-                flex items-center gap-2 px-3 py-2 text-sm
-                transition-colors duration-[var(--transition-fast)]
-                ${opt.disabled ? "cursor-not-allowed opacity-50 text-[var(--text-tertiary)]" : "cursor-pointer text-[var(--text-primary)] hover:bg-[var(--button-primary-bg)]/20 hover:text-[var(--text-primary)]"}
-                ${opt.value === value && !opt.disabled ? "bg-[var(--button-primary-bg)]/15 text-[var(--link-default)]" : ""}
-              `}
-            >
-              {opt.icon && (
-                <span className="flex shrink-0 items-center text-[var(--text-secondary)] [&_svg]:text-current">
-                  {opt.icon}
-                </span>
-              )}
-              <span className="flex-1">{opt.label}</span>
-              {opt.disabled && (
-                <span className="ml-1 rounded-full bg-[var(--button-primary-bg)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--button-primary-bg)]">
-                  Soon
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+          {selectedOption.icon && (
+            <span className="flex shrink-0 items-center text-[var(--text-secondary)] [&_svg]:text-current">
+              {selectedOption.icon}
+            </span>
+          )}
+          <span className="min-w-0 flex-1 truncate">{selectedOption.label}</span>
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]">
+            <ChevronDown />
+          </span>
+        </button>
+      </div>
+      {typeof document !== "undefined" && listContent ? createPortal(listContent, document.body) : null}
+    </>
   );
 }

@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { getProjectFiles, getProjectFilePaths } from "@/lib/projectFileStore";
 import { buildPbxproj, detectPrivacyPermissions, detectRequiredFrameworks, detectEntitlements, generateEntitlementsPlist } from "@/lib/xcodeProject";
-import { getProject, ensureProject } from "@/lib/projectStore";
+import { getProject, setProject, type ProjectRecord } from "@/lib/projectStore";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 function sanitizeXcodeName(name: string, fallback: string): string {
   const raw = (name || "").trim();
@@ -376,6 +377,10 @@ struct AppLiveActivityWidget: Widget {
  * Accepts Swift files in the body so export works even if server memory is cleared.
  * Body: { files: Array<{ path, content }> }
  */
+function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
+  return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -384,6 +389,9 @@ export async function POST(
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
+  const auth = await requireProjectAuth(request, id);
+  if (auth instanceof NextResponse) return auth;
+  setProject(toRecord(auth.project));
   const body = await request.json().catch(() => ({}));
   const files = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : [];
   const providedName = typeof body?.projectName === "string" ? body.projectName : "";
@@ -391,7 +399,7 @@ export async function POST(
   const providedTeam = typeof body?.developmentTeam === "string" && body.developmentTeam.trim()
     ? body.developmentTeam.trim()
     : process.env.DEFAULT_DEVELOPMENT_TEAM ?? "";
-  const project = getProject(id) ?? ensureProject(id, providedName || "Untitled app");
+  const project = getProject(id)!;
   const projectName = sanitizeXcodeName(providedName || project.name, "VibetreeApp");
   const candidateBundleId = (providedBundleId || project.bundleId || "com.vibetree.app").trim();
   const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";
@@ -421,6 +429,9 @@ export async function GET(
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
+  const auth = await requireProjectAuth(request, id);
+  if (auth instanceof NextResponse) return auth;
+  setProject(toRecord(auth.project));
   const url = new URL(request.url);
   const paramTeam = (url.searchParams.get("developmentTeam") ?? "").trim();
   const developmentTeam = paramTeam || process.env.DEFAULT_DEVELOPMENT_TEAM || "";
@@ -429,7 +440,7 @@ export async function GET(
   const timezoneOffsetMinutes =
     timezoneOffsetParam !== null && timezoneOffsetParam !== "" ? parseInt(timezoneOffsetParam, 10) : undefined;
 
-  const project = getProject(id) ?? ensureProject(id, "Untitled app");
+  const project = getProject(id)!;
   const projectName = sanitizeXcodeName(project.name, "VibetreeApp");
   const candidateBundleId = (project.bundleId || "com.vibetree.app").trim();
   const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";

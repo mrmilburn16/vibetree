@@ -111,11 +111,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const session = localStorage.getItem("vibetree-session");
-    if (!session) {
-      router.replace("/sign-in");
-      return;
-    }
     setProjects(getProjects());
     setMounted(true);
   }, [router]);

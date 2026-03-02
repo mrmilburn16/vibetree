@@ -1113,8 +1113,8 @@ function ResultRow({
             : "border-[var(--border-default)] bg-[var(--background-secondary)] hover:border-[var(--border-subtle)]"
       }`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-[280px] flex-1 items-center gap-3">
           {!running && onToggleSelect && (
             <button
               type="button"
@@ -1137,8 +1137,8 @@ function ResultRow({
           ) : (
             <StatusBadge status={result.status} />
           )}
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+          <div className="min-w-[260px] flex-1">
+            <p className="text-sm font-medium text-[var(--text-primary)] truncate" title={result.idea.title}>
               {result.idea.title}
               {result.model && (
                 <span className="ml-2 inline-flex items-center rounded-full bg-[var(--background-tertiary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)]">
@@ -1155,7 +1155,7 @@ function ResultRow({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 self-start">
           {result.attempts > 0 && (
             <span className="text-xs tabular-nums text-[var(--text-tertiary)]">
               {result.attempts} attempt{result.attempts !== 1 ? "s" : ""}
@@ -1658,6 +1658,7 @@ function SummaryPanel({
   const allErrors = completed.flatMap((r) => r.compilerErrors);
   const grouped = groupErrorsByPattern(completed);
   const [expandedPatterns, setExpandedPatterns] = useState<Set<ErrorCategory>>(() => new Set());
+  const [integrationChecksCollapsed, setIntegrationChecksCollapsed] = useState(true);
   const maxOccurrence = grouped.length > 0 ? Math.max(...grouped.map((g) => g.occurrenceCount)) : 0;
 
   const runLabel =
@@ -1745,7 +1746,20 @@ function SummaryPanel({
 
       {isM6 && completed.some((r) => r.integrationChecks != null) && (
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">Integration checks per app</p>
+          <button
+            type="button"
+            onClick={() => setIntegrationChecksCollapsed((prev) => !prev)}
+            className="mb-2 flex w-full items-center justify-between gap-2 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+            aria-expanded={!integrationChecksCollapsed}
+          >
+            <span>Integration checks per app</span>
+            {integrationChecksCollapsed ? (
+              <ChevronDown className="h-4 w-4 shrink-0" aria-hidden />
+            ) : (
+              <ChevronUp className="h-4 w-4 shrink-0" aria-hidden />
+            )}
+          </button>
+          {!integrationChecksCollapsed && (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-xs">
               <thead>
@@ -1789,6 +1803,7 @@ function SummaryPanel({
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
 
@@ -3873,7 +3888,7 @@ Please:
       }}
     >
       <header className="border-b border-[var(--border-default)] bg-[var(--background-primary)]/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <div className="flex w-full items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
             <Link
               href="/admin/dashboard"
@@ -3902,7 +3917,7 @@ Please:
         </div>
         {runnerOnline === false && (
           <div
-            className="mx-auto max-w-5xl px-4 py-2 sm:px-6 border-t border-amber-500/30 bg-amber-500/10 text-sm text-amber-800 dark:text-amber-200"
+            className="w-full px-4 py-2 sm:px-6 border-t border-amber-500/30 bg-amber-500/10 text-sm text-amber-800 dark:text-amber-200"
             role="status"
           >
             Mac runner offline — builds are currently unavailable.
@@ -3910,7 +3925,7 @@ Please:
         )}
         {runPausedByRunner && (
           <div
-            className="mx-auto max-w-5xl px-4 py-2 sm:px-6 border-t border-amber-500/30 bg-amber-500/10 text-sm text-amber-800 dark:text-amber-200"
+            className="w-full px-4 py-2 sm:px-6 border-t border-amber-500/30 bg-amber-500/10 text-sm text-amber-800 dark:text-amber-200"
             role="status"
           >
             Run paused — Mac runner went offline. Remaining apps will resume when you click Resume after the runner is back online.
@@ -3918,7 +3933,7 @@ Please:
         )}
 
         {milestoneTabs.length > 0 && (
-          <nav className="mx-auto max-w-5xl px-4 sm:px-6">
+          <nav className="w-full px-4 sm:px-6">
             <div className="flex gap-1 overflow-x-auto pb-0">
               {milestoneTabs.map((tab) => (
                 <button
@@ -3942,7 +3957,7 @@ Please:
         )}
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 space-y-6">
+      <main className="w-full px-4 py-8 sm:px-6 space-y-6">
         {/* ── Run Controls ── */}
         <section className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
           <div className="flex flex-wrap items-center gap-3">

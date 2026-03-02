@@ -188,7 +188,7 @@ export function updateSettings(updates: Partial<CalendarSettings>): CalendarSett
   return merged;
 }
 
-/* ────────────────────────── Auto-schedule ────────────────────────── */
+/* ────────────────────────── Schedule from due date ────────────────────────── */
 
 function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
@@ -200,6 +200,22 @@ function minutesToTime(mins: number): string {
   const m = mins % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
+
+/** Return scheduledStart/scheduledEnd for a task due on dueDate (YYYY-MM-DD) at work start time. */
+export function scheduleFromDueDate(
+  dueDate: string,
+  workStart: string,
+  estimatedMinutes: number
+): { scheduledStart: string; scheduledEnd: string } {
+  const startMins = timeToMinutes(workStart);
+  const endMins = startMins + estimatedMinutes;
+  return {
+    scheduledStart: `${dueDate}T${minutesToTime(startMins)}:00`,
+    scheduledEnd: `${dueDate}T${minutesToTime(endMins)}:00`,
+  };
+}
+
+/* ────────────────────────── Auto-schedule ────────────────────────── */
 
 function getBlocksForDate(blocks: TimeBlock[], date: Date): Array<{ start: number; end: number }> {
   const dayOfWeek = date.getDay();

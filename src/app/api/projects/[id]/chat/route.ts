@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getProjectChat, setProjectChat } from "@/lib/projectChatStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 export const runtime = "nodejs";
 
@@ -35,14 +36,18 @@ function asMessages(input: unknown): Array<{
   return out;
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const auth = await requireProjectAuth(request, id);
+  if (auth instanceof NextResponse) return auth;
   const chat = await getProjectChat(id);
   return NextResponse.json({ projectId: id, updatedAt: chat?.updatedAt ?? null, messages: chat?.messages ?? [] });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const auth = await requireProjectAuth(request, id);
+  if (auth instanceof NextResponse) return auth;
   const body = await request.json().catch(() => ({}));
   const messages = asMessages((body as any)?.messages);
   await setProjectChat(id, messages);

@@ -13,11 +13,6 @@ export default function CreditsPage() {
   const [purchased, setPurchased] = useState<string | null>(null);
   const [testBalance, setTestBalance] = useState("");
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const session = localStorage.getItem("vibetree-session");
-    if (!session) router.replace("/sign-in");
-  }, [router]);
 
   function handlePurchase(packId: string, credits: number) {
     add(credits);

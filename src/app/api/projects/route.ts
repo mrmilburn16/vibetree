@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 import {
   listProjects,
   createProject,
@@ -23,8 +24,12 @@ function toRecord(doc: ProjectDoc): { id: string; name: string; bundleId: string
   };
 }
 
-export async function GET() {
-  const { projects: fromFirestore, fromFirestore: useFirestore } = await listProjectsFromFirestore();
+export async function GET(request: Request) {
+  const user = await getSession(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { projects: fromFirestore, fromFirestore: useFirestore } = await listProjectsFromFirestore(user.uid);
   if (useFirestore) {
     setProjects(fromFirestore.map(toRecord));
   }
@@ -36,6 +41,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const user = await getSession(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const body = await request.json().catch(() => ({}));
   const name = typeof body.name === "string" ? body.name.trim() || "Untitled app" : "Untitled app";
   const id = typeof body.id === "string" ? body.id.trim() : undefined;
@@ -53,6 +62,7 @@ export async function POST(request: Request) {
     projectType,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
+    userId: user.uid,
   };
   await createProjectInFirestore(doc);
   return NextResponse.json({ project: { ...project, projectType } });

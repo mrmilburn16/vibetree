@@ -31,10 +31,10 @@ function getWeekDates(monday: Date): Date[] {
 function formatWeekRange(dates: Date[]): string {
   const first = dates[0];
   const last = dates[dates.length - 1];
-  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  const opts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric" };
   const yearOpts: Intl.DateTimeFormatOptions = { ...opts, year: "numeric" };
   if (first.getMonth() === last.getMonth()) {
-    return `${first.toLocaleDateString(undefined, opts)} – ${last.getDate()}, ${first.getFullYear()}`;
+    return `${first.toLocaleDateString(undefined, opts)} – ${last.toLocaleDateString(undefined, opts)}, ${first.getFullYear()}`;
   }
   return `${first.toLocaleDateString(undefined, opts)} – ${last.toLocaleDateString(undefined, yearOpts)}`;
 }

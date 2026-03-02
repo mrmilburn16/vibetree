@@ -21,8 +21,23 @@ function isAllowedIp(request: NextRequest): boolean {
   return list.includes(ip);
 }
 
+const SESSION_COOKIE_NAME = "vibetree-session";
+
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+
+  // Require session for dashboard, editor, and credits
+  if (
+    path === "/dashboard" ||
+    path.startsWith("/dashboard/") ||
+    path === "/editor" ||
+    path.startsWith("/editor/") ||
+    path === "/credits"
+  ) {
+    if (!request.cookies.has(SESSION_COOKIE_NAME)) {
+      return NextResponse.redirect(new URL("/sign-in", request.url));
+    }
+  }
 
   // Admin IP guard
   if (path.startsWith("/admin") || path.startsWith("/api/admin")) {
@@ -50,5 +65,15 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*", "/waitlist", "/waitlist/:path*"],
+  matcher: [
+    "/dashboard",
+    "/dashboard/:path*",
+    "/editor",
+    "/editor/:path*",
+    "/credits",
+    "/admin/:path*",
+    "/api/admin/:path*",
+    "/waitlist",
+    "/waitlist/:path*",
+  ],
 };

@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasProjectIPA } from "@/lib/ipaStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
+  const auth = await requireProjectAuth(req, projectId);
+  if (auth instanceof NextResponse) return auth;
 
   if (!hasProjectIPA(projectId)) {
     return NextResponse.json(
@@ -14,8 +17,8 @@ export async function GET(
     );
   }
 
-  const host = _req.headers.get("host") || "localhost:3001";
-  const proto = _req.headers.get("x-forwarded-proto") || "https";
+  const host = req.headers.get("host") || "localhost:3001";
+  const proto = req.headers.get("x-forwarded-proto") || "https";
   const ipaURL = `${proto}://${host}/api/projects/${projectId}/ipa`;
 
   const manifest = `<?xml version="1.0" encoding="UTF-8"?>

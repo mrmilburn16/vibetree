@@ -1,4 +1,5 @@
-import { getProject, ensureProject } from "@/lib/projectStore";
+import { NextResponse } from "next/server";
+import { setProject, type ProjectRecord } from "@/lib/projectStore";
 import {
   setProjectFiles,
   getProjectFiles,
@@ -11,11 +12,16 @@ import { startGeneration, updateGenerationPhase, endGeneration } from "@/lib/act
 import { enrichWithSkills } from "@/lib/llm/promptEnrichment";
 import { detectSkills, buildSkillPromptBlock } from "@/lib/skills/registry";
 import { logLLMAnalytics } from "@/lib/llm/analyticsLog";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 const MAX_MESSAGE_LENGTH = 4000;
 
 function encodeLine(obj: object): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(obj) + "\n");
+}
+
+function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
+  return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
 }
 
 export async function POST(
@@ -24,13 +30,11 @@ export async function POST(
 ) {
   console.log("[message/stream] POST invoked", { path: request.url });
   const { id: projectId } = await params;
-
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
+  const { project } = auth;
+  setProject(toRecord(project));
   const body = await request.json().catch(() => ({}));
-  const nameFromBody =
-    typeof body.projectName === "string"
-      ? body.projectName.trim() || "Untitled app"
-      : "Untitled app";
-  const project = getProject(projectId) ?? ensureProject(projectId, nameFromBody);
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
 

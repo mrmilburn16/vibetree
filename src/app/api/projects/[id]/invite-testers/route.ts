@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 /**
  * POST /api/projects/[id]/invite-testers
@@ -13,6 +14,8 @@ export async function POST(
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
+  const auth = await requireProjectAuth(request, id);
+  if (auth instanceof NextResponse) return auth;
 
   let body: { emails?: string[] };
   try {

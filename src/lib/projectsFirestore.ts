@@ -12,6 +12,8 @@ export interface ProjectDoc {
   projectType: "standard" | "pro";
   createdAt: number;
   updatedAt: number;
+  /** Owner's Firebase Auth uid. Required for user-scoped access. */
+  userId: string;
   /** Appetize public key (persisted); set by Mac runner after successful upload. */
   appetizePublicKey?: string | null;
 }
@@ -26,14 +28,16 @@ function getDb() {
   }
 }
 
-/** Fetch a single project by id (e.g. for appetize key when in-memory store not yet populated). */
-export async function getProjectFromFirestore(id: string): Promise<ProjectDoc | null> {
+/** Fetch a single project by id. If userId is provided, only return if doc.userId matches. */
+export async function getProjectFromFirestore(id: string, userId?: string): Promise<ProjectDoc | null> {
   const db = getDb();
   if (!db) return null;
   try {
     const snap = await db.collection(COLLECTION).doc(id).get();
     if (!snap.exists) return null;
     const data = snap.data()!;
+    const docUserId = (data.userId as string) ?? "";
+    if (userId != null && docUserId !== userId) return null;
     const appetizePublicKey = data.appetizePublicKey;
     return {
       id: (data.id as string) || snap.id,
@@ -42,6 +46,7 @@ export async function getProjectFromFirestore(id: string): Promise<ProjectDoc | 
       projectType: (data.projectType === "standard" ? "standard" : "pro") as "standard" | "pro",
       createdAt: typeof data.createdAt === "number" ? data.createdAt : Date.now(),
       updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : Date.now(),
+      userId: docUserId,
       appetizePublicKey: typeof appetizePublicKey === "string" && appetizePublicKey.length > 0 ? appetizePublicKey : undefined,
     };
   } catch {
@@ -49,14 +54,18 @@ export async function getProjectFromFirestore(id: string): Promise<ProjectDoc | 
   }
 }
 
-export async function listProjectsFromFirestore(): Promise<{
+export async function listProjectsFromFirestore(userId: string): Promise<{
   projects: ProjectDoc[];
   fromFirestore: boolean;
 }> {
   const db = getDb();
   if (!db) return { projects: [], fromFirestore: false };
   try {
-    const snap = await db.collection(COLLECTION).orderBy("updatedAt", "desc").get();
+    const snap = await db
+      .collection(COLLECTION)
+      .where("userId", "==", userId)
+      .orderBy("updatedAt", "desc")
+      .get();
     const projects: ProjectDoc[] = snap.docs.map((d) => {
       const data = d.data();
       const appetizePublicKey = data.appetizePublicKey;
@@ -67,6 +76,7 @@ export async function listProjectsFromFirestore(): Promise<{
         projectType: (data.projectType === "standard" ? "standard" : "pro") as "standard" | "pro",
         createdAt: typeof data.createdAt === "number" ? data.createdAt : Date.now(),
         updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : Date.now(),
+        userId: (data.userId as string) ?? "",
         appetizePublicKey: typeof appetizePublicKey === "string" && appetizePublicKey.length > 0 ? appetizePublicKey : undefined,
       };
     });
@@ -87,6 +97,7 @@ export async function createProjectInFirestore(doc: ProjectDoc): Promise<boolean
       projectType: doc.projectType,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
+      userId: doc.userId,
     };
     if (doc.appetizePublicKey != null && doc.appetizePublicKey !== "") {
       payload.appetizePublicKey = doc.appetizePublicKey;
@@ -100,14 +111,16 @@ export async function createProjectInFirestore(doc: ProjectDoc): Promise<boolean
 
 export async function updateProjectInFirestore(
   id: string,
-  updates: Partial<Pick<ProjectDoc, "name" | "bundleId" | "projectType" | "appetizePublicKey">>
+  updates: Partial<Pick<ProjectDoc, "name" | "bundleId" | "projectType" | "appetizePublicKey">>,
+  userId?: string
 ): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
   try {
     const ref = db.collection(COLLECTION).doc(id);
-    const doc = await ref.get();
-    if (!doc.exists) return false;
+    const snap = await ref.get();
+    if (!snap.exists) return false;
+    if (userId != null && (snap.data()?.userId as string) !== userId) return false;
     const updatedAt = Date.now();
     await ref.update({
       ...updates,
@@ -119,11 +132,16 @@ export async function updateProjectInFirestore(
   }
 }
 
-export async function deleteProjectFromFirestore(id: string): Promise<boolean> {
+export async function deleteProjectFromFirestore(id: string, userId?: string): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
   try {
-    await db.collection(COLLECTION).doc(id).delete();
+    const ref = db.collection(COLLECTION).doc(id);
+    if (userId != null) {
+      const snap = await ref.get();
+      if (!snap.exists || (snap.data()?.userId as string) !== userId) return false;
+    }
+    await ref.delete();
     return true;
   } catch {
     return false;

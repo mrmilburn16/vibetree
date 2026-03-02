@@ -1,7 +1,9 @@
 import * as Sentry from "@sentry/nextjs";
+import { NextResponse } from "next/server";
 import { appendBuildJobLogs, createBuildJob, setBuildJobStatus } from "@/lib/buildJobs";
 import { sendBackgroundRefreshPush } from "@/lib/apns";
-import { ensureProject, getProject } from "@/lib/projectStore";
+import { getProject, setProject, type ProjectRecord } from "@/lib/projectStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 type SimBody = {
   projectName?: string;
@@ -34,7 +36,9 @@ export async function POST(
 
   const { id: projectId } = await params;
   if (!projectId) return Response.json({ error: "Project ID required" }, { status: 400 });
-
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
+  setProject({ id: auth.project.id, name: auth.project.name, bundleId: auth.project.bundleId, projectType: auth.project.projectType, createdAt: auth.project.createdAt, updatedAt: auth.project.updatedAt });
   const body = (await request.json().catch(() => ({}))) as SimBody;
   const providedName = typeof body?.projectName === "string" ? body.projectName.trim() : "";
   const providedBundleId = typeof body?.bundleId === "string" ? body.bundleId.trim() : "";
@@ -42,7 +46,7 @@ export async function POST(
     typeof body?.durationSeconds === "number" && Number.isFinite(body.durationSeconds) ? body.durationSeconds : 35;
   const fail = body?.fail === true;
 
-  const project = getProject(projectId) ?? ensureProject(projectId, providedName || "Untitled app");
+  const project = getProject(projectId)!;
   const bundleId = isValidBundleId(providedBundleId) ? providedBundleId : (project.bundleId || "com.vibetree.app");
 
   const job = createBuildJob({

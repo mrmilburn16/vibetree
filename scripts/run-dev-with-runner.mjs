@@ -48,7 +48,7 @@ setTimeout(() => {
     cwd: root,
     stdio: "inherit",
     shell: false,
-    env: process.env,
+    env: { ...process.env, VIBETREE_SERVER_URL: "http://localhost:3001" },
   });
 
   runnerProcess.on("error", (err) => {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 const VISION_MODEL = "claude-sonnet-4-6";
 const VISION_MAX_TOKENS = 1000;
@@ -140,6 +141,8 @@ export async function POST(
 ) {
   const { id: projectId } = await params;
   if (!projectId) return NextResponse.json({ error: "Missing project id" }, { status: 400 });
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
 
   const apiKey = process.env.ANTHROPIC_VISION_API_KEY?.trim() || process.env.ANTHROPIC_API_KEY?.trim();
   if (!apiKey) {

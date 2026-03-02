@@ -1,12 +1,12 @@
 import { initializeApp, getApps, cert, App } from "firebase-admin/app";
 import { getFirestore, Firestore } from "firebase-admin/firestore";
+import { getAuth, type Auth } from "firebase-admin/auth";
 
 let app: App;
 let db: Firestore;
 
-export function getAdminDb(): Firestore {
-  if (db) return db;
-
+function ensureApp(): App {
+  if (app) return app;
   if (!getApps().length) {
     const projectId = process.env.FIREBASE_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
@@ -22,11 +22,21 @@ export function getAdminDb(): Firestore {
       credential: cert({ projectId, clientEmail, privateKey }),
     });
   } else {
-    app = getApps()[0]!;
+    app = getApps()[0] as App;
   }
+  return app;
+}
 
-  db = getFirestore(app);
+export function getAdminDb(): Firestore {
+  if (db) return db;
+  const a = ensureApp();
+  db = getFirestore(a);
   return db;
+}
+
+export function getAdminAuth(): Auth {
+  ensureApp();
+  return getAuth();
 }
 
 export type WaitlistEntry = {

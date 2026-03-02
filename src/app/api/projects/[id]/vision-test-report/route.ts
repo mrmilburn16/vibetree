@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { setVisionTestReport, getVisionTestReport, type VisionTestReport } from "@/lib/visionTestStore";
+import { requireProjectAuth } from "@/lib/apiProjectAuth";
 
 /**
  * POST /api/projects/[id]/vision-test-report
@@ -11,6 +12,8 @@ export async function POST(
 ) {
   const { id: projectId } = await params;
   if (!projectId) return NextResponse.json({ error: "Missing project id" }, { status: 400 });
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
 
   let body: VisionTestReport;
   try {
@@ -32,11 +35,13 @@ export async function POST(
  * Return the stored vision test report if it exists.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
   if (!projectId) return NextResponse.json({ error: "Missing project id" }, { status: 400 });
+  const auth = await requireProjectAuth(request, projectId);
+  if (auth instanceof NextResponse) return auth;
 
   const report = getVisionTestReport(projectId);
   if (!report) {
