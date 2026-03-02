@@ -7,6 +7,7 @@ import {
   setBuildJobAutoFixInProgress,
 } from "@/lib/buildJobs";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
+import { getProjectFromFirestore } from "@/lib/projectsFirestore";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { preBuildLint } from "@/lib/preBuildLint";
 import Anthropic from "@anthropic-ai/sdk";
@@ -16,6 +17,21 @@ type SwiftFile = { path: string; content: string };
 
 const FIX_MODEL = "claude-sonnet-4-5-20250929";
 const FIX_MAX_TOKENS = 32000;
+/** Timeout for the auto-fix Claude API call so a hung request eventually fails and we can move on. */
+const AUTO_FIX_CLAUDE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+function requireRunnerAuth(request: Request): { ok: true } | { ok: false; response: Response } {
+  const token = process.env.MAC_RUNNER_TOKEN;
+  if (!token) {
+    return { ok: false, response: NextResponse.json({ error: "Runner auth not configured" }, { status: 503 }) };
+  }
+  const auth = request.headers.get("authorization") ?? request.headers.get("Authorization") ?? "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (!m?.[1] || m[1] !== token) {
+    return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+  return { ok: true };
+}
 
 const FIX_SCHEMA = {
   type: "object",
@@ -163,8 +179,15 @@ export async function POST(
 ) {
   const { id: projectId } = await params;
   if (!projectId) return Response.json({ error: "Project ID required" }, { status: 400 });
-  const auth = await requireProjectAuth(request, projectId);
-  if (auth instanceof NextResponse) return auth;
+  const runnerAuth = requireRunnerAuth(request);
+  if (runnerAuth.ok) {
+    const project = await getProjectFromFirestore(projectId);
+    if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    // Runner token accepted; no user session required. Project loaded for ownership check only.
+  } else {
+    const auth = await requireProjectAuth(request, projectId);
+    if (auth instanceof NextResponse) return auth;
+  }
 
   const body = await request.json().catch(() => ({}));
   const failedJobId = typeof body?.failedJobId === "string" ? body.failedJobId : "";
@@ -297,7 +320,12 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       return { fixedFiles, explanation, raw: textContent, stopReason: String(msg.stop_reason ?? "") };
     }
 
-    let result = await callLLMStreaming(prompt);
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Auto-fix Claude request timed out after 5 minutes")), AUTO_FIX_CLAUDE_TIMEOUT_MS)
+    );
+
+    const run = async (): Promise<Response> => {
+      let result = await callLLMStreaming(prompt);
     let fixedFiles = result.fixedFiles;
     let explanation = result.explanation;
 
@@ -390,6 +418,9 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
     appendBuildJobLogs(failedJobId, [`Created retry job ${retryJob.id} (attempt ${attempt}/${maxAttempts})`]);
 
     return Response.json({ retryJobId: retryJob.id, attempt, maxAttempts });
+    };
+
+    return await Promise.race([run(), timeoutPromise]);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     appendBuildJobLogs(failedJobId, [`LLM fix error: ${msg}`]);

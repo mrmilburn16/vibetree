@@ -10,7 +10,12 @@ function displayNameForProject(projectId: string, fallback: string): string {
 export async function GET() {
   markAbandonedJobs();
   const all: BuildJobRecord[] = getAllBuildJobs();
-  const active = all.filter((j: BuildJobRecord) => j.status === "queued" || j.status === "running");
+  const active = all.filter(
+    (j: BuildJobRecord) =>
+      j.status === "queued" ||
+      j.status === "running" ||
+      (j.status === "failed" && j.autoFixInProgress)
+  );
 
   const generations = getActiveGenerations();
   const activeBuildJobIds = new Set(active.map((j) => j.id));

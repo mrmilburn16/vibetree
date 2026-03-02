@@ -5,6 +5,20 @@ import { buildPbxproj, detectPrivacyPermissions, detectRequiredFrameworks, detec
 import { getProject, setProject, type ProjectRecord } from "@/lib/projectStore";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
+import { getProjectFromFirestore } from "@/lib/projectsFirestore";
+
+function requireRunnerAuth(request: Request): { ok: true } | { ok: false; response: Response } {
+  const token = process.env.MAC_RUNNER_TOKEN;
+  if (!token) {
+    return { ok: false, response: NextResponse.json({ error: "Runner auth not configured" }, { status: 503 }) };
+  }
+  const auth = request.headers.get("authorization") ?? request.headers.get("Authorization") ?? "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (!m?.[1] || m[1] !== token) {
+    return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+  return { ok: true };
+}
 
 function sanitizeXcodeName(name: string, fallback: string): string {
   const raw = (name || "").trim();
@@ -389,9 +403,16 @@ export async function POST(
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
-  const auth = await requireProjectAuth(request, id);
-  if (auth instanceof NextResponse) return auth;
-  setProject(toRecord(auth.project));
+  const runnerAuth = requireRunnerAuth(request);
+  if (runnerAuth.ok) {
+    const project = await getProjectFromFirestore(id);
+    if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    setProject(toRecord(project));
+  } else {
+    const auth = await requireProjectAuth(request, id);
+    if (auth instanceof NextResponse) return auth;
+    setProject(toRecord(auth.project));
+  }
   const body = await request.json().catch(() => ({}));
   const files = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : [];
   const providedName = typeof body?.projectName === "string" ? body.projectName : "";
@@ -429,9 +450,16 @@ export async function GET(
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
-  const auth = await requireProjectAuth(request, id);
-  if (auth instanceof NextResponse) return auth;
-  setProject(toRecord(auth.project));
+  const runnerAuth = requireRunnerAuth(request);
+  if (runnerAuth.ok) {
+    const project = await getProjectFromFirestore(id);
+    if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    setProject(toRecord(project));
+  } else {
+    const auth = await requireProjectAuth(request, id);
+    if (auth instanceof NextResponse) return auth;
+    setProject(toRecord(auth.project));
+  }
   const url = new URL(request.url);
   const paramTeam = (url.searchParams.get("developmentTeam") ?? "").trim();
   const developmentTeam = paramTeam || process.env.DEFAULT_DEVELOPMENT_TEAM || "";

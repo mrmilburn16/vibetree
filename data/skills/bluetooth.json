@@ -34,9 +34,9 @@
     "NSBluetoothAlwaysUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 3,
+    "totalBuilds": 6,
     "firstAttemptCompile": 2,
-    "compileRate": 67,
+    "compileRate": 33,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],

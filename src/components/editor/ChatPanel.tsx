@@ -87,9 +87,11 @@ function StopBuildButton({
       const data = await res.json().catch(() => ({}));
       const jobs = Array.isArray(data?.jobs) ? data.jobs : [];
       const job = jobs.find(
-        (j: { request?: { projectId?: string }; status?: string }) =>
+        (j: { request?: { projectId?: string }; status?: string; autoFixInProgress?: boolean }) =>
           j?.request?.projectId === projectId &&
-          (j?.status === "queued" || j?.status === "running")
+          (j?.status === "queued" ||
+            j?.status === "running" ||
+            (j?.status === "failed" && j?.autoFixInProgress))
       );
       if (job?.id) {
         const cancelRes = await fetch(`/api/build-jobs/${job.id}/cancel`, { method: "POST" });

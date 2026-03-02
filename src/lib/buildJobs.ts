@@ -121,10 +121,17 @@ export function setBuildJobAutoFixInProgress(id: string, inProgress: boolean): v
   jobs.set(id, rec);
 }
 
-/** Mark job as failed (cancelled). Returns true if job was queued or running and is now failed. */
+/** Mark job as failed (cancelled). Returns true if job was queued, running, or stuck in auto-fix and is now cancelled. */
 export function cancelBuildJob(id: string): boolean {
   const rec = jobs.get(id);
-  if (!rec || (rec.status !== "queued" && rec.status !== "running")) return false;
+  if (!rec) return false;
+  if (rec.status === "failed" && rec.autoFixInProgress) {
+    rec.autoFixInProgress = false;
+    rec.error = rec.error || "Auto-fix cancelled by user";
+    jobs.set(id, rec);
+    return true;
+  }
+  if (rec.status !== "queued" && rec.status !== "running") return false;
   rec.status = "failed";
   rec.finishedAt = Date.now();
   rec.error = "Cancelled by user";

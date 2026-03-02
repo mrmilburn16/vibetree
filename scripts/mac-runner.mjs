@@ -152,10 +152,14 @@ async function updateJob(jobId, payload) {
 async function downloadZip(job) {
   const hasFiles = Array.isArray(job.request.files) && job.request.files.length > 0;
 
+  const runnerHeaders = {
+    Authorization: `Bearer ${TOKEN}`,
+    ...(hasFiles ? { "Content-Type": "application/json" } : {}),
+  };
   const res = hasFiles
     ? await fetch(`${SERVER_URL}/api/projects/${job.request.projectId}/export-xcode`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: runnerHeaders,
         body: JSON.stringify({
           projectName: job.request.projectName,
           bundleId: job.request.bundleId,
@@ -163,7 +167,9 @@ async function downloadZip(job) {
           files: job.request.files,
         }),
       })
-    : await fetch(`${SERVER_URL}/api/projects/${job.request.projectId}/export-xcode`);
+    : await fetch(`${SERVER_URL}/api/projects/${job.request.projectId}/export-xcode`, {
+        headers: runnerHeaders,
+      });
   if (!res.ok) throw new Error(`export-xcode failed: ${res.status} ${await res.text()}`);
   const buf = Buffer.from(await res.arrayBuffer());
   return buf;

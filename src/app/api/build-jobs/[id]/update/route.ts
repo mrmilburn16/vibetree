@@ -32,17 +32,31 @@ async function triggerAutoFix(
     process.env.NEXT_PUBLIC_SITE_URL ||
     `http://localhost:${process.env.PORT || 3001}`;
   const url = `${base}/api/projects/${projectId}/auto-fix-build`;
+  const runnerToken = process.env.MAC_RUNNER_TOKEN;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (runnerToken) headers.Authorization = `Bearer ${runnerToken}`;
   try {
     console.log(`[auto-fix] Triggering: POST ${url} (failedJobId=${jobId})`);
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ failedJobId: jobId }),
     });
     const text = await res.text();
     console.log(`[auto-fix] Response ${res.status}: ${text.slice(0, 300)}`);
+    if (!res.ok) {
+      setBuildJobAutoFixInProgress(jobId, false);
+      return;
+    }
+    try {
+      const data = JSON.parse(text) as { gaveUp?: boolean };
+      if (data?.gaveUp) setBuildJobAutoFixInProgress(jobId, false);
+    } catch {
+      // ignore parse error
+    }
   } catch (err) {
     console.error(`[auto-fix] Fetch failed for job ${jobId}:`, err);
+    setBuildJobAutoFixInProgress(jobId, false);
   }
 }
 
