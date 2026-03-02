@@ -2,6 +2,7 @@
   "name": "vibetree",
   "version": "0.1.0",
   "private": true,
+  "description": "VibeTree — AI-powered iOS app builder",
   "scripts": {
     "dev": "next dev -p 3001",
     "dev:webpack": "next dev -p 3001 --webpack",
