@@ -53,9 +53,9 @@
     "NSHealthUpdateUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 8,
+    "totalBuilds": 11,
     "firstAttemptCompile": 5,
-    "compileRate": 63,
+    "compileRate": 45,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [

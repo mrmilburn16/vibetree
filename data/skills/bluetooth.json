@@ -1,7 +1,9 @@
 {
   "id": "bluetooth",
   "name": "Bluetooth (CoreBluetooth)",
-  "frameworks": ["CoreBluetooth"],
+  "frameworks": [
+    "CoreBluetooth"
+  ],
   "version": 1,
   "detection": {
     "keywords": [
@@ -21,16 +23,20 @@
     "excludeKeywords": []
   },
   "promptInjection": "## Bluetooth (CoreBluetooth)\n\n**Type:** Apple Native (on-device)\n\n**Cost:** No keys; on-device only.\n\n**Apple Identifier Required:** None.\n\n**Key/Token Required:** No.\n\n**User Setup Steps:** None beyond Info.plist usage description (handled by the agent).\n\n**Common Errors:**\n- **App crashes when accessing Bluetooth** — Add `NSBluetoothAlwaysUsageDescription` to Info.plist and `// REQUIRES PLIST: NSBluetoothAlwaysUsageDescription` above the first use of CBCentralManager or CBPeripheralManager. Request or check authorization before scanning or advertising.\n- Bluetooth off or unavailable — Handle powered-off and unauthorized states; show a clear message when Bluetooth is not available.\n\n**Swift Code Pattern:**\n- Add `// REQUIRES PLIST: NSBluetoothAlwaysUsageDescription` above the first CoreBluetooth usage. Do not assume Bluetooth is powered on or authorized; check state and handle accordingly.\n\n**Agent Behavior:**\n- For any app that uses CoreBluetooth (BLE scanning, peripherals), always add the REQUIRES PLIST comment and handle unavailable/denied states.",
-  "canonicalCode": {},
+  "canonicalCode": {
+    "Views/BluetoothView.swift": "import SwiftUI\\nimport CoreBluetooth\\n\\n// REQUIRES PLIST: NSBluetoothAlwaysUsageDescription\\nclass BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate {\\n    private var centralManager: CBCentralManager!\\n    @Published var isBluetoothReady = false\\n    @Published var statusMessage: String?\\n    @Published var discoveredPeripherals: [String] = []\\n    @Published var isScanning = false\\n    private var discoveredIDs = Set<UUID>()\\n\\n    override init() {\\n        super.init()\\n        centralManager = CBCentralManager(delegate: self, queue: nil)\\n    }\\n\\n    func centralManager(_ central: CBCentralManager, didUpdateState state: CBManagerState) {\\n        DispatchQueue.main.async {\\n            switch state {\\n            case .poweredOn:\\n                self.isBluetoothReady = true\\n                self.statusMessage = nil\\n            default:\\n                self.isBluetoothReady = false\\n                self.statusMessage = \\\"Bluetooth is off or unavailable\\\"\\n            }\\n        }\\n    }\\n\\n    func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {\\n        DispatchQueue.main.async {\\n            guard !self.discoveredIDs.contains(peripheral.identifier) else { return }\\n            self.discoveredIDs.insert(peripheral.identifier)\\n            self.discoveredPeripherals.append(peripheral.name ?? peripheral.identifier.uuidString)\\n        }\\n    }\\n\\n    func startScan() {\\n        guard isBluetoothReady else { return }\\n        discoveredPeripherals = []\\n        discoveredIDs = []\\n        isScanning = true\\n        centralManager.scanForPeripherals(withServices: nil)\\n    }\\n}\\n\\nstruct BluetoothView: View {\\n    @StateObject private var viewModel = BluetoothViewModel()\\n\\n    var body: some View {\\n        VStack(spacing: 16) {\\n            if let message = viewModel.statusMessage {\\n                Text(message).foregroundStyle(.secondary)\\n            }\\n            Button(\\\"Scan\\\") { viewModel.startScan() }\\n                .disabled(!viewModel.isBluetoothReady)\\n            if viewModel.isScanning && viewModel.discoveredPeripherals.isEmpty {\\n                Text(\\\"Scanning...\\\").foregroundStyle(.secondary)\\n            }\\n            List(viewModel.discoveredPeripherals, id: \\\\.self) { name in\\n                Text(name)\\n            }\\n        }\\n    }\\n}\\n"
+  },
   "antiPatterns": [
     "Using CBCentralManager or CBPeripheralManager without NSBluetoothAlwaysUsageDescription",
     "Assuming Bluetooth is powered on or authorized without checking state"
   ],
-  "requiredPermissions": ["NSBluetoothAlwaysUsageDescription"],
+  "requiredPermissions": [
+    "NSBluetoothAlwaysUsageDescription"
+  ],
   "stats": {
-    "totalBuilds": 0,
-    "firstAttemptCompile": 0,
-    "compileRate": 0,
+    "totalBuilds": 3,
+    "firstAttemptCompile": 2,
+    "compileRate": 67,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],

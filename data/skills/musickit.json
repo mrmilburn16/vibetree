@@ -55,9 +55,9 @@
     "NSAppleMusicUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 9,
-    "firstAttemptCompile": 8,
-    "compileRate": 89,
+    "totalBuilds": 10,
+    "firstAttemptCompile": 9,
+    "compileRate": 90,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [

@@ -53,11 +53,11 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 28,
+    "totalBuilds": 29,
     "firstAttemptCompile": 16,
-    "compileRate": 57,
+    "compileRate": 55,
     "functionalSuccesses": 1,
-    "functionalRate": 4,
+    "functionalRate": 3,
     "commonErrors": [
       "type 'Theme' has no member 'accentColor'"
     ],

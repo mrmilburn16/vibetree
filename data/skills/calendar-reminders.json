@@ -1,7 +1,9 @@
 {
   "id": "calendar-reminders",
   "name": "Calendar & Reminders (EventKit)",
-  "frameworks": ["EventKit"],
+  "frameworks": [
+    "EventKit"
+  ],
   "version": 1,
   "detection": {
     "keywords": [
@@ -22,14 +24,19 @@
     "excludeKeywords": []
   },
   "promptInjection": "## Calendar / Reminders (EventKit)\n\n**Type:** Apple Native (on-device)\n\n**Cost:** No keys; on-device only.\n\n**Apple Identifier Required:** None.\n\n**Key/Token Required:** No.\n\n**User Setup Steps:** None beyond Info.plist usage description. Use `NSCalendarsUsageDescription` for calendar and `NSRemindersUsageDescription` for reminders if the app uses both.\n\n**Common Errors:**\n- **App crashes when accessing calendar or reminders** — Add the appropriate usage description to Info.plist and `// REQUIRES PLIST: NSCalendarsUsageDescription` (or NSRemindersUsageDescription) above the first EKEventStore access. Call `requestAccess(to: .event)` or `requestAccess(to: .reminder)` before reading or writing.\n\n**Swift Code Pattern:**\n- Add the REQUIRES PLIST comment(s) above the first EKEventStore usage. Request access for .event or .reminder and check the result before querying.\n\n**Agent Behavior:**\n- For any app that uses EventKit, always add the required plist comment(s) and request authorization before use.",
-  "canonicalCode": {},
+  "canonicalCode": {
+    "Views/RemindersView.swift": "import SwiftUI\\nimport EventKit\\n\\n// REQUIRES PLIST: NSRemindersUsageDescription\\nclass RemindersViewModel: ObservableObject {\\n    private let store = EKEventStore()\\n    @Published var isAuthorized = false\\n    @Published var lastAddedTitle: String?\\n    @Published var errorMessage: String?\\n\\n    func requestAccess() {\\n        store.requestAccess(to: .reminder) { [weak self] granted, _ in\\n            DispatchQueue.main.async {\\n                guard let self = self else { return }\\n                if granted {\\n                    self.isAuthorized = true\\n                    self.errorMessage = nil\\n                } else {\\n                    self.isAuthorized = false\\n                    self.errorMessage = \\\"Reminders access denied\\\"\\n                }\\n            }\\n        }\\n    }\\n\\n    func addReminder(title: String) {\\n        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }\\n        guard let calendar = store.defaultCalendar(for: .reminder) else {\\n            DispatchQueue.main.async { self.errorMessage = \\\"No reminder calendar\\\" }\\n            return\\n        }\\n        let reminder = EKReminder(eventStore: store)\\n        reminder.calendar = calendar\\n        reminder.title = title\\n        do {\\n            try store.save(reminder, commit: true)\\n            DispatchQueue.main.async {\\n                self.lastAddedTitle = title\\n                self.errorMessage = nil\\n            }\\n        } catch {\\n            DispatchQueue.main.async { self.errorMessage = error.localizedDescription }\\n        }\\n    }\\n}\\n\\nstruct RemindersView: View {\\n    @StateObject private var viewModel = RemindersViewModel()\\n    @State private var title = \\\"\\\"\\n\\n    var body: some View {\\n        VStack(spacing: 16) {\\n            TextField(\\\"Reminder title\\\", text: $title)\\n                .textFieldStyle(.roundedBorder)\\n                .disabled(!viewModel.isAuthorized)\\n            Button(\\\"Add Reminder\\\") { viewModel.addReminder(title: title) }\\n                .disabled(!viewModel.isAuthorized)\\n            if let message = viewModel.errorMessage {\\n                Text(message).foregroundStyle(.red)\\n            }\\n            if let added = viewModel.lastAddedTitle {\\n                Text(\\\"Added: \\\" + added).foregroundStyle(.secondary)\\n            }\\n        }\\n        .onAppear { viewModel.requestAccess() }\\n    }\\n}\\n"
+  },
   "antiPatterns": [
     "Accessing EKEventStore without requestAccess(to: .event) or requestAccess(to: .reminder)",
     "Missing // REQUIRES PLIST: NSCalendarsUsageDescription or NSRemindersUsageDescription"
   ],
-  "requiredPermissions": ["NSCalendarsUsageDescription", "NSRemindersUsageDescription"],
+  "requiredPermissions": [
+    "NSCalendarsUsageDescription",
+    "NSRemindersUsageDescription"
+  ],
   "stats": {
-    "totalBuilds": 0,
+    "totalBuilds": 1,
     "firstAttemptCompile": 0,
     "compileRate": 0,
     "functionalSuccesses": 0,

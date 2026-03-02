@@ -1,7 +1,10 @@
 {
   "id": "cloudkit-icloud",
   "name": "CloudKit / iCloud",
-  "frameworks": ["CloudKit", "Foundation"],
+  "frameworks": [
+    "CloudKit",
+    "Foundation"
+  ],
   "version": 1,
   "detection": {
     "keywords": [
@@ -19,7 +22,9 @@
     "excludeKeywords": []
   },
   "promptInjection": "## CloudKit / iCloud\n\n**Type:** Apple Native (sync)\n\n**Cost:** No per-call fee for typical usage; iCloud account required.\n\n**Apple Identifier Required:** App ID with **iCloud** capability (and optionally CloudKit container).\n\n**Key/Token Required:** No.\n\n**User Setup Steps:** Enable iCloud capability on the App ID in the Apple Developer portal. No plist usage-description key is required for CloudKit.\n\n**Common Errors:**\n- Missing entitlement — User must enable iCloud (and CloudKit if used) on the App ID in the Apple Developer portal.\n- Unavailable — When iCloud is unavailable (e.g. not signed in, no network), handle gracefully and work offline if the app supports it. Always check account status (e.g. `CKContainer.accountStatus`) and do not assume iCloud is available; show a clear message or disable sync when unavailable.\n\n**Swift Code Pattern:**\n- Use `NSUbiquitousKeyValueStore` or `CKContainer` as appropriate. Handle account status and errors; do not assume iCloud is always available. When using `NSUbiquitousKeyValueStore`, do not assume keys exist—check for the key and provide a default or handle missing values; `object(forKey:)` can return `nil`. When using `CKContainer`, use the correct container identifier (typically from your app's entitlements, e.g. `CKContainer.default()` or the container ID that matches the App ID capability); a wrong or missing container ID causes \"container not found\" or permission errors.\n- For offline-first apps, persist locally (e.g. Core Data) and sync when iCloud is available.\n\n**Agent Behavior:**\n- In the app summary, warn that the user must enable iCloud (and the capability used) on the App ID in the Apple Developer portal when the app uses CloudKit or iCloud sync.",
-  "canonicalCode": {},
+  "canonicalCode": {
+    "Views/CloudKitKeyValueView.swift": "import SwiftUI\nimport CloudKit\nimport Foundation\n\nclass CloudKitKeyValueViewModel: ObservableObject {\n    @Published var isICloudAvailable = false\n    @Published var syncedValue: String = \"\"\n    @Published var errorMessage: String?\n\n    private let store = NSUbiquitousKeyValueStore.default\n    private let key = \"syncedPreference\"\n\n    func checkAccountStatus() {\n        CKContainer.default().accountStatus { [weak self] status, error in\n            DispatchQueue.main.async {\n                guard let self = self else { return }\n                if let error = error {\n                    self.errorMessage = error.localizedDescription\n                    self.isICloudAvailable = false\n                    return\n                }\n                switch status {\n                case .available:\n                    self.isICloudAvailable = true\n                    self.errorMessage = nil\n                    self.loadFromStore()\n                case .noAccount, .restricted, .couldNotDetermine:\n                    self.isICloudAvailable = false\n                    self.errorMessage = \"iCloud is not available. Sign in to iCloud in Settings to sync.\"\n                @unknown default:\n                    self.isICloudAvailable = false\n                    self.errorMessage = \"iCloud status unknown.\"\n                }\n            }\n        }\n    }\n\n    private func loadFromStore() {\n        if let value = store.object(forKey: key) as? String {\n            syncedValue = value\n        } else {\n            syncedValue = \"\"\n        }\n    }\n\n    func save(_ value: String) {\n        store.set(value, forKey: key)\n        store.synchronize()\n        DispatchQueue.main.async {\n            self.syncedValue = value\n        }\n    }\n}\n\nstruct CloudKitKeyValueView: View {\n    @StateObject private var viewModel = CloudKitKeyValueViewModel()\n    @State private var editingValue: String = \"\"\n\n    var body: some View {\n        VStack(spacing: 16) {\n            if !viewModel.isICloudAvailable, let message = viewModel.errorMessage {\n                Text(message)\n                    .font(.caption)\n                    .foregroundStyle(.secondary)\n                    .multilineTextAlignment(.center)\n            }\n\n            TextField(\"Synced value\", text: $editingValue)\n                .textFieldStyle(.roundedBorder)\n                .disabled(!viewModel.isICloudAvailable)\n                .onSubmit { viewModel.save(editingValue) }\n\n            if viewModel.isICloudAvailable {\n                Text(\"Synced: \\(viewModel.syncedValue)\")\n                    .font(.caption)\n            }\n        }\n        .onAppear { viewModel.checkAccountStatus() }\n        .onChange(of: viewModel.syncedValue) { _, newValue in\n            editingValue = newValue\n        }\n    }\n}"
+  },
   "antiPatterns": [
     "Assuming iCloud is always available without checking account status",
     "Force-unwrapping NSUbiquitousKeyValueStore.object(forKey:) which can return nil",
@@ -27,7 +32,7 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 0,
+    "totalBuilds": 1,
     "firstAttemptCompile": 0,
     "compileRate": 0,
     "functionalSuccesses": 0,

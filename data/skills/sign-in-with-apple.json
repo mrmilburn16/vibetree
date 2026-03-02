@@ -1,7 +1,9 @@
 {
   "id": "sign-in-with-apple",
   "name": "Sign in with Apple",
-  "frameworks": ["AuthenticationServices"],
+  "frameworks": [
+    "AuthenticationServices"
+  ],
   "version": 1,
   "detection": {
     "keywords": [
@@ -17,10 +19,17 @@
       "apple id login",
       "asauthorizationcontroller"
     ],
-    "excludeKeywords": ["face id", "touch id", "biometric", "local auth"]
+    "excludeKeywords": [
+      "face id",
+      "touch id",
+      "biometric",
+      "local auth"
+    ]
   },
   "promptInjection": "## Sign in with Apple\n\n**Type:** Apple Native\n\n**Cost:** Free and unlimited; no charges from Apple.\n\n**Apple Identifier Required:** App ID with **Sign in with Apple** capability enabled.\n\n**Key/Token Required:** No.\n\n**User Setup Steps:** None. Ensure the project's bundle ID has Sign in with Apple capability enabled in the App ID (the agent or build system can note this).\n\n**Common Errors:**\n- Capability not enabled — Enable Sign in with Apple in the App ID for the app's bundle ID.\n\n**Swift Code Pattern:**\n- Use `AuthenticationServices` (e.g. `ASAuthorizationAppleIDProvider`, `ASAuthorizationController`) for Sign in with Apple button and flow.\n- Handle credential and error states appropriately: user cancelled (`.canceled`), credential revoked (re-check on app launch), network error. Do not assume the user completed sign-in; always handle the case where no credential is available. If you need to restore sign-in state across app launches, store the user identifier or credential reference securely (e.g. Keychain); do not store raw credentials in UserDefaults.\n\n**Agent Behavior:**\n- Use Sign in with Apple freely; it is the **preferred login method** for iOS apps when the user asks for login or authentication.\n- In the app summary, warn that the user must enable Sign in with Apple on the App ID in the Apple Developer portal or the app may not work.",
-  "canonicalCode": {},
+  "canonicalCode": {
+    "Views/SignInWithAppleView.swift": "import SwiftUI\nimport AuthenticationServices\n\nclass SignInWithAppleViewModel: ObservableObject {\n    @Published var isSignedIn = false\n    @Published var errorMessage: String?\n}\n\nstruct SignInWithAppleView: View {\n    @StateObject private var viewModel = SignInWithAppleViewModel()\n\n    var body: some View {\n        VStack(spacing: 16) {\n            SignInWithAppleButton(.signIn, onRequest: { request in\n                request.requestedScopes = [.fullName, .email]\n            }, onCompletion: { result in\n                switch result {\n                case .success(let authorization):\n                    guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else { return }\n                    let userIdentifier = credential.userIdentifier ?? \"\"\n                    // Store userIdentifier in Keychain for persistence across app launches.\n                    DispatchQueue.main.async {\n                        viewModel.isSignedIn = true\n                        viewModel.errorMessage = nil\n                    }\n                case .failure(let error):\n                    DispatchQueue.main.async {\n                        if (error as NSError).code == ASAuthorizationError.canceled.rawValue {\n                            viewModel.errorMessage = nil\n                        } else {\n                            viewModel.errorMessage = error.localizedDescription\n                        }\n                    }\n                }\n            })\n            .signInWithAppleButtonStyle(.black)\n\n            if let message = viewModel.errorMessage {\n                Text(message)\n                    .font(.caption)\n                    .foregroundStyle(.red)\n            }\n        }\n    }\n}"
+  },
   "antiPatterns": [
     "Storing raw credentials in UserDefaults instead of Keychain",
     "Assuming user completed sign-in without handling .canceled or no credential",
@@ -28,7 +37,7 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 0,
+    "totalBuilds": 1,
     "firstAttemptCompile": 0,
     "compileRate": 0,
     "functionalSuccesses": 0,
