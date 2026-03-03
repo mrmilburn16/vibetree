@@ -134,6 +134,10 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - If an item was created with a form, tapping it should open the same form pre-populated with the existing data for editing. Saving updates the item; it does not create a new one.
 - Lists with editable items must also support Edit mode with a toolbar Edit button for bulk delete.
 
+=== TASK COMPLETION UI (checklists / todo) ===
+
+- When a task is marked complete, apply these patterns so checklist/todo apps meet universal expectations: (1) Circle checkbox: empty circle = incomplete, filled circle with ✓ = complete; animate the transition with a spring animation. (2) Task title strikethrough: Text(task.title).strikethrough(task.isComplete, color: .secondary).foregroundColor(task.isComplete ? .secondary : .primary). (3) Completed tasks visually dim: use opacity 0.5–0.6 to de-emphasize. (4) Sort so completed tasks appear at the bottom of the list, below all incomplete tasks.
+
 - Confirm destructive actions with .alert() or .confirmationDialog().
 - Respect Reduce Motion: wrap motion animations in UIAccessibility.isReduceMotionEnabled check.
 - Add .accessibilityLabel() to icon buttons and non-text controls.
@@ -141,15 +145,16 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 
 === BACKGROUND DESIGN ===
 
-- Never use a flat single-color background. Always use a subtle gradient background that fits the app's category as the default:
+- Never use a flat single-color background. Always use a subtle gradient background that fits the app's category as the default. Never use purple, violet, or magenta in gradients unless the user explicitly requests it—purple is overused in AI-generated apps and looks generic.
   - Fitness/Health: dark navy to black — Color(hex: \"0A0A1A\") to Color(hex: \"1C1C2E\")
-  - Weather: blue gradient matching conditions (clear = deep blue, cloudy = grey-blue)
-  - Finance/Budget: dark green to black — Color(hex: \"0A1628\") to Color(hex: \"1C1C1E\")
-  - Productivity/Todo: deep purple to dark navy — Color(hex: \"1A0A2E\") to Color(hex: \"0A0A1A\")
+  - Weather: deep blue to navy — Color(hex: \"0A1628\") to Color(hex: \"1C2951\")
+  - Finance/Budget: dark green to black — Color(hex: \"0A1A0A\") to Color(hex: \"1C1C1E\")
+  - Productivity/Todo: dark slate to black — Color(hex: \"1A1A2E\") to Color(hex: \"0A0A0A\")
   - Food/Recipe: warm dark brown to black — Color(hex: \"1A0A00\") to Color(hex: \"1C1C1E\")
-  - Education: deep blue to dark teal — Color(hex: \"0A1628\") to Color(hex: \"0A2818\")
-  - Utility: dark grey to black — Color(hex: \"1C1C1E\") to Color(hex: \"0A0A0A\")
-  - Default: dark navy to black
+  - Education: deep teal to dark navy — Color(hex: \"0A2020\") to Color(hex: \"0A1628\")
+  - Utility: dark charcoal to black — Color(hex: \"1C1C1E\") to Color(hex: \"0A0A0A\")
+  - Social: deep burgundy to black — Color(hex: \"1A0A0A\") to Color(hex: \"1C1C1E\")
+  - Default: dark navy to black — Color(hex: \"0A0A1A\") to Color(hex: \"1C1C1E\")
 - If the user's prompt specifies a color scheme, background color, or theme — always follow their specification instead. User instructions override this default.
 - Apply the gradient as the base layer behind all content using:
   LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom)
@@ -177,7 +182,8 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 
 === CURRENCY INPUT ===
 
-- Any field that accepts a monetary amount must: (1) show the currency symbol (e.g. $ for US locale) inside or preceding the text field; (2) use .keyboardType(.decimalPad) so only numbers and decimal point can be entered; (3) format the displayed value with NumberFormatter using .currency style and Locale.current so the symbol and format match the user's locale; (4) never show a plain text field with just "0.00" placeholder and no currency symbol. Example for US: "$0.00" not "0.00".
+- Currency input must use calculator-style input, not a standard TextField with text cursor. (1) Display starts at $0.00. (2) Each digit typed shifts in from the right: 6 → $0.06, 0 → $0.60, 0 → $6.00. (3) Backspace removes the rightmost digit. (4) Use a custom input that intercepts number pad taps and builds the value as an integer of cents; do not use a standard TextField. (5) Never allow the cursor to be positioned mid-number. Store the value internally as Int (cents) and display as a formatted currency string (e.g. NumberFormatter .currency style, Locale.current).
+- Any field that accepts a monetary amount must: (1) show the currency symbol (e.g. $ for US locale) inside or preceding the field; (2) format the displayed value with NumberFormatter using .currency style and Locale.current; (3) never show a plain "0.00" without the symbol. For calculator-style inputs, display the formatted string derived from the cents value.
 - Large currency input displays (amount is the focal point of the screen) must: (1) center the value horizontally; (2) use a large font size (minimum 36pt) so the amount is prominent; (3) show the currency symbol inline with the number, same size—not as a separate smaller prefix label. Example: Text(\"$600.00\").font(.system(size: 48, weight: .bold)).multilineTextAlignment(.center).frame(maxWidth: .infinity). Small inline currency fields (in a list row or form) can be left or trailing aligned; use judgment based on context.
 - When a currency text field loses focus (onSubmit or .onChange(of: isFocused)), normalize the value to 2 decimal places so \"85.6\" becomes \"85.60\", \"600\" becomes \"600.00\", and \"85.60\" stays \"85.60\". Use .onChange(of: isFocused) { focused in if !focused { if let value = Double(amountText) { amountText = String(format: \"%.2f\", value) } } }. Applies to any currency input where the user types a dollar amount.
 
