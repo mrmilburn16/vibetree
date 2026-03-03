@@ -335,6 +335,7 @@ export function RunOnDeviceModal({
           projectName,
           bundleId: finalBundleId,
           developmentTeam: finalTeamId,
+          autoFix: buildStatus !== "live",
         }),
       });
       if (!res.ok) {

@@ -1222,6 +1222,7 @@ function ResultRow({
                         projectName: toPascalCase(result.idea.title),
                         bundleId: "com.vibetree.test",
                         developmentTeam: teamId || undefined,
+                        autoFix: result.status !== "succeeded",
                       }),
                     });
                     const data = await res.json().catch(() => ({}));

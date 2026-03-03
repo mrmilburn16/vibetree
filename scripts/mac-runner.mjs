@@ -1,4 +1,5 @@
 import { spawn, execSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir, homedir } from "node:os";
@@ -12,6 +13,29 @@ const SIMULATOR_FRAME_INTERVAL_MS = 200;
 
 /** Persistent DerivedData cache per project (keyed by projectId). */
 const DERIVED_DATA_CACHE_DIR = join(homedir(), ".vibetree", "derived-data-cache");
+/** Cache for built device .app bundles keyed by projectId + content hash (skip rebuild when source unchanged). */
+const DEVICE_APP_CACHE_DIR = join(homedir(), ".vibetree", "device-app-cache");
+
+function contentHash(zipBuffer) {
+  return createHash("sha256").update(zipBuffer).digest("hex").slice(0, 16);
+}
+
+function getCachedDeviceAppPath(projectId, hash) {
+  const p = join(DEVICE_APP_CACHE_DIR, projectId, `${hash}.app`);
+  return existsSync(p) ? p : null;
+}
+
+function saveDeviceAppToCache(projectId, hash, appPath) {
+  if (!projectId || !hash || !appPath || !existsSync(appPath)) return;
+  try {
+    const dir = join(DEVICE_APP_CACHE_DIR, projectId);
+    execSync(`mkdir -p "${dir}"`, { encoding: "utf8" });
+    const dest = join(dir, `${hash}.app`);
+    execSync(`ditto "${appPath}" "${dest}"`, { encoding: "utf8" });
+  } catch (e) {
+    console.warn("[device-cache] Failed to save .app to cache:", e?.message || e);
+  }
+}
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -584,6 +608,64 @@ async function validateJob(job) {
 
   try {
     const zip = await downloadZip(job);
+    const wantDevice = job.request.outputType === "device";
+
+    if (wantDevice) {
+      const hash = contentHash(zip);
+      const cachedAppPath = getCachedDeviceAppPath(job.request.projectId, hash);
+      if (cachedAppPath) {
+        const logs = [];
+        const flush = async (force = false) => {
+          if (!logs.length) return;
+          await updateJob(job.id, { logs: logs.splice(0, logs.length) });
+        };
+        logs.push("[device-cache] Reusing cached device build (source unchanged), skipping xcodebuild.");
+        await flush(true);
+        const device = findConnectedDevice();
+        if (!device) {
+          logs.push("[install] ⚠️ No connected iOS device found — cached build ready but could not install.");
+          await updateJob(job.id, {
+            status: "succeeded",
+            exitCode: 0,
+            logs: ["✅ Cached build", "⚠️ No connected device found for auto-install"],
+          });
+        } else {
+          logs.push(`[install] Found device: ${device.name} (${device.identifier})`);
+          await flush(true);
+          const bundleId = job.request.bundleId || "com.vibetree.app";
+          const INSTALL_TIMEOUT_MS = 60 * 1000;
+          let installed;
+          try {
+            installed = await Promise.race([
+              installAppOnDevice(cachedAppPath, device.identifier, bundleId, logs, flush),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("INSTALL_TIMEOUT")), INSTALL_TIMEOUT_MS)
+              ),
+            ]);
+          } catch (e) {
+            if (e?.message === "INSTALL_TIMEOUT") {
+              await updateJob(job.id, {
+                status: "failed",
+                error: "Install timed out — make sure your iPhone is unlocked and connected via USB.",
+                logs: [],
+              });
+              return;
+            }
+            throw e;
+          }
+          await updateJob(job.id, {
+            status: "succeeded",
+            exitCode: 0,
+            ...(installed && { installedOnDevice: true }),
+            logs: installed
+              ? ["✅ Cached build", `✅ Installed on ${device.name}`]
+              : ["✅ Cached build", `⚠️ Install failed on ${device.name}`],
+          });
+        }
+        return;
+      }
+    }
+
     await writeFile(zipPath, zip);
 
     // Unzip with ditto (built-in on macOS).
@@ -630,7 +712,6 @@ async function validateJob(job) {
     };
 
     const wantIPA = job.request.outputType === "ipa";
-    const wantDevice = job.request.outputType === "device";
     const teamId = job.request.developmentTeam || process.env.DEFAULT_DEVELOPMENT_TEAM || "";
     const cachedDD = getCachedDerivedDataPath(job.request.projectId);
     const derivedDataPath = cachedDD || join(tmp, "DerivedData");
@@ -708,6 +789,13 @@ async function validateJob(job) {
             exitCode: 0,
             logs: ["✅ Build succeeded", "⚠️ No connected device found for auto-install"],
           });
+          try {
+            const zipBuf = await readFile(zipPath);
+            const hash = contentHash(zipBuf);
+            saveDeviceAppToCache(job.request.projectId, hash, appPath);
+          } catch (e) {
+            console.warn("[device-cache] Failed to cache .app:", e?.message || e);
+          }
         } else {
           logs.push(`[install] Found device: ${device.name} (${device.identifier})`);
           await flush(true);
@@ -745,6 +833,13 @@ async function validateJob(job) {
               ? ["✅ Build succeeded", `✅ Installed on ${device.name}`]
               : ["✅ Build succeeded", `⚠️ Install failed on ${device.name} — download the zip and run from Xcode instead`],
           });
+          try {
+            const zipBuf = await readFile(zipPath);
+            const hash = contentHash(zipBuf);
+            saveDeviceAppToCache(job.request.projectId, hash, appPath);
+          } catch (e) {
+            console.warn("[device-cache] Failed to cache .app:", e?.message || e);
+          }
         }
       } else if (wantIPA) {
         const ipaPath = await archiveAndExportIPA(
