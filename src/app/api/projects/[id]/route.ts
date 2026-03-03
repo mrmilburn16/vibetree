@@ -47,7 +47,23 @@ export async function PATCH(
   if (typeof body.bundleId === "string") updates.bundleId = body.bundleId;
   if (body.projectType === "standard" || body.projectType === "pro") updates.projectType = body.projectType;
   const project = updateProject(id, updates);
-  if (project) await updateProjectInFirestore(id, updates, auth.user.uid);
+  if (!project) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+  try {
+    const ok = await updateProjectInFirestore(id, updates, auth.user.uid);
+    if (!ok) {
+      return NextResponse.json(
+        { error: "Project could not be updated. Please try again." },
+        { status: 503 }
+      );
+    }
+  } catch {
+    return NextResponse.json(
+      { error: "Project could not be updated. Please try again." },
+      { status: 503 }
+    );
+  }
   return NextResponse.json({ ...project, projectType: project?.projectType ?? "pro" });
 }
 
@@ -58,10 +74,24 @@ export async function DELETE(
   const { id } = await params;
   const auth = await requireProjectAuth(request, id);
   if (auth instanceof NextResponse) return auth;
-  const existed = deleteProject(id);
-  await deleteProjectFromFirestore(id, auth.user.uid);
+  const existed = getProject(id) != null;
   if (!existed) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
+  try {
+    const ok = await deleteProjectFromFirestore(id, auth.user.uid);
+    if (!ok) {
+      return NextResponse.json(
+        { error: "Project could not be deleted. Please try again." },
+        { status: 503 }
+      );
+    }
+  } catch {
+    return NextResponse.json(
+      { error: "Project could not be deleted. Please try again." },
+      { status: 503 }
+    );
+  }
+  deleteProject(id);
   return new NextResponse(null, { status: 204 });
 }

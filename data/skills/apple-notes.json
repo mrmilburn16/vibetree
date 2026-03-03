@@ -1,0 +1,6 @@
+{
+  "name": "Apple Notes Integration",
+  "detection": { "keywords": [], "excludeKeywords": [] },
+  "triggers": ["notes app", "Apple Notes", "save to notes", "log to notes"],
+  "promptBlock": "Apple Notes app: There is no public API for third-party apps to create or edit notes inside the built-in Apple Notes app. If the user wants to \"log to Apple Notes\" or \"save to the Notes app\", store the content in your app and provide a Share action (ShareLink or UIActivityViewController) so the user can tap \"Share to Notes.\" For programmable system integration, Reminders (EventKit) is an alternative when \"reminder\"-style logging is acceptable."
+}

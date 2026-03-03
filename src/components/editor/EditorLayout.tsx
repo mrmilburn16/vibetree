@@ -77,9 +77,19 @@ export function EditorLayout({
   const [chatWidth, setChatWidth] = useState(CHAT_WIDTH_DEFAULT);
   const [isResizing, setIsResizing] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [runOnDeviceTitle, setRunOnDeviceTitle] = useState("Preview on your iPhone with Expo Go");
 
   useEffect(() => {
     setChatWidth(getStoredChatWidth());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setRunOnDeviceTitle(
+      localStorage.getItem("vibetree-project-type") === "pro"
+        ? "Install and run on your iPhone"
+        : "Preview on your iPhone with Expo Go",
+    );
   }, []);
 
   useEffect(() => {
@@ -298,7 +308,7 @@ export function EditorLayout({
             variant="secondary"
             className="gap-1.5 text-xs"
             onClick={() => setRunOnDeviceOpen(true)}
-            title="Preview on your iPhone with Expo Go"
+            title={runOnDeviceTitle}
           >
             <Smartphone className="h-3.5 w-3.5 shrink-0" aria-hidden />
             Run on device

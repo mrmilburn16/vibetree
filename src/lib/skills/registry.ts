@@ -70,13 +70,15 @@ export function detectSkills(prompt: string): SkillMatch[] {
   const matches: SkillMatch[] = [];
 
   for (const skill of skills) {
-    const excludeHit = skill.detection.excludeKeywords.some((kw) =>
+    const keywords = skill.detection?.keywords ?? [];
+    const excludeKeywords = skill.detection?.excludeKeywords ?? [];
+    const excludeHit = excludeKeywords.some((kw) =>
       hay.includes(normalise(kw)),
     );
     if (excludeHit) continue;
 
     const matched: string[] = [];
-    for (const kw of skill.detection.keywords) {
+    for (const kw of keywords) {
       if (hay.includes(normalise(kw))) matched.push(kw);
     }
 

@@ -1,0 +1,6 @@
+{
+  "name": "AR Measurement & Ruler",
+  "detection": { "keywords": [], "excludeKeywords": [] },
+  "triggers": ["AR", "augmented reality", "ARKit", "ruler", "measure", "measurement", "3D", "anchor", "plane detection"],
+  "promptBlock": "AR ruler / measurement apps: For any AR measurement or ruler app, use the standard UX pattern: (1) tap to place first anchor point, (2) tap again to place second anchor point, (3) draw a visible line between the two points, (4) show distance in both inches and centimeters, (5) include a Reset button to start over. Tapping should lock the cursor dot's current AR raycast position as the anchor point — not place a point at the screen touch coordinates. The cursor dot tracks the AR surface continuously; tap confirms its current position."
+}

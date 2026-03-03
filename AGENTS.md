@@ -25,6 +25,7 @@ If you are the **system improvement agent** (improving prompts, skills, and fixe
 | **`docs/SYSTEM_IMPROVEMENT_AGENT.md`** | Full instructions for the system improvement agent: mission, how the system works, levers, process, copy-paste brief. |
 | **`docs/FIRST_TRY_INTEGRATION.md`** | Playbook to pre-wire a new capability (e.g. MapKit) so the first user prompt works — skill + learnings + checklist. |
 | **`docs/LEARNINGS_MUSICKIT.md`** | MusicKit failure modes and fix prompts (e.g. "Could not access Apple Music", developer token, authorization-first). |
+| **`docs/System_Prompt_Restructuring_Plan.md`** | Plan to slim core Swift prompt and move integration-specific rules into conditional skills (token savings, skill list, Cursor prompts). |
 | **`docs/DELEGATABLE_TASKS.md`** | (If present) List of tasks a cloud agent can do without building apps. |
 | **`data/build-results.jsonl`** | Build outcomes and compiler errors; input for data-driven improvements. |
 | **`scripts/analyze-builds.mjs`** | Summarize compile rate, auto-fix usage; run with `node scripts/analyze-builds.mjs`. |

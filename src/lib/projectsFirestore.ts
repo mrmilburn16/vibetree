@@ -81,7 +81,11 @@ export async function listProjectsFromFirestore(userId: string): Promise<{
       };
     });
     return { projects, fromFirestore: true };
-  } catch {
+  } catch (err) {
+    console.error("[projects-firestore] listProjectsFromFirestore failed:", err);
+    const e = err as { code?: string; message?: string };
+    if (e?.message) console.error("[projects-firestore] message:", e.message);
+    if (e?.code) console.error("[projects-firestore] code:", e.code);
     return { projects: [], fromFirestore: false };
   }
 }

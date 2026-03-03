@@ -85,6 +85,7 @@ export default function DashboardPage() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projectsFetchError, setProjectsFetchError] = useState<"session_expired" | "network" | null>(null);
   const [pushTestLoading, setPushTestLoading] = useState(false);
   const [pushTestMessage, setPushTestMessage] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -118,9 +119,19 @@ export default function DashboardPage() {
   const fetchProjectsFromApi = useCallback(() => {
     if (typeof window === "undefined") return;
     setProjectsLoading(true);
+    setProjectsFetchError(null);
     fetch("/api/projects")
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to fetch"))))
-      .then((data: { projects?: Array<Project & { projectType?: string }> }) => {
+      .then((res) => {
+        if (res.status === 401) {
+          setProjectsFetchError("session_expired");
+          return null;
+        }
+        if (!res.ok) return Promise.reject(res);
+        return res.json();
+      })
+      .then((data: { projects?: Array<Project & { projectType?: string }> } | null) => {
+        if (data == null) return;
+        setProjectsFetchError(null);
         const list = Array.isArray(data.projects) ? data.projects : [];
         const normalized: Project[] = list.map((p) => ({
           id: p.id,
@@ -133,6 +144,7 @@ export default function DashboardPage() {
         saveProjects(normalized);
       })
       .catch(() => {
+        setProjectsFetchError("network");
         setProjects(getProjects());
       })
       .finally(() => {
@@ -568,6 +580,18 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Session expired — do not replace project list with localStorage */}
+        {projectsFetchError === "session_expired" && (
+          <div className="mb-4 rounded-xl border border-[var(--semantic-warning)]/50 bg-[var(--semantic-warning)]/10 px-4 py-3 text-center">
+            <p className="text-sm text-[var(--text-primary)]">
+              Session expired, please sign in.
+            </p>
+            <Link href="/sign-in" className="mt-2 inline-block text-sm font-medium text-[var(--link-default)] hover:underline">
+              Sign in
+            </Link>
+          </div>
+        )}
 
         {/* Projects section */}
         {projects.length > 0 && (

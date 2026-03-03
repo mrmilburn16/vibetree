@@ -1,0 +1,6 @@
+{
+  "name": "Social Media & Cross-Posting",
+  "detection": { "keywords": [], "excludeKeywords": [] },
+  "triggers": ["social media", "post to", "cross-post", "X/Twitter", "Instagram", "LinkedIn", "Facebook", "TikTok", "Bluesky", "Mastodon"],
+  "promptBlock": "Cross-posting / multi-platform posting: If the app posts to multiple social platforms, it MUST include a way to \"connect\" or \"link\" accounts — e.g. a Settings or \"Connected accounts\" screen where each platform has a \"Connect\" action and shows connection status. Do not only show platform selection toggles; users need a visible flow to connect each platform. Real posting requires OAuth/API keys per service, so implement connection UI and demo/simulated posting unless you have backend support."
+}

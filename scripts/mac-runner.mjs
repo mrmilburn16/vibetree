@@ -731,12 +731,16 @@ async function validateJob(job) {
         const bundleId = job.request.bundleId || "com.vibetree.app";
         const projectId = job.request.projectId;
 
-        const appetizeResult = await uploadAppToAppetize(projectId, appPath, projectName);
-        if (appetizeResult.ok) {
-          console.log("[Appetize] Appetize upload succeeded:", appetizeResult.publicKey);
+        if (process.env.APPETIZE_ENABLED === "true") {
+          const appetizeResult = await uploadAppToAppetize(projectId, appPath, projectName);
+          if (appetizeResult.ok) {
+            console.log("[Appetize] Appetize upload succeeded:", appetizeResult.publicKey);
+          } else {
+            console.warn("[Appetize] Appetize upload failed, falling back to screenshots:", appetizeResult.error);
+            await runSimulatorStream(projectId, appPath, bundleId);
+          }
         } else {
-          console.warn("[Appetize] Appetize upload failed, falling back to screenshots:", appetizeResult.error);
-          await runSimulatorStream(projectId, appPath, bundleId);
+          console.log("[Appetize] APPETIZE_ENABLED not set, skipping upload");
         }
       }
     } else {

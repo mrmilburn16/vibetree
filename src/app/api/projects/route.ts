@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import {
   listProjects,
-  createProject,
-  ensureProject,
   setProjects,
+  setProject,
+  makeDefaultBundleId,
 } from "@/lib/projectStore";
 import {
   listProjectsFromFirestore,
@@ -54,16 +54,34 @@ export async function POST(request: Request) {
       : body.projectType === "standard"
         ? "standard"
         : "pro";
-  const project = id ? ensureProject(id, name, projectType) : createProject(name, projectType);
+  const projectId = id ?? `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const now = Date.now();
+  const record = {
+    id: projectId,
+    name,
+    bundleId: makeDefaultBundleId(projectId),
+    projectType: projectType as "standard" | "pro",
+    createdAt: now,
+    updatedAt: now,
+  };
   const doc: ProjectDoc = {
-    id: project.id,
-    name: project.name,
-    bundleId: project.bundleId,
-    projectType,
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
+    ...record,
     userId: user.uid,
   };
-  await createProjectInFirestore(doc);
-  return NextResponse.json({ project: { ...project, projectType } });
+  try {
+    const ok = await createProjectInFirestore(doc);
+    if (!ok) {
+      return NextResponse.json(
+        { error: "Project could not be saved. Please try again." },
+        { status: 503 }
+      );
+    }
+  } catch {
+    return NextResponse.json(
+      { error: "Project could not be saved. Please try again." },
+      { status: 503 }
+    );
+  }
+  setProject(record);
+  return NextResponse.json({ project: { ...record, projectType } });
 }

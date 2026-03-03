@@ -1,0 +1,6 @@
+{
+  "name": "Workout & Fitness Rep Counting",
+  "detection": { "keywords": [], "excludeKeywords": [] },
+  "triggers": ["workout", "exercise", "rep", "reps", "fitness tracker", "gym", "pushup", "squat", "rep counting", "motion detection"],
+  "promptBlock": "Sensing strategy (workout rep counting / detection): Choose the sensing approach that matches the user's described setup. Do NOT guess.\n- If the phone is placed in front of the user (selfie/FaceTime-style camera on tripod/table), Core Motion will NOT reliably detect reps because the device is stationary. Use AVFoundation camera frames + Vision human body pose estimation with smoothing + hysteresis thresholds + cooldown. Provide on-screen guidance when the body isn't visible enough, plus a manual +1 fallback button.\n- If the phone/watch moves with the body (pocket/armband/Apple Watch), use Core Motion (accelerometer/gyro or CMPedometer) with filtering + thresholds + cooldown.\n- If ambiguous, infer from phrasing: \"selfie/FaceTime/tripod/watching me\" => Vision pose; \"pocket/armband/watch\" => Core Motion."
+}

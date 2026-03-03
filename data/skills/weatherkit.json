@@ -1,20 +1,15 @@
 {
   "id": "weatherkit",
-  "name": "Weather (WeatherKit)",
-  "frameworks": [
-    "WeatherKit"
-  ],
-  "version": 1,
+  "name": "Weather (OpenWeatherMap)",
+  "frameworks": [],
+  "version": 2,
   "detection": {
     "keywords": [
       "weather",
       "forecast",
       "temperature",
-      "weatherkit",
-      "weather kit",
       "current weather",
       "daily forecast",
-      "hourly forecast",
       "humidity",
       "wind",
       "rain",
@@ -25,20 +20,30 @@
     ],
     "excludeKeywords": []
   },
-  "promptInjection": "## WeatherKit\n\n**Type:** Apple Native + VibeTree Hosted (token)\n\n**Cost:** Apple provides 500,000 free API calls per month; after that, $0.0002 per call. VibeTree absorbs cost; agent can use WeatherKit freely without requiring user setup.\n\n**Apple Identifier Required:** App ID with **WeatherKit** capability enabled under the App Services tab.\n\n**Key/Token Required:** Yes. Uses the same `.p8` key as MusicKit if both are enabled on the same key. JWT requires **subject (sub) claim set to bundle ID**, unlike MusicKit. Token stored in VibeTree App Secrets as `weatherkit_token`.\n\n**User Setup Steps:**\n- No user setup required for standard use; VibeTree provides the token. If self-hosting or custom key: ensure App ID has WeatherKit capability; generate JWT with `sub` set to the app's bundle ID; store as `weatherkit_token`.\n\n**Common Errors:**\n- Invalid or expired token — Regenerate JWT with correct `sub` (bundle ID) and key.\n- Rate limit or too many requests — Calling the weather API on every view appearance or every render causes rate limiting. You must cache responses for at least 30 minutes and never call the API from a view body or on every .onAppear without checking the cache first.\n\n**Swift Code Pattern:**\n- Always **cache** weather responses for at least **30 minutes** in generated code; never call the API on every render or every view appearance.\n- Use `WeatherService.shared` (or equivalent) with the appropriate request type; check cache before issuing a new request. Use a single shared service instance (e.g. `WeatherService.shared`); do not create a new `WeatherService` on every request or in every view. The response type (e.g. `Weather`) may have optional properties (e.g. `dailyForecast`); handle `nil` for optional fields instead of force-unwrapping to avoid runtime crashes.\n\n**Agent Behavior:**\n- Use WeatherKit freely in apps when the user asks for weather; do not require user setup since VibeTree absorbs cost.\n- Always generate code that caches weather for at least 30 minutes and never calls on every render.",
+  "triggers": [
+    "weather",
+    "forecast",
+    "temperature",
+    "current weather",
+    "weather app",
+    "weather widget",
+    "local weather"
+  ],
+  "promptInjection": "## Weather — OpenWeatherMap only\n\n**NEVER use Apple WeatherKit.** Always use the OpenWeatherMap API instead.\n\n**API:** OpenWeatherMap current weather. Endpoint: `https://api.openweathermap.org/data/2.5/weather?q={city}&appid={key}&units=imperial`. Use a hardcoded API key stored as a constant (e.g. `kOpenWeatherMapAPIKey`).\n\n**Networking:** Use URLSession to request the URL, decode the JSON response with Codable, and handle errors (invalid URL, network failure, non-2xx status, decoding errors). Show a user-facing error message on failure.\n\n**Caching:** Cache the response for at least 30 minutes; do not call the API on every view appearance or every render. Check cache before issuing a new request.\n\n**Swift pattern:** One shared service or view model that holds cache and last-fetch time; use `URLSession.shared.data(from: url)` or `URLSession.shared.data(for: URLRequest)`, validate `httpResponse.statusCode`, decode into a struct (e.g. with `main.temp`, `weather[0].description`, `name`), and update UI on the main actor.",
+  "promptBlock": "## Weather — OpenWeatherMap only\n\nNEVER use Apple WeatherKit. Always use the OpenWeatherMap API.\n\nEndpoint: https://api.openweathermap.org/data/2.5/weather?q={city}&appid={key}&units=imperial\nStore the API key as a constant (e.g. kOpenWeatherMapAPIKey). Use URLSession to fetch, validate HTTP status, decode JSON with Codable, and handle errors. Cache responses for at least 30 minutes; do not call the API on every view appearance.",
   "canonicalCode": {
-    "Views/WeatherView.swift": "import SwiftUI\\nimport WeatherKit\\nimport CoreLocation\\n\\nprivate let kCacheInterval: TimeInterval = 30 * 60\\nprivate let kNewYork = CLLocation(latitude: 40.7128, longitude: -74.0060)\\n\\n@MainActor\\nclass WeatherViewModel: ObservableObject {\\n    @Published var currentWeather: CurrentWeather?\\n    @Published var isLoading = false\\n    @Published var errorMessage: String?\\n\\n    private var cachedWeather: Weather?\\n    private var lastFetchTime: Date?\\n\\n    func fetchWeather() {\\n        if let cached = cachedWeather, let time = lastFetchTime, Date().timeIntervalSince(time) < kCacheInterval {\\n            currentWeather = cached.currentWeather\\n            isLoading = false\\n            errorMessage = nil\\n            return\\n        }\\n        isLoading = true\\n        errorMessage = nil\\n        Task {\\n            do {\\n                let weather = try await WeatherService.shared.weather(for: kNewYork, including: .current)\\n                cachedWeather = weather\\n                lastFetchTime = Date()\\n                currentWeather = weather.currentWeather\\n                isLoading = false\\n                errorMessage = nil\\n            } catch {\\n                isLoading = false\\n                errorMessage = error.localizedDescription\\n            }\\n        }\\n    }\\n}\\n\\nstruct WeatherView: View {\\n    @StateObject private var viewModel = WeatherViewModel()\\n\\n    var body: some View {\\n        Group {\\n            if viewModel.isLoading {\\n                ProgressView(\\\"Loading…\\\")\\n            } else if let message = viewModel.errorMessage {\\n                Text(message)\\n                    .foregroundStyle(.red)\\n            } else if let current = viewModel.currentWeather {\\n                VStack(spacing: 8) {\\n                    if let temp = current.temperature {\\n                        Text(\\\"\\(Int(temp.value))°\\\")\\n                            .font(.largeTitle)\\n                    }\\n                    if let condition = current.condition {\\n                        Text(String(describing: condition))\\n                            .font(.subheadline)\\n                    }\\n                }\\n            }\\n        }\\n        .onAppear { viewModel.fetchWeather() }\\n    }\\n}\\n"
+    "Views/WeatherView.swift": "import SwiftUI\n\nprivate let kOpenWeatherMapAPIKey = \"768a1b47b3bfd8f5e94ed1a4f3630e48\"\nprivate let kCacheInterval: TimeInterval = 30 * 60\n\nstruct OWMResponse: Codable {\n    let name: String?\n    let main: Main?\n    let weather: [WeatherItem]?\n    struct Main: Codable {\n        let temp: Double?\n        let humidity: Int?\n        let feels_like: Double?\n    }\n    struct WeatherItem: Codable {\n        let main: String?\n        let description: String?\n    }\n}\n\n@MainActor\nclass WeatherViewModel: ObservableObject {\n    @Published var cityName: String = \"\"\n    @Published var temp: Double?\n    @Published var condition: String?\n    @Published var isLoading = false\n    @Published var errorMessage: String?\n\n    private var lastFetchTime: Date?\n    private var cachedCity: String?\n\n    func fetchWeather(city: String) {\n        let trimmed = city.trimmingCharacters(in: .whitespacesAndNewlines)\n        guard !trimmed.isEmpty else { return }\n        if let cached = cachedCity, cached == trimmed, let time = lastFetchTime, Date().timeIntervalSince(time) < kCacheInterval {\n            isLoading = false\n            errorMessage = nil\n            return\n        }\n        isLoading = true\n        errorMessage = nil\n        let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trimmed\n        guard let url = URL(string: \"https://api.openweathermap.org/data/2.5/weather?q=\\(encoded)&appid=\\(kOpenWeatherMapAPIKey)&units=imperial\") else {\n            errorMessage = \"Invalid city\"\n            isLoading = false\n            return\n        }\n        Task {\n            do {\n                let (data, response) = try await URLSession.shared.data(from: url)\n                guard let http = response as? HTTPURLResponse else {\n                    errorMessage = \"Invalid response\"\n                    isLoading = false\n                    return\n                }\n                guard (200...299).contains(http.statusCode) else {\n                    errorMessage = \"Weather unavailable (HTTP \\(http.statusCode))\"\n                    isLoading = false\n                    return\n                }\n                let decoder = JSONDecoder()\n                let owm = try decoder.decode(OWMResponse.self, from: data)\n                lastFetchTime = Date()\n                cachedCity = trimmed\n                cityName = owm.name ?? trimmed\n                temp = owm.main?.temp\n                condition = owm.weather?.first?.description\n                errorMessage = nil\n            } catch {\n                errorMessage = error.localizedDescription\n            }\n            isLoading = false\n        }\n    }\n}\n\nstruct WeatherView: View {\n    @StateObject private var viewModel = WeatherViewModel()\n    @State private var cityInput = \"San Francisco\"\n\n    var body: some View {\n        VStack(spacing: 12) {\n            TextField(\"City\", text: $cityInput)\n                .textFieldStyle(.roundedBorder)\n                .padding(.horizontal)\n            Button(\"Get weather\") { viewModel.fetchWeather(city: cityInput) }\n            Group {\n                if viewModel.isLoading {\n                    ProgressView(\"Loading…\")\n                } else if let message = viewModel.errorMessage {\n                    Text(message)\n                        .foregroundStyle(.red)\n                } else if let temp = viewModel.temp {\n                    VStack(spacing: 8) {\n                        Text(\"\\(viewModel.cityName)\")\n                            .font(.headline)\n                        Text(\"\\(Int(temp))°F\")\n                            .font(.largeTitle)\n                        if let cond = viewModel.condition {\n                            Text(cond)\n                                .font(.subheadline)\n                        }\n                    }\n                }\n            }\n        }\n        .padding()\n        .onAppear { viewModel.fetchWeather(city: cityInput) }\n    }\n}\n"
   },
   "antiPatterns": [
+    "Using Apple WeatherKit or WeatherService.shared",
     "Calling weather API on every view appearance or every render without caching",
-    "Creating a new WeatherService instance on every request or in every view",
-    "Force-unwrapping optional Weather response properties (e.g. dailyForecast)"
+    "Force-unwrapping decoded API response properties"
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 1,
-    "firstAttemptCompile": 0,
-    "compileRate": 0,
+    "totalBuilds": 2,
+    "firstAttemptCompile": 1,
+    "compileRate": 50,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],

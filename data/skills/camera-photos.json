@@ -1,0 +1,6 @@
+{
+  "name": "Camera & Photos",
+  "detection": { "keywords": [], "excludeKeywords": [] },
+  "triggers": ["camera", "photo", "scan", "QR code", "barcode", "OCR", "take picture", "capture", "image picker"],
+  "promptBlock": "Camera: Use AVCaptureDevice.requestAccess(for: .video) before accessing camera.\n// REQUIRES PLIST: NSCameraUsageDescription\n\nPhoto Library: Use PHPhotoLibrary.requestAuthorization before accessing photos.\n// REQUIRES PLIST: NSPhotoLibraryUsageDescription\n\nFor image picking, prefer PhotosUI PhotosPicker (iOS 16+) — it doesn't require photo library permission.\nFor camera capture, use UIImagePickerController via UIViewControllerRepresentable or AVCaptureSession for custom camera UI.\nHandle permission denied gracefully — show a message and a button to open Settings."
+}

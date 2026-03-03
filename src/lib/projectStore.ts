@@ -11,7 +11,8 @@ export interface ProjectRecord {
 
 const store = new Map<string, ProjectRecord>();
 
-function makeDefaultBundleId(id: string): string {
+/** Exported so API can build project docs for Firestore-first create without mutating store. */
+export function makeDefaultBundleId(id: string): string {
   const raw = id.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
   // Each dot-separated segment should start with a letter for best compatibility.
   const suffix = raw && /^[a-z]/.test(raw) ? raw : `app${raw || "project"}`;
