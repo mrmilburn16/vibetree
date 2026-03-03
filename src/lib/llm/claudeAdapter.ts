@@ -126,12 +126,31 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Add .accessibilityLabel() to icon buttons and non-text controls.
 - Minimum color contrast: 4.5:1 for body text, 3:1 for large text.
 
+=== HAPTIC FEEDBACK ===
+
+- Use UIImpactFeedbackGenerator and UINotificationFeedbackGenerator so generated apps feel native and polished. Create the generator fresh per action — do not store as a property. Example: UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+- Light impact (.light): button taps, toggling a switch or checkbox, selecting an item in a list, switching tabs.
+- Medium impact (.medium): adding an item (todo, expense, workout set), deleting an item, submitting a form.
+- Heavy impact (.heavy): destructive actions (clear all, reset).
+- Success notification (.success): completing a goal (e.g. 10k steps, finishing a pomodoro, saving a record), successful form submission.
+- Error notification (.error): failed action, validation error, API error shown to the user.
+- Warning notification (.warning): approaching a limit or threshold.
+- Never use haptics: on scroll or list updates; on every render or view appear; more than once per user action; for purely visual/decorative updates.
+
 === UNITS & LOCALE ===
 
 - Use the user's locale for all measurement units. Use Locale.current to determine the user's measurement system (metric vs imperial).
 - For distance, weight, height, and temperature: use Foundation's Measurement with UnitLength, UnitMass, UnitTemperature and format display with MeasurementFormatter. Never hardcode "km", "kg", "cm", or "°C" in user-facing strings — MeasurementFormatter automatically shows the correct unit for the user's locale.
 - Always format numeric measurements with MeasurementFormatter (e.g. formatter.string(from: Measurement(value: value, unit: UnitLength.kilometers)) so the system chooses miles vs km, lbs vs kg, feet/inches vs cm, °F vs °C based on locale.
 - For US locale: distance in miles not km, weight in lbs not kg, height in feet and inches not cm, temperature in °F not °C. Using Measurement + MeasurementFormatter with the default locale gives this behavior automatically; do not hardcode imperial or metric strings.
+
+=== CURRENCY INPUT ===
+
+- Any field that accepts a monetary amount must: (1) show the currency symbol (e.g. $ for US locale) inside or preceding the text field; (2) use .keyboardType(.decimalPad) so only numbers and decimal point can be entered; (3) format the displayed value with NumberFormatter using .currency style and Locale.current so the symbol and format match the user's locale; (4) never show a plain text field with just "0.00" placeholder and no currency symbol. Example for US: "$0.00" not "0.00".
+
+=== KEYBOARD DISMISS ===
+
+- Any view that contains a TextField or TextEditor must dismiss the keyboard when the user taps outside the field. Add this modifier to the root view or ScrollView in that view: .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }. This is standard iOS behavior — users expect tapping outside a text field to dismiss the keyboard.
 
 === CHART INTERACTIVITY ===
 
