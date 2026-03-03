@@ -85,6 +85,7 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - ForEach needs explicit id: when compiler can't infer. Use id: \\.id for Identifiable, id: \\.self for Hashable.
 - @StateObject requires the type to conform to ObservableObject.
 - Slider, Stepper require Binding<Double> or Binding<Int>, not Binding<String>.
+- Numeric input: For precise numeric values (weight, price, measurements, distances) prefer a TextField with .keyboardType(.decimalPad) over a Slider. Use Slider only when the prompt specifically requests it or when the value does not need to be exact (e.g. volume, brightness, opacity).
 - TextField, SecureField, .searchable require Binding<String>.
 - Picker selection type must match tag type.
 - DatePicker requires Binding<Date>, not Binding<String>.
@@ -112,19 +113,47 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Use semantic text styles for Dynamic Type support, not hardcoded .system(size:).
 - Empty states: SF Symbol icon + message + action button. Never a blank screen.
 - Loading states: show ProgressView(). Never leave screens blank.
+- Circular progress rings (Circle + .trim()): (1) Start trim at 12 o'clock using .trim(from: 0, to: progress). (2) Rotate -90° so 0% is at top: .rotationEffect(.degrees(-90)). (3) Clamp progress to 0...1: let clampedProgress = min(max(progress, 0), 1). (4) Use .trim(from: 0, to: clampedProgress) so there is never a visible gap at the start of an empty ring. This prevents the dark sliver artifact at 12 o'clock.
 - AsyncImage with placeholder and failure view for remote images.
 - Prefer SF Symbols via Image(systemName:). Use .symbolRenderingMode for depth.
 - Avoid emojis in UI text. Prefer clean typography and SF Symbols sparingly.
 - Animation: .spring(response: 0.35, dampingFraction: 0.85) for natural feel. Always animate state transitions.
+- Breathing/meditation animations: Must alternate between both states—\"Breathe In\" during expand phase and \"Breathe Out\" during contract phase. Never show only one state. Use a timer or animation completion callback to toggle between the two labels.
+- Core feature text: Instructional text that guides the user's primary action (breathe in/out, tap here, swipe up, etc.) must be minimum font size 22, bold or semibold, high contrast against background, centered and clearly visible. Never make core instruction text smaller than supporting UI elements.
+- Animations and layout: When an animation changes an element's size (scale, expand/contract), use .scaleEffect() instead of changing frame size so the element does not push other views. Never animate width/height directly—it causes layout shifts.
 - Use .buttonStyle(.borderedProminent) for primary actions (one per screen), .bordered for secondary.
 - Use TabView for 3-5 top-level sections. Each tab gets its own NavigationStack.
 - Use .sheet for non-blocking tasks, .fullScreenCover only for immersive content.
 - Use Form { Section { } } for settings screens.
 - Use List with .listStyle(.insetGrouped) for settings, .plain for feeds.
+
+=== LIST INTERACTIONS (standard iOS patterns) ===
+
+- Every list item must be tappable and open a detail or edit view. Never create a list where tapping an item does nothing.
+- Every list must support swipe to delete: .swipeActions(edge: .trailing) { Button(role: .destructive) { /* delete action */ } label: { Label(\"Delete\", systemImage: \"trash\") } }
+- If an item was created with a form, tapping it should open the same form pre-populated with the existing data for editing. Saving updates the item; it does not create a new one.
+- Lists with editable items must also support Edit mode with a toolbar Edit button for bulk delete.
+
 - Confirm destructive actions with .alert() or .confirmationDialog().
 - Respect Reduce Motion: wrap motion animations in UIAccessibility.isReduceMotionEnabled check.
 - Add .accessibilityLabel() to icon buttons and non-text controls.
 - Minimum color contrast: 4.5:1 for body text, 3:1 for large text.
+
+=== BACKGROUND DESIGN ===
+
+- Never use a flat single-color background. Always use a subtle gradient background that fits the app's category as the default:
+  - Fitness/Health: dark navy to black — Color(hex: \"0A0A1A\") to Color(hex: \"1C1C2E\")
+  - Weather: blue gradient matching conditions (clear = deep blue, cloudy = grey-blue)
+  - Finance/Budget: dark green to black — Color(hex: \"0A1628\") to Color(hex: \"1C1C1E\")
+  - Productivity/Todo: deep purple to dark navy — Color(hex: \"1A0A2E\") to Color(hex: \"0A0A1A\")
+  - Food/Recipe: warm dark brown to black — Color(hex: \"1A0A00\") to Color(hex: \"1C1C1E\")
+  - Education: deep blue to dark teal — Color(hex: \"0A1628\") to Color(hex: \"0A2818\")
+  - Utility: dark grey to black — Color(hex: \"1C1C1E\") to Color(hex: \"0A0A0A\")
+  - Default: dark navy to black
+- If the user's prompt specifies a color scheme, background color, or theme — always follow their specification instead. User instructions override this default.
+- Apply the gradient as the base layer behind all content using:
+  LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom)
+  .ignoresSafeArea()
 
 === HAPTIC FEEDBACK ===
 
@@ -136,6 +165,8 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Error notification (.error): failed action, validation error, API error shown to the user.
 - Warning notification (.warning): approaching a limit or threshold.
 - Never use haptics: on scroll or list updates; on every render or view appear; more than once per user action; for purely visual/decorative updates.
+- Sliders — continuous haptic: Use UISelectionFeedbackGenerator for Slider so the user feels a tick on every value change while dragging. Call selectionChanged() in .onChange(of: value). Prepare once (e.g. let g = UISelectionFeedbackGenerator(); g.prepare()) then g.selectionChanged() on every change. Never use UIImpactFeedbackGenerator for sliders — too heavy for continuous dragging; use selectionChanged() only.
+- Steppers and +/- buttons: Any button that increments or decrements a value (sets, reps, quantity, count) must use light impact on every tap: UIImpactFeedbackGenerator(style: .light).impactOccurred(). These are high-frequency taps so .light is correct — never .medium or .heavy for increment/decrement buttons.
 
 === UNITS & LOCALE ===
 
@@ -147,6 +178,8 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 === CURRENCY INPUT ===
 
 - Any field that accepts a monetary amount must: (1) show the currency symbol (e.g. $ for US locale) inside or preceding the text field; (2) use .keyboardType(.decimalPad) so only numbers and decimal point can be entered; (3) format the displayed value with NumberFormatter using .currency style and Locale.current so the symbol and format match the user's locale; (4) never show a plain text field with just "0.00" placeholder and no currency symbol. Example for US: "$0.00" not "0.00".
+- Large currency input displays (amount is the focal point of the screen) must: (1) center the value horizontally; (2) use a large font size (minimum 36pt) so the amount is prominent; (3) show the currency symbol inline with the number, same size—not as a separate smaller prefix label. Example: Text(\"$600.00\").font(.system(size: 48, weight: .bold)).multilineTextAlignment(.center).frame(maxWidth: .infinity). Small inline currency fields (in a list row or form) can be left or trailing aligned; use judgment based on context.
+- When a currency text field loses focus (onSubmit or .onChange(of: isFocused)), normalize the value to 2 decimal places so \"85.6\" becomes \"85.60\", \"600\" becomes \"600.00\", and \"85.60\" stays \"85.60\". Use .onChange(of: isFocused) { focused in if !focused { if let value = Double(amountText) { amountText = String(format: \"%.2f\", value) } } }. Applies to any currency input where the user types a dollar amount.
 
 === KEYBOARD DISMISS ===
 
@@ -199,8 +232,9 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Handle permission denied and integration unavailable gracefully with clear messages.
 - Capabilities requiring entitlements (HealthKit, MusicKit, Push, iCloud, Sign in with Apple, CoreNFC): in your summary, include an explicit warning to enable the capability in the Apple Developer portal.
 
-- Backend/proxy base URL: For any API or proxy base URL (e.g. weather proxy), use the literal string __VIBETREE_API_BASE_URL__ in Swift (e.g. private let kApiBaseURL = \"__VIBETREE_API_BASE_URL__\"). It is replaced at build/export time so the device can reach the server (e.g. Mac's local IP for local dev). Never use localhost in generated app code — the iPhone cannot reach the Mac via localhost.
-- Backend/proxy auth: Generated apps installed via the runner have no browser session. For every proxy request (e.g. weather), set the X-App-Token header using the literal placeholder __VIBETREE_APP_TOKEN__ (e.g. private let kAppToken = \"__VIBETREE_APP_TOKEN__\"; request.setValue(kAppToken, forHTTPHeaderField: \"X-App-Token\")). It is replaced at build time so the proxy can authenticate the app.
+- Backend/proxy (mandatory placeholders — never substitute):
+  - Always use the literal string __VIBETREE_API_BASE_URL__ as the base URL for all proxy/API calls in Swift. Never substitute a real URL, localhost, https://your-backend.com, or any other value. Example: private let kApiBaseURL = \"__VIBETREE_API_BASE_URL__\". The build system replaces it at export time so the device can reach the server. The iPhone cannot reach the Mac via localhost.
+  - Always use the literal string __VIBETREE_APP_TOKEN__ as the app token value in Swift. Never substitute a real token or omit it. Example: private let kAppToken = \"__VIBETREE_APP_TOKEN__\"; then request.setValue(kAppToken, forHTTPHeaderField: \"X-App-Token\") on every proxy request. The build system replaces it at export time so the proxy can authenticate the app. Generated apps installed via the runner have no browser session — the token header is required for every proxy call.
 
 === DEBUG ERROR OVERLAY (TESTING) ===
 

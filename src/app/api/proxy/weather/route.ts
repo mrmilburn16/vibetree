@@ -56,7 +56,16 @@ async function resolveAuth(request: Request): Promise<{ rateLimitKey: string } |
 }
 
 export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const lat = searchParams.get("lat");
+  const lon = searchParams.get("lon");
+  const city = searchParams.get("city")?.trim();
+  const type = searchParams.get("type") ?? "current";
   const auth = await resolveAuth(request);
+  console.log("🌤️ WEATHER REQUEST", {
+    auth: auth ? { rateLimitKey: auth.rateLimitKey } : null,
+    params: { lat, lon, city, type },
+  });
   if (!auth) {
     const headerToken = normalizeToken(request.headers.get("x-app-token") ?? request.headers.get("X-App-Token") ?? "");
     const envToken = process.env.VIBETREE_APP_TOKEN && normalizeToken(process.env.VIBETREE_APP_TOKEN);
@@ -84,12 +93,6 @@ export async function GET(request: Request) {
     );
   }
 
-  const { searchParams } = new URL(request.url);
-  const lat = searchParams.get("lat");
-  const lon = searchParams.get("lon");
-  const city = searchParams.get("city")?.trim();
-  const type = searchParams.get("type") ?? "current";
-
   const hasLatLon =
     lat != null &&
     lon != null &&
@@ -106,6 +109,7 @@ export async function GET(request: Request) {
 
   const base =
     type === "forecast" ? OPENWEATHER_FORECAST : OPENWEATHER_WEATHER;
+  // Imperial = Fahrenheit and mph so the app doesn't need to convert from Kelvin.
   const units = "&units=imperial";
   let url: string;
   if (hasCity) {

@@ -189,6 +189,8 @@ async function buildZipFromSwiftFiles(
     timezoneOffsetMinutes?: number;
     /** Base URL for API/proxy calls (weather, etc.). Replaces VIBETREE_API_BASE_URL_PLACEHOLDER in Swift so device can reach server (e.g. Mac IP for local dev). */
     apiBaseUrl?: string;
+    /** When true (runner export), leave placeholders in Swift so the runner can inject after unzip; do not replace here. */
+    leavePlaceholdersForRunner?: boolean;
   }
 ): Promise<Response> {
   const swiftFilesRaw = filesArr.filter((f) => typeof f?.path === "string" && f.path.endsWith(".swift"));
@@ -204,15 +206,38 @@ async function buildZipFromSwiftFiles(
   const filesMap: Record<string, string> = {};
   for (const f of swiftFiles) filesMap[f.path] = f.content ?? "";
 
-  const apiBaseUrl = (options.apiBaseUrl ?? process.env.VIBETREE_PUBLIC_URL ?? "https://vibetree.vercel.app").replace(/\/$/, "");
-  const appToken = (process.env.VIBETREE_APP_TOKEN ?? "").replace(/\r\n?|\n/g, "").trim();
-  for (const path of Object.keys(filesMap)) {
-    if (path.endsWith(".swift")) {
-      let content = filesMap[path] ?? "";
-      content = content.split(VIBETREE_API_BASE_URL_PLACEHOLDER).join(apiBaseUrl);
-      content = content.split(VIBETREE_APP_TOKEN_PLACEHOLDER).join(appToken);
-      filesMap[path] = content;
+  const swiftPathsForPlaceholders = Object.keys(filesMap).filter((p) => p.endsWith(".swift"));
+  const beforeUrl = swiftPathsForPlaceholders.filter((p) => (filesMap[p] ?? "").includes(VIBETREE_API_BASE_URL_PLACEHOLDER)).length;
+  const beforeToken = swiftPathsForPlaceholders.filter((p) => (filesMap[p] ?? "").includes(VIBETREE_APP_TOKEN_PLACEHOLDER)).length;
+  console.log(
+    "[export-xcode] Swift placeholder check before any replacement: __VIBETREE_API_BASE_URL__ in %d/%d files, __VIBETREE_APP_TOKEN__ in %d/%d files (leavePlaceholdersForRunner=%s)",
+    beforeUrl,
+    swiftPathsForPlaceholders.length,
+    beforeToken,
+    swiftPathsForPlaceholders.length,
+    String(!!options.leavePlaceholdersForRunner)
+  );
+
+  if (!options.leavePlaceholdersForRunner) {
+    const apiBaseUrl = (options.apiBaseUrl ?? process.env.VIBETREE_PUBLIC_URL ?? "https://vibetree.vercel.app").replace(/\/$/, "");
+    const appToken = (process.env.VIBETREE_APP_TOKEN ?? "").replace(/\r\n?|\n/g, "").trim();
+    for (const path of Object.keys(filesMap)) {
+      if (path.endsWith(".swift")) {
+        let content = filesMap[path] ?? "";
+        content = content.split(VIBETREE_API_BASE_URL_PLACEHOLDER).join(apiBaseUrl);
+        content = content.split(VIBETREE_APP_TOKEN_PLACEHOLDER).join(appToken);
+        filesMap[path] = content;
+      }
     }
+    const afterUrl = swiftPathsForPlaceholders.filter((p) => (filesMap[p] ?? "").includes(VIBETREE_API_BASE_URL_PLACEHOLDER)).length;
+    const afterToken = swiftPathsForPlaceholders.filter((p) => (filesMap[p] ?? "").includes(VIBETREE_APP_TOKEN_PLACEHOLDER)).length;
+    console.log(
+      "[export-xcode] After replacement: __VIBETREE_API_BASE_URL__ in %d files, __VIBETREE_APP_TOKEN__ in %d files",
+      afterUrl,
+      afterToken
+    );
+  } else {
+    console.log("[export-xcode] Skipping placeholder replacement (zip for runner will contain placeholders for runner to inject).");
   }
 
   const usesLiquidGlass = swiftPaths.some((p) => {
@@ -459,6 +484,7 @@ export async function POST(
     preferredRunDevice: preferredRunDevice || undefined,
     timezoneOffsetMinutes,
     apiBaseUrl,
+    leavePlaceholdersForRunner: runnerAuth.ok,
   });
 }
 
@@ -523,5 +549,6 @@ export async function GET(
     preferredRunDevice: preferredRunDevice || undefined,
     timezoneOffsetMinutes: Number.isFinite(timezoneOffsetMinutes) ? timezoneOffsetMinutes : undefined,
     apiBaseUrl,
+    leavePlaceholdersForRunner: runnerAuth.ok,
   });
 }

@@ -5,6 +5,7 @@ function normalizeToken(s: string | undefined): string {
   return (s ?? "").replace(/\r\n?|\n/g, "").trim();
 }
 
+/** API must never redirect; always return JSON so the runner gets a parseable response. */
 function requireRunnerAuth(request: Request): { ok: true; runnerId: string } | { ok: false; response: Response } {
   const token = normalizeToken(process.env.MAC_RUNNER_TOKEN);
   if (!token) {

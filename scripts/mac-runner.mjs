@@ -105,10 +105,22 @@ if (APP_TOKEN) {
 const API_BASE_URL_PLACEHOLDER = "__VIBETREE_API_BASE_URL__";
 const APP_TOKEN_PLACEHOLDER = "__VIBETREE_APP_TOKEN__";
 
+/** Escape value for use inside a Swift double-quoted string literal (\\ and "). */
+function escapeForSwiftString(s) {
+  return (s ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
 function injectBuildSecretsInSwiftFiles(dir, baseUrl, appToken) {
-  if (!dir || !existsSync(dir)) return;
+  if (!dir || !existsSync(dir)) {
+    console.warn("[mac-runner] injectBuildSecretsInSwiftFiles: dir missing or not found:", dir);
+    return;
+  }
   const normalizedUrl = baseUrl ? baseUrl.replace(/\/$/, "") : "";
-  const normalizedToken = appToken ? normalizeToken(appToken) : "";
+  const rawToken = appToken ? normalizeToken(appToken) : "";
+  const normalizedToken = rawToken ? escapeForSwiftString(rawToken) : "";
+  let swiftFileCount = 0;
+  let urlReplacedCount = 0;
+  let tokenReplacedCount = 0;
   function walk(d) {
     try {
       const entries = readdirSync(d, { withFileTypes: true });
@@ -116,19 +128,36 @@ function injectBuildSecretsInSwiftFiles(dir, baseUrl, appToken) {
         const full = join(d, e.name);
         if (e.isDirectory()) walk(full);
         else if (e.name.endsWith(".swift")) {
+          swiftFileCount += 1;
           let content = readFileSync(full, "utf8");
           const needsUrl = normalizedUrl && content.includes(API_BASE_URL_PLACEHOLDER);
           const needsToken = normalizedToken && content.includes(APP_TOKEN_PLACEHOLDER);
           if (needsUrl || needsToken) {
-            if (needsUrl) content = content.split(API_BASE_URL_PLACEHOLDER).join(normalizedUrl);
-            if (needsToken) content = content.split(APP_TOKEN_PLACEHOLDER).join(normalizedToken);
+            if (needsUrl) {
+              content = content.split(API_BASE_URL_PLACEHOLDER).join(normalizedUrl);
+              urlReplacedCount += 1;
+            }
+            if (needsToken) {
+              content = content.split(APP_TOKEN_PLACEHOLDER).join(normalizedToken);
+              tokenReplacedCount += 1;
+            }
             writeFileSync(full, content);
           }
         }
       }
-    } catch (_) {}
+    } catch (err) {
+      console.warn("[mac-runner] injectBuildSecretsInSwiftFiles walk error:", err?.message || err);
+    }
   }
   walk(dir);
+  console.log(
+    "[mac-runner] injectBuildSecretsInSwiftFiles: dir=%s, Swift files=%d, __VIBETREE_API_BASE_URL__ replaced=%d, __VIBETREE_APP_TOKEN__ replaced=%d, token length=%d",
+    dir,
+    swiftFileCount,
+    urlReplacedCount,
+    tokenReplacedCount,
+    rawToken.length
+  );
 }
 const RUNNER_ID = process.env.MAC_RUNNER_ID || `mac_${process.pid}`;
 
@@ -197,10 +226,23 @@ async function reportRunnerDevices() {
 }
 
 async function claimJob() {
+  const url = `${SERVER_URL}/api/build-jobs/claim`;
   const res = await api("/api/build-jobs/claim", { method: "POST" });
   if (res.status === 204) return null;
-  if (!res.ok) throw new Error(`claim failed: ${res.status} ${await res.text()}`);
-  const data = await res.json();
+  const body = await res.text();
+  if (!res.ok) {
+    const preview = body.slice(0, 200).replace(/\s+/g, " ");
+    console.warn(
+      "[mac-runner] claim failed: %s %s | url=%s | token present=%s | body preview: %s",
+      res.status,
+      res.statusText,
+      url,
+      !!TOKEN,
+      preview
+    );
+    throw new Error(`claim failed: ${res.status} ${body}`);
+  }
+  const data = JSON.parse(body);
   return data.job;
 }
 
@@ -528,6 +570,28 @@ function findConnectedDevice() {
 }
 
 /**
+ * Log signing identity for the built .app (Authority, TeamIdentifier) so we can verify development vs distribution.
+ * Runs: codesign -dvvv <appPath> and pushes a short summary to logs.
+ */
+function logSigningIdentity(appPath, logs, flush) {
+  if (!existsSync(appPath)) return;
+  try {
+    const out = execSync(`codesign -dvvv "${appPath}" 2>&1`, { encoding: "utf8", maxBuffer: 8192 });
+    const authority = (out.match(/^Authority=(.+)$/m) || [])[1]?.trim();
+    const teamId = (out.match(/^TeamIdentifier=(.+)$/m) || [])[1]?.trim();
+    const id = (out.match(/^Identifier=(.+)$/m) || [])[1]?.trim();
+    logs.push(`[signing] Identity: ${authority ?? "unknown"} | TeamIdentifier=${teamId ?? "—"} | Identifier=${id ?? "—"}`);
+    if (authority && !authority.includes("Development") && !authority.includes("Developer")) {
+      logs.push("[signing] ⚠️ Not an Apple Development identity — device install may require a different trust flow (e.g. enterprise).");
+    }
+    flush(true).catch(() => {});
+  } catch (_) {
+    logs.push("[signing] Could not read codesign info");
+    flush(true).catch(() => {});
+  }
+}
+
+/**
  * Install a .app bundle on a connected iOS device via devicectl.
  * Returns true on success, false on failure.
  */
@@ -555,6 +619,7 @@ async function installAppOnDevice(appPath, deviceId, bundleId, logs, flush) {
   }
 
   logs.push("[install] ✅ App installed on device");
+  logs.push("[install] If the app doesn't appear: enable Settings → Privacy & Security → Developer Mode (iOS 16+), then go to Settings → General → VPN & Device Management and tap your developer certificate to Trust.");
   await flush(true);
 
   // Auto-launch the app so the user sees it immediately
@@ -631,6 +696,7 @@ async function validateJob(job) {
           });
         } else {
           logs.push(`[install] Found device: ${device.name} (${device.identifier})`);
+          logSigningIdentity(cachedAppPath, logs, flush);
           await flush(true);
           const bundleId = job.request.bundleId || "com.vibetree.app";
           const INSTALL_TIMEOUT_MS = 60 * 1000;
@@ -798,6 +864,7 @@ async function validateJob(job) {
           }
         } else {
           logs.push(`[install] Found device: ${device.name} (${device.identifier})`);
+          logSigningIdentity(appPath, logs, flush);
           await flush(true);
           const bundleId = job.request.bundleId || "com.vibetree.app";
           const INSTALL_TIMEOUT_MS = 60 * 1000;
