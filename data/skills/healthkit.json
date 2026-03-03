@@ -1,6 +1,52 @@
 {
   "name": "HealthKit",
-  "detection": { "keywords": [], "excludeKeywords": [] },
-  "triggers": ["health", "HealthKit", "heart rate", "steps", "calories", "sleep", "blood pressure", "fitness data", "health data"],
-  "promptBlock": "HealthKit: Check HKHealthStore.isHealthDataAvailable() first. Request authorization with healthStore.requestAuthorization(toShare:read:completion:) specifying exact HKQuantityType/HKCategoryType needed. Handle denied gracefully — show a clear message explaining why health data access is needed and how to enable it in Settings.\n\n// REQUIRES PLIST: NSHealthShareUsageDescription (for reading)\n// REQUIRES PLIST: NSHealthUpdateUsageDescription (for writing)\n\nIn your summary, warn: \"Enable HealthKit in your App ID in the Apple Developer portal.\"\n\nCommon types:\n- Steps: HKQuantityType(.stepCount)\n- Heart rate: HKQuantityType(.heartRate)\n- Calories: HKQuantityType(.activeEnergyBurned)\n- Sleep: HKCategoryType(.sleepAnalysis)\n- Distance: HKQuantityType(.distanceWalkingRunning)"
+  "detection": {
+    "keywords": [
+      "health",
+      "HealthKit",
+      "steps",
+      "step count",
+      "heart rate",
+      "calories",
+      "sleep",
+      "fitness",
+      "health data"
+    ],
+    "excludeKeywords": []
+  },
+  "triggers": [
+    "health",
+    "HealthKit",
+    "heart rate",
+    "steps",
+    "calories",
+    "sleep",
+    "blood pressure",
+    "fitness data",
+    "health data"
+  ],
+  "promptInjection": "## HealthKit — authorization and read flow\n\n**Availability:** Check HKHealthStore.isHealthDataAvailable() before using HealthKit.\n\n**Request authorization:** Call healthStore.requestAuthorization(toShare:read:completion:) with the exact types you need (e.g. for steps: read set containing HKQuantityType(.stepCount)). Use a single HKHealthStore instance (e.g. @StateObject or shared); do not create a new HKHealthStore on every view update.\n\n**Critical — check status and run query in the completion handler:** Do NOT check authorization status or decide \"denied\" before the completion handler runs. The completion handler is called after the user dismisses the Health permission sheet. Inside the completion handler: (1) Check authorization only there — for read-only data like steps, you cannot know if the user granted read (HealthKit does not expose read grant/deny). So immediately run your read query (e.g. HKSampleQuery or HKStatisticsQuery for step count) in the completion handler; do not require an app restart. (2) For write/sharing, use authorizationStatus(for: type) and only treat .sharingAuthorized as authorized. (3) Show \"Health Access Denied\" only when the user has explicitly denied — i.e. when authorizationStatus(for: type) is .sharingDenied for a type you write to, or when you have a clear denied outcome. Do NOT show \"Health Access Denied\" when status is .notDetermined (user has not decided yet or sheet just dismissed). For read-only apps: after the sheet dismisses, run the query; if the query returns no data, show a neutral message like \"No step data\" or \"Enable Steps in Health\" rather than \"Health Access Denied\" unless you are certain the user denied.\n\n**Flow:** On view appear, request authorization; in the completion handler (on main queue), run the step count (or other) query and update UI with the result. No app restart required.\n\n**Plist:** // REQUIRES PLIST: NSHealthShareUsageDescription (for reading), NSHealthUpdateUsageDescription (for writing). In summary, warn: \"Enable HealthKit in your App ID in the Apple Developer portal.\"\n\n**Common types:** Steps: HKQuantityType(.stepCount); heart rate: HKQuantityType(.heartRate); calories: HKQuantityType(.activeEnergyBurned); sleep: HKCategoryType(.sleepAnalysis); distance: HKQuantityType(.distanceWalkingRunning).",
+  "promptBlock": "HealthKit: isHealthDataAvailable() first; single HKHealthStore. Request auth with requestAuthorization(toShare:read:completion:). In the completion handler (not before): run the read query immediately so data appears without app restart. Show \"Health Access Denied\" only when user explicitly denied (.sharingDenied), never for .notDetermined. For read-only steps: run step query in completion handler; if no data, show \"No step data\" not \"Denied\". REQUIRES PLIST: NSHealthShareUsageDescription, NSHealthUpdateUsageDescription.",
+  "antiPatterns": [
+    "Checking authorization status before the requestAuthorization completion handler runs",
+    "Showing \"Health Access Denied\" when HKAuthorizationStatus is .notDetermined",
+    "Requiring app restart after the user grants permission — run the read query inside the completion handler",
+    "Creating a new HKHealthStore() on every view update or request"
+  ],
+  "id": "healthkit",
+  "frameworks": [
+    "HealthKit"
+  ],
+  "version": 1,
+  "canonicalCode": {},
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 1,
+    "firstAttemptCompile": 1,
+    "compileRate": 100,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
 }

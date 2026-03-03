@@ -135,6 +135,7 @@ export function matchSkills(userMessage: string): string {
   }
 
   logSkillMatch(matchedNames, message);
+  console.log("[skills] detected:", matchedNames.length ? matchedNames.join(", ") : "none");
   return blocks.join("\n\n");
 }
 

@@ -1,5 +1,5 @@
 import { spawn, execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir, homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -64,8 +64,48 @@ function getXcodebuildPath() {
   return { path: "xcodebuild", tried };
 }
 
-const SERVER_URL = process.env.VIBETREE_SERVER_URL || "http://localhost:3001";
-const TOKEN = process.env.MAC_RUNNER_TOKEN;
+const rawServerUrl = process.env.VIBETREE_SERVER_URL || "http://localhost:3001";
+const SERVER_URL = /^https?:\/\//i.test(rawServerUrl) ? rawServerUrl.replace(/\/$/, "") : `http://${rawServerUrl.replace(/\/$/, "")}`;
+function normalizeToken(s) {
+  return (s ?? "").replace(/\r\n?|\n/g, "").trim();
+}
+const TOKEN = normalizeToken(process.env.MAC_RUNNER_TOKEN);
+const APP_TOKEN = normalizeToken(process.env.VIBETREE_APP_TOKEN);
+if (APP_TOKEN) {
+  console.log("[mac-runner] VIBETREE_APP_TOKEN loaded, first 4 chars:", APP_TOKEN.slice(0, 4));
+} else {
+  console.warn("[mac-runner] VIBETREE_APP_TOKEN not set — generated apps may get 401 from weather proxy");
+}
+
+/** Placeholders in Swift source; replaced at build time so device can reach Mac and authenticate proxy. */
+const API_BASE_URL_PLACEHOLDER = "__VIBETREE_API_BASE_URL__";
+const APP_TOKEN_PLACEHOLDER = "__VIBETREE_APP_TOKEN__";
+
+function injectBuildSecretsInSwiftFiles(dir, baseUrl, appToken) {
+  if (!dir || !existsSync(dir)) return;
+  const normalizedUrl = baseUrl ? baseUrl.replace(/\/$/, "") : "";
+  const normalizedToken = appToken ? normalizeToken(appToken) : "";
+  function walk(d) {
+    try {
+      const entries = readdirSync(d, { withFileTypes: true });
+      for (const e of entries) {
+        const full = join(d, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.name.endsWith(".swift")) {
+          let content = readFileSync(full, "utf8");
+          const needsUrl = normalizedUrl && content.includes(API_BASE_URL_PLACEHOLDER);
+          const needsToken = normalizedToken && content.includes(APP_TOKEN_PLACEHOLDER);
+          if (needsUrl || needsToken) {
+            if (needsUrl) content = content.split(API_BASE_URL_PLACEHOLDER).join(normalizedUrl);
+            if (needsToken) content = content.split(APP_TOKEN_PLACEHOLDER).join(normalizedToken);
+            writeFileSync(full, content);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+  walk(dir);
+}
 const RUNNER_ID = process.env.MAC_RUNNER_ID || `mac_${process.pid}`;
 
 if (!TOKEN) {
@@ -575,6 +615,9 @@ async function validateJob(job) {
       await updateJob(job.id, { status: "failed", error: msg, logs: [msg] });
       return;
     }
+
+    // Inject Mac's server URL and app token into Swift so device can reach proxy/API and authenticate without a browser session.
+    injectBuildSecretsInSwiftFiles(join(unzipDir, projectName), SERVER_URL, APP_TOKEN || process.env.VIBETREE_APP_TOKEN);
 
     const logs = [];
     let lastFlushAt = Date.now();

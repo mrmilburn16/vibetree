@@ -56,11 +56,11 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 80,
-    "firstAttemptCompile": 55,
-    "compileRate": 69,
+    "totalBuilds": 82,
+    "firstAttemptCompile": 57,
+    "compileRate": 70,
     "functionalSuccesses": 2,
-    "functionalRate": 3,
+    "functionalRate": 2,
     "commonErrors": [
       "cannot find type 'WorkoutAttributes' in scope",
       "cannot find type 'DeliveryStage' in scope",

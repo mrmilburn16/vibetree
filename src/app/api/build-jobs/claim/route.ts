@@ -1,14 +1,19 @@
 import { claimNextBuildJob } from "@/lib/buildJobs";
 import { sendBackgroundRefreshPush } from "@/lib/apns";
 
+function normalizeToken(s: string | undefined): string {
+  return (s ?? "").replace(/\r\n?|\n/g, "").trim();
+}
+
 function requireRunnerAuth(request: Request): { ok: true; runnerId: string } | { ok: false; response: Response } {
-  const token = process.env.MAC_RUNNER_TOKEN;
+  const token = normalizeToken(process.env.MAC_RUNNER_TOKEN);
   if (!token) {
     return { ok: false, response: Response.json({ error: "Runner auth not configured" }, { status: 503 }) };
   }
   const auth = request.headers.get("authorization") ?? request.headers.get("Authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
-  if (!m?.[1] || m[1] !== token) {
+  const incoming = normalizeToken(m?.[1]);
+  if (!incoming || incoming !== token) {
     return { ok: false, response: Response.json({ error: "Unauthorized" }, { status: 401 }) };
   }
   const runnerId = request.headers.get("x-runner-id") ?? `runner_${Date.now()}`;

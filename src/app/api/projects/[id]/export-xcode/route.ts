@@ -148,6 +148,11 @@ ${liveActivitiesEntry}\t<key>UIApplicationSupportsIndirectInputEvents</key>
 \t\t<string>UIInterfaceOrientationLandscapeLeft</string>
 \t\t<string>UIInterfaceOrientationLandscapeRight</string>
 \t</array>
+\t<key>NSAppTransportSecurity</key>
+\t<dict>
+\t\t<key>NSAllowsLocalNetworking</key>
+\t\t<true/>
+\t</dict>
 ${privacyEntries ? "\n" + privacyEntries + "\n" : ""}</dict>
 </plist>
 `;
@@ -159,6 +164,11 @@ function escapePlistString(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+/** Placeholder in Swift source replaced at export/build time with the actual API base URL (so device can use Mac's local IP for local dev). */
+export const VIBETREE_API_BASE_URL_PLACEHOLDER = "__VIBETREE_API_BASE_URL__";
+/** Placeholder in Swift source replaced at export/build time with VIBETREE_APP_TOKEN so generated apps can call proxy without a browser session. */
+export const VIBETREE_APP_TOKEN_PLACEHOLDER = "__VIBETREE_APP_TOKEN__";
 
 /** Build a date for zip entries so extracted files show the user's local time (JSZip stores UTC; many extractors show it as-is). */
 function zipFileDate(timezoneOffsetMinutes?: number): Date {
@@ -177,6 +187,8 @@ async function buildZipFromSwiftFiles(
     preferredRunDevice?: string;
     /** Client's timezone offset in minutes (e.g. from Date.getTimezoneOffset()) so zip file dates show correct local time when extracted. */
     timezoneOffsetMinutes?: number;
+    /** Base URL for API/proxy calls (weather, etc.). Replaces VIBETREE_API_BASE_URL_PLACEHOLDER in Swift so device can reach server (e.g. Mac IP for local dev). */
+    apiBaseUrl?: string;
   }
 ): Promise<Response> {
   const swiftFilesRaw = filesArr.filter((f) => typeof f?.path === "string" && f.path.endsWith(".swift"));
@@ -191,6 +203,17 @@ async function buildZipFromSwiftFiles(
   let swiftPaths = swiftFiles.map((f) => f.path);
   const filesMap: Record<string, string> = {};
   for (const f of swiftFiles) filesMap[f.path] = f.content ?? "";
+
+  const apiBaseUrl = (options.apiBaseUrl ?? process.env.VIBETREE_PUBLIC_URL ?? "https://vibetree.vercel.app").replace(/\/$/, "");
+  const appToken = (process.env.VIBETREE_APP_TOKEN ?? "").replace(/\r\n?|\n/g, "").trim();
+  for (const path of Object.keys(filesMap)) {
+    if (path.endsWith(".swift")) {
+      let content = filesMap[path] ?? "";
+      content = content.split(VIBETREE_API_BASE_URL_PLACEHOLDER).join(apiBaseUrl);
+      content = content.split(VIBETREE_APP_TOKEN_PLACEHOLDER).join(appToken);
+      filesMap[path] = content;
+    }
+  }
 
   const usesLiquidGlass = swiftPaths.some((p) => {
     const c = filesMap[p] ?? "";
@@ -428,12 +451,14 @@ export async function POST(
   const preferredRunDevice = (typeof body?.preferredRunDevice === "string" ? body.preferredRunDevice : "").trim();
   const timezoneOffsetMinutes =
     typeof body?.timezoneOffsetMinutes === "number" ? body.timezoneOffsetMinutes : undefined;
+  const apiBaseUrl = process.env.VIBETREE_PUBLIC_URL ?? "https://vibetree.vercel.app";
   return await buildZipFromSwiftFiles(files, id.slice(0, 12), {
     projectName,
     bundleId,
     developmentTeam: developmentTeam || undefined,
     preferredRunDevice: preferredRunDevice || undefined,
     timezoneOffsetMinutes,
+    apiBaseUrl,
   });
 }
 
@@ -483,11 +508,20 @@ export async function GET(
   }
 
   const filesArr: SwiftFile[] = paths.map((p) => ({ path: p, content: files[p] ?? "" }));
+  const apiBaseUrl = (() => {
+    try {
+      const u = new URL(request.url);
+      return u.origin;
+    } catch {
+      return undefined;
+    }
+  })();
   return await buildZipFromSwiftFiles(filesArr, id.slice(0, 12), {
     projectName,
     bundleId,
     developmentTeam: developmentTeam || undefined,
     preferredRunDevice: preferredRunDevice || undefined,
     timezoneOffsetMinutes: Number.isFinite(timezoneOffsetMinutes) ? timezoneOffsetMinutes : undefined,
+    apiBaseUrl,
   });
 }

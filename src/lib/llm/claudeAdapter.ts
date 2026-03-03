@@ -126,6 +126,21 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Add .accessibilityLabel() to icon buttons and non-text controls.
 - Minimum color contrast: 4.5:1 for body text, 3:1 for large text.
 
+=== UNITS & LOCALE ===
+
+- Use the user's locale for all measurement units. Use Locale.current to determine the user's measurement system (metric vs imperial).
+- For distance, weight, height, and temperature: use Foundation's Measurement with UnitLength, UnitMass, UnitTemperature and format display with MeasurementFormatter. Never hardcode "km", "kg", "cm", or "°C" in user-facing strings — MeasurementFormatter automatically shows the correct unit for the user's locale.
+- Always format numeric measurements with MeasurementFormatter (e.g. formatter.string(from: Measurement(value: value, unit: UnitLength.kilometers)) so the system chooses miles vs km, lbs vs kg, feet/inches vs cm, °F vs °C based on locale.
+- For US locale: distance in miles not km, weight in lbs not kg, height in feet and inches not cm, temperature in °F not °C. Using Measurement + MeasurementFormatter with the default locale gives this behavior automatically; do not hardcode imperial or metric strings.
+
+=== CHART INTERACTIVITY ===
+
+- Any app that includes a bar chart, line chart, or any Swift Charts chart MUST make it interactive. Do not generate static non-interactive charts unless the user prompt specifically asks for "simple display only" or "static chart only".
+- Make each bar, point, or segment tappable. Use ChartProxy with .chartOverlay (or equivalent) for tap detection in Swift Charts; resolve the tapped position to the nearest data point or bar.
+- When the user taps a bar or point: show a tooltip or detail view with the exact value and date/label for that element.
+- Visually highlight the selected bar or point (e.g. brighter color, border, or distinct foregroundStyle) so the user sees what they selected.
+- This applies to all chart types (BarMark, LineMark, PointMark, AreaMark, etc.) in all generated apps.
+
 === ARCHITECTURE RULES (3+ screens) ===
 
 - Models/ for data types (Codable, Identifiable, Hashable), ViewModels/ for logic (@Observable), Views/ for UI.
@@ -164,6 +179,17 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Request authorization before accessing any protected data. Never read the API until auth is granted.
 - Handle permission denied and integration unavailable gracefully with clear messages.
 - Capabilities requiring entitlements (HealthKit, MusicKit, Push, iCloud, Sign in with Apple, CoreNFC): in your summary, include an explicit warning to enable the capability in the Apple Developer portal.
+
+- Backend/proxy base URL: For any API or proxy base URL (e.g. weather proxy), use the literal string __VIBETREE_API_BASE_URL__ in Swift (e.g. private let kApiBaseURL = \"__VIBETREE_API_BASE_URL__\"). It is replaced at build/export time so the device can reach the server (e.g. Mac's local IP for local dev). Never use localhost in generated app code — the iPhone cannot reach the Mac via localhost.
+- Backend/proxy auth: Generated apps installed via the runner have no browser session. For every proxy request (e.g. weather), set the X-App-Token header using the literal placeholder __VIBETREE_APP_TOKEN__ (e.g. private let kAppToken = \"__VIBETREE_APP_TOKEN__\"; request.setValue(kAppToken, forHTTPHeaderField: \"X-App-Token\")). It is replaced at build time so the proxy can authenticate the app.
+
+=== DEBUG ERROR OVERLAY (TESTING) ===
+
+- Every generated app MUST include a global error display so the developer can see API and network failures while testing on device. This is for testing only; it can be removed or gated behind a debug flag before launch.
+- In the root view (ContentView or main app container): add @State private var errorMessage: String? = nil and @State private var copiedFeedback = false.
+- Add a .overlay(alignment: .top) at the root that shows only when errorMessage != nil: a red rounded rectangle (e.g. RoundedRectangle(cornerRadius: 8)) at the top with padding, containing the error text, a copy button (Image(systemName: "doc.on.doc") or similar), and optional tap-to-dismiss. Use .onTapGesture to clear errorMessage and dismiss. When the user taps the copy button, copy the error string to UIPasteboard.general.string, set copiedFeedback = true, then after 2 seconds set copiedFeedback = false. Show "Copied!" next to the copy icon when copiedFeedback is true.
+- Auto-dismiss: use .onChange(of: errorMessage) or .task(id: errorMessage) to start a 5-second timer when errorMessage is set; when the timer fires, clear errorMessage on the main actor. Cancel the task when the view disappears or when errorMessage is cleared by tap.
+- Every network or API call (URLSession, data(from:), etc.) MUST set errorMessage with the actual error text on failure. Use Task { @MainActor in errorMessage = error.localizedDescription } (or the full error description) in the catch block so the banner shows the real message. Never swallow errors without assigning to errorMessage.
 
 === FILE PLANNING ===
 
@@ -316,6 +342,18 @@ export async function getClaudeResponse(
     .join("\n\n");
   const systemPrompt = basePrompt + skillPromptBlock + qaRulesBlock;
 
+  const baseTokens = estimatePromptTokens(basePrompt);
+  const skillsTokens = estimatePromptTokens(skillPromptBlock);
+  const qaTokens = estimatePromptTokens(qaRulesBlock);
+  const systemTotalTokens = estimatePromptTokens(systemPrompt);
+  console.log(
+    "[claudeAdapter] generation: system prompt ~%dk tokens (base ~%dk, skills ~%dk, qa ~%dk)",
+    Math.round(systemTotalTokens / 1000),
+    Math.round(baseTokens / 1000),
+    Math.round(skillsTokens / 1000),
+    Math.round(qaTokens / 1000)
+  );
+
   const response = await client.messages.create({
     model,
     max_tokens: MAX_TOKENS,
@@ -406,6 +444,18 @@ async function getClaudeResponseStream(
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = basePrompt + skillPromptBlock + qaRulesBlock;
+
+  const baseTokens = estimatePromptTokens(basePrompt);
+  const skillsTokens = estimatePromptTokens(skillPromptBlock);
+  const qaTokens = estimatePromptTokens(qaRulesBlock);
+  const systemTotalTokens = estimatePromptTokens(systemPrompt);
+  console.log(
+    "[claudeAdapter] generation (stream): system prompt ~%dk tokens (base ~%dk, skills ~%dk, qa ~%dk)",
+    Math.round(systemTotalTokens / 1000),
+    Math.round(baseTokens / 1000),
+    Math.round(skillsTokens / 1000),
+    Math.round(qaTokens / 1000)
+  );
 
   let lastReported = 0;
   const throttleChars = 80;
