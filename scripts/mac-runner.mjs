@@ -306,6 +306,23 @@ function run(cmd, args, { cwd, onLine }) {
   });
 }
 
+/** Known system errors from xcodebuild/devicectl. Scan stderr/stdout and return a user-facing message or null. */
+const KNOWN_SYSTEM_ERRORS = [
+  [/no space left on device/i, "Build failed — your Mac is out of disk space. Free up space and try again."],
+  [/unable to connect to device/i, "Build failed — iPhone not detected. Check your USB connection or trust this computer on your iPhone."],
+  [/code signing error/i, "Build failed — code signing issue. Check your Apple Developer team ID in settings."],
+  [/\bkilled:\s*9\b|SIGKILL/i, "Build failed — process was killed, likely due to low memory on your Mac."],
+];
+
+function getKnownSystemErrorMessage(output) {
+  if (!output || typeof output !== "string") return null;
+  const combined = output;
+  for (const [pattern, message] of KNOWN_SYSTEM_ERRORS) {
+    if (pattern.test(combined)) return message;
+  }
+  return null;
+}
+
 /**
  * Boot simulator, install app, launch it; then stream screenshots to the server in the background.
  * We await until install+launch are done so the caller can safely delete tmp; the screenshot loop
@@ -615,7 +632,7 @@ async function installAppOnDevice(appPath, deviceId, bundleId, logs, flush) {
   if (result.code !== 0) {
     logs.push(`[install] ❌ Install failed (exit ${result.code})`);
     await flush(true);
-    return false;
+    return { ok: false, output: (result.out || "") + "\n" + (result.err || "") };
   }
 
   logs.push("[install] ✅ App installed on device");
@@ -650,7 +667,7 @@ async function installAppOnDevice(appPath, deviceId, bundleId, logs, flush) {
     }
   }
 
-  return true;
+  return { ok: true };
 }
 
 /**
@@ -719,13 +736,17 @@ async function validateJob(job) {
             }
             throw e;
           }
+          const installSucceeded = installed && (installed === true || installed.ok === true);
+          const installOutput = installed && installed.ok === false ? installed.output : "";
+          const installSystemError = getKnownSystemErrorMessage(installOutput);
           await updateJob(job.id, {
             status: "succeeded",
             exitCode: 0,
-            ...(installed && { installedOnDevice: true }),
-            logs: installed
+            ...(installSucceeded && { installedOnDevice: true }),
+            ...(installSystemError && { error: installSystemError }),
+            logs: installSucceeded
               ? ["✅ Cached build", `✅ Installed on ${device.name}`]
-              : ["✅ Cached build", `⚠️ Install failed on ${device.name}`],
+              : ["✅ Cached build", installSystemError || `⚠️ Install failed on ${device.name}`],
           });
         }
         return;
@@ -892,13 +913,17 @@ async function validateJob(job) {
             }
             throw e;
           }
+          const installSucceeded = installed && (installed === true || installed.ok === true);
+          const installOutput = installed && installed.ok === false ? installed.output : "";
+          const installSystemError = getKnownSystemErrorMessage(installOutput);
           await updateJob(job.id, {
             status: "succeeded",
             exitCode: 0,
-            ...(installed && { installedOnDevice: true }),
-            logs: installed
+            ...(installSucceeded && { installedOnDevice: true }),
+            ...(installSystemError && { error: installSystemError }),
+            logs: installSucceeded
               ? ["✅ Build succeeded", `✅ Installed on ${device.name}`]
-              : ["✅ Build succeeded", `⚠️ Install failed on ${device.name} — download the zip and run from Xcode instead`],
+              : ["✅ Build succeeded", installSystemError || `⚠️ Install failed on ${device.name} — download the zip and run from Xcode instead`],
           });
           try {
             const zipBuf = await readFile(zipPath);
@@ -950,6 +975,7 @@ async function validateJob(job) {
       }
     } else {
       const allOutput = (result.out || "") + "\n" + (result.err || "");
+      const systemError = getKnownSystemErrorMessage(allOutput);
       // Capture Swift compiler errors: file.swift:line:col: error: or file.swift:line: error:
       const swiftErrorRe = /\.swift:\d+(?::\d+)?:\s*error:/;
       const errorLines = allOutput
@@ -962,8 +988,8 @@ async function validateJob(job) {
       await updateJob(job.id, {
         status: "failed",
         exitCode: result.code,
-        error: "xcodebuild failed",
-        logs: ["❌ Build failed (see logs above)"],
+        error: systemError || "xcodebuild failed",
+        logs: systemError ? [systemError, "❌ Build failed (see logs above)"] : ["❌ Build failed (see logs above)"],
         ...(uniqueErrors.length > 0 ? { compilerErrors: uniqueErrors } : {}),
       });
     }

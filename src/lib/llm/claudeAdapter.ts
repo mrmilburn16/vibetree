@@ -115,6 +115,9 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Loading states: show ProgressView(). Never leave screens blank.
 - Circular progress rings (Circle + .trim()): (1) Start trim at 12 o'clock using .trim(from: 0, to: progress). (2) Rotate -90° so 0% is at top: .rotationEffect(.degrees(-90)). (3) Clamp progress to 0...1: let clampedProgress = min(max(progress, 0), 1). (4) Use .trim(from: 0, to: clampedProgress) so there is never a visible gap at the start of an empty ring. This prevents the dark sliver artifact at 12 o'clock.
 - AsyncImage with placeholder and failure view for remote images.
+- Post/feed images: Use .aspectRatio(contentMode: .fit) to show the entire image (no crop). .fill zooms and crops to fill the frame and can cut off edges. For a feed (e.g. Instagram-style) where you use .fill for a fixed-height cell, constrain the frame and always add .clipped(): Image(...).resizable().aspectRatio(contentMode: .fill).frame(maxWidth: .infinity).frame(height: 300).clipped(). Never use .fill without .clipped()—without it the image bleeds outside its frame and appears zoomed/cropped.
+- Share button on feed posts: Must open the native iOS share sheet. Use UIActivityViewController(activityItems: [postURL or postCaption], applicationActivities: nil) and present it from the window's rootViewController (e.g. UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.windows.first?.rootViewController?.present(activityVC, animated: true)). Never make a share button that only fires haptics and does nothing else—every button must do something visible and functional.
+- Comment and post likes: Must show immediate visual feedback. Empty heart → filled red heart on tap; like count increments by 1 instantly; use the same heart fill animation for both post and comment likes. Never have a like button that only triggers haptics without a visible state change. A button with no visible state change after tap is a broken interaction.
 - Prefer SF Symbols via Image(systemName:). Use .symbolRenderingMode for depth.
 - Avoid emojis in UI text. Prefer clean typography and SF Symbols sparingly.
 - Never use sparkle, star, or magic wand icons (e.g. sparkles, star.fill, wand.and.stars) as app icons or primary UI elements—they are overused in AI-generated interfaces and signal low quality. App icons must reflect the app's function: Fitness → figure, heart, flame; Finance → chart, dollar sign, wallet; Productivity → checkmark, clock, list; Food → fork, plate; Weather → sun, cloud, thermometer. Use SF Symbols that are literal and functional, not decorative or \"magical\".
@@ -133,11 +136,12 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 
 - Every list item must be tappable and open a detail or edit view. Never create a list where tapping an item does nothing.
 - Chevron rule: Every NavigationLink or list row that shows a chevron (>) on the right MUST have a working NavigationLink or .onTapGesture that navigates to a detail view. A chevron with no navigation action is a broken UI pattern. If a row has a chevron, it must navigate; if it doesn't navigate, remove the chevron. Never show a chevron on a non-tappable row.
-- Every list must support swipe to delete: .swipeActions(edge: .trailing) { Button(role: .destructive) { /* delete action */ } label: { Label(\"Delete\", systemImage: \"trash\") } }
+- SWIPE TO DELETE (MANDATORY): Every List or ScrollView with items MUST implement swipe to delete on every row without exception. Use this exact pattern on each row: .swipeActions(edge: .trailing) { Button(role: .destructive) { deleteItem(item) } label: { Label(\"Delete\", systemImage: \"trash\") } }. This applies to every list item, every category row, every nested item inside a category, history rows, and saved entries of any kind. Also add a long-press context menu as a secondary delete: .contextMenu { Button(role: .destructive) { deleteItem(item) } label: { Label(\"Delete\", systemImage: \"trash\") } }. NEVER generate a list without swipe to delete. If a list exists in the app, swipe to delete must exist on it. This is non-negotiable iOS behavior that every user expects.
 - If an item was created with a form, tapping it should open the same form pre-populated with the existing data for editing. Saving updates the item; it does not create a new one.
 - Lists with editable items must also support Edit mode with a toolbar Edit button for bulk delete.
 - When a list item has a customizable icon and color, the icon and color must be visibly rendered on the list row—not only in the edit/creation form. The custom emoji or SF Symbol must display in the list row (not a placeholder circle). The custom color must be applied to the icon background or accent in the list row. The same icon and color shown in the creation form must match exactly what appears in the list. Test: if a user picks red and a running emoji, the list row must show a red circle with that emoji inside it.
 - List rows with a number badge and text must vertically align to center: use HStack(alignment: .center) { number badge, text }. Never use .top alignment unless the text is guaranteed to be multi-line. .center handles both single-line (number and text centered) and multi-line (number sits at center of the text block) correctly.
+- Expandable/collapsible sections: The entire row must be tappable to toggle expand/collapse, not just the chevron. Use Button(action: { isExpanded.toggle() }) { HStack { row content; Spacer(); Image(systemName: \"chevron.down\").rotationEffect(isExpanded ? .degrees(180) : .degrees(0)) } }.contentShape(Rectangle()) so the full row is the hit target.
 
 === TASK COMPLETION UI (checklists / todo) ===
 
@@ -213,6 +217,14 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 === KEYBOARD DISMISS ===
 
 - Any view that contains a TextField or TextEditor must dismiss the keyboard when the user taps outside the field. Add this modifier to the root view or ScrollView in that view: .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }. This is standard iOS behavior — users expect tapping outside a text field to dismiss the keyboard.
+
+=== KEYBOARD & SCROLL (keep field visible) ===
+
+- When a TextField or TextEditor is focused and the keyboard appears, the scroll view must automatically scroll so the active field stays visible above the keyboard. Use ScrollViewReader: wrap the scroll content in ScrollView { ScrollViewReader { proxy in VStack { ... } .onChange(of: focusedField) { field in withAnimation { proxy.scrollTo(field, anchor: .center) } } } }. Add .ignoresSafeArea(.keyboard, edges: .bottom) on the ScrollView so the keyboard does not compress the entire layout. Never let the keyboard cover the active text field — the user must always see what they are typing.
+
+=== NOTIFICATION SETTINGS ===
+
+- Any app that sends push notifications must include a settings screen where the user can configure when they get notified. Never hardcode notification timing. For birthday/event reminders, offer: On the day (day of), 1 day before, 3 days before, 1 week before, Custom (let user pick days before). Use multi-select so users can pick multiple options (e.g. \"1 week before\" AND \"day of\"). Display the current selection clearly in the settings row so the user knows what's active without tapping in (e.g. \"Reminders  →  1 week before, day of\"). Never show hardcoded timing like \"Day-of + 1 day before\" without giving the user a way to change it.
 
 === CHART INTERACTIVITY ===
 
