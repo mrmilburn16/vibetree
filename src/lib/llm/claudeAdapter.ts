@@ -78,7 +78,7 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Don't pass formatted strings into numeric APIs. Keep numbers as Double/Int for ProgressView, Gauge, charts; only format to String for Text display.
 - Never create an accentColor property on custom types. Only valid use is Color.accentColor.
 - Write Color once only (Color.primary, not ColorColor). Color has no .quaternary property.
-- NSAttributedString.Key has no member .foregroundStyle. The correct key is .foregroundColor.
+- NSAttributedString (rich text): When using NSAttributedString for rich text editing, use UIKit attribute keys only—never SwiftUI modifiers. Use .foregroundColor (not .foregroundStyle), .font (not .fontStyle), .backgroundColor (not .backgroundStyle). .foregroundStyle is a SwiftUI view modifier and does NOT exist on NSAttributedString.Key. Never mix SwiftUI view modifiers with NSAttributedString attributes; they are separate APIs.
 - No duplicate declarations in the same type.
 - AsyncStream requires for await, not for-in.
 - Async functions in sync context require Task { await ... }.
@@ -117,6 +117,7 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - AsyncImage with placeholder and failure view for remote images.
 - Prefer SF Symbols via Image(systemName:). Use .symbolRenderingMode for depth.
 - Avoid emojis in UI text. Prefer clean typography and SF Symbols sparingly.
+- Never use sparkle, star, or magic wand icons (e.g. sparkles, star.fill, wand.and.stars) as app icons or primary UI elements—they are overused in AI-generated interfaces and signal low quality. App icons must reflect the app's function: Fitness → figure, heart, flame; Finance → chart, dollar sign, wallet; Productivity → checkmark, clock, list; Food → fork, plate; Weather → sun, cloud, thermometer. Use SF Symbols that are literal and functional, not decorative or \"magical\".
 - Animation: .spring(response: 0.35, dampingFraction: 0.85) for natural feel. Always animate state transitions.
 - Breathing/meditation animations: Must alternate between both states—\"Breathe In\" during expand phase and \"Breathe Out\" during contract phase. Never show only one state. Use a timer or animation completion callback to toggle between the two labels.
 - Core feature text: Instructional text that guides the user's primary action (breathe in/out, tap here, swipe up, etc.) must be minimum font size 22, bold or semibold, high contrast against background, centered and clearly visible. Never make core instruction text smaller than supporting UI elements.
@@ -126,17 +127,34 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Use .sheet for non-blocking tasks, .fullScreenCover only for immersive content.
 - Use Form { Section { } } for settings screens.
 - Use List with .listStyle(.insetGrouped) for settings, .plain for feeds.
+- Numeric goal-setting (calorie goals, step goals, weight targets, etc.): Never show only 2–3 preset buttons as the only input. Always combine: (1) large prominent number display showing current value, (2) +/- stepper buttons for fine control with meaningful increments (e.g. calories: 50, steps: 500, weight: 1 lb, water: 1 glass), (3) optional 2–3 quick preset buttons as shortcuts. This gives users both speed (presets) and precision (stepper) without requiring keyboard input.
 
 === LIST INTERACTIONS (standard iOS patterns) ===
 
 - Every list item must be tappable and open a detail or edit view. Never create a list where tapping an item does nothing.
+- Chevron rule: Every NavigationLink or list row that shows a chevron (>) on the right MUST have a working NavigationLink or .onTapGesture that navigates to a detail view. A chevron with no navigation action is a broken UI pattern. If a row has a chevron, it must navigate; if it doesn't navigate, remove the chevron. Never show a chevron on a non-tappable row.
 - Every list must support swipe to delete: .swipeActions(edge: .trailing) { Button(role: .destructive) { /* delete action */ } label: { Label(\"Delete\", systemImage: \"trash\") } }
 - If an item was created with a form, tapping it should open the same form pre-populated with the existing data for editing. Saving updates the item; it does not create a new one.
 - Lists with editable items must also support Edit mode with a toolbar Edit button for bulk delete.
+- When a list item has a customizable icon and color, the icon and color must be visibly rendered on the list row—not only in the edit/creation form. The custom emoji or SF Symbol must display in the list row (not a placeholder circle). The custom color must be applied to the icon background or accent in the list row. The same icon and color shown in the creation form must match exactly what appears in the list. Test: if a user picks red and a running emoji, the list row must show a red circle with that emoji inside it.
+- List rows with a number badge and text must vertically align to center: use HStack(alignment: .center) { number badge, text }. Never use .top alignment unless the text is guaranteed to be multi-line. .center handles both single-line (number and text centered) and multi-line (number sits at center of the text block) correctly.
 
 === TASK COMPLETION UI (checklists / todo) ===
 
 - When a task is marked complete, apply these patterns so checklist/todo apps meet universal expectations: (1) Circle checkbox: empty circle = incomplete, filled circle with ✓ = complete; animate the transition with a spring animation. (2) Task title strikethrough: Text(task.title).strikethrough(task.isComplete, color: .secondary).foregroundColor(task.isComplete ? .secondary : .primary). (3) Completed tasks visually dim: use opacity 0.5–0.6 to de-emphasize. (4) Sort so completed tasks appear at the bottom of the list, below all incomplete tasks.
+
+=== MODE TOGGLE SWITCHES (segmented control / Focus-Break, Day-Week-Month, etc.) ===
+
+- Any segmented control or toggle that switches between modes must: (1) Switch immediately on tap—never require a separate confirm or reset button to apply the mode change. The user expects tapping a toggle to work instantly, like a tab bar. (2) If switching would interrupt an active timer or process, show a brief confirmation alert instead of switching silently: e.g. \"Switch to Short Break? This will reset the current timer.\" with Cancel and Switch buttons; only then apply the change. (3) Never silently ignore a tap—always give immediate visual feedback that the tap registered (selection highlight, animation).
+- Segmented control labels must never be truncated (no \"...\"). If labels are too long to fit: (1) Shorten with abbreviations (e.g. \"Word → Translation\" → \"W → T\", \"T → W\", \"Mixed\") or use SF Symbol icons (arrow.right, arrow.left, shuffle). (2) Never let a segment show \"...\" truncation—it looks broken. (3) If you need long labels, use a Picker with .pickerStyle(.menu) dropdown instead of a segmented control. Rule: if any label exceeds ~12 characters, either shorten it or use a different picker style.
+
+=== SESSION COMPLETION (Try Again / Study Again / Restart) ===
+
+- Any \"Try Again\", \"Study Again\", \"Play Again\", or \"Restart\" button on a results/completion screen must: (1) Reset all session state (score, current index, answers, timer) to initial values. (2) Navigate back to the first item/question of the session—not back to the same results screen. (3) Never create a loop where the restart button returns to the same screen. Correct flow: Results screen → tap \"Study Again\" → first flashcard/question with fresh state. Wrong: Results screen → tap \"Study Again\" → same results screen.
+
+=== SWIPEABLE CARDS (correct/incorrect, accept/reject) ===
+
+- Any card that can be swiped left/right to indicate correct/incorrect (or accept/reject) must show a swipe indicator: (1) Swipe RIGHT → green \"CORRECT\" label with checkmark in top-left of card, opacity tied to drag amount. (2) Swipe LEFT → red \"INCORRECT\" label with X in top-right of card, opacity tied to drag amount. (3) Card rotates slightly during drag (max ~15°). (4) Indicator opacity = min(abs(dragOffset)/100, 1.0). Use a ZStack over the card content: Label(\"CORRECT\", systemImage: \"checkmark\").foregroundColor(.green).opacity(dragOffset > 0 ? min(dragOffset/100, 1) : 0) and Label(\"INCORRECT\", systemImage: \"xmark\").foregroundColor(.red).opacity(dragOffset < 0 ? min(-dragOffset/100, 1) : 0); apply .rotationEffect(.degrees(dragOffset/20)), .offset(x: dragOffset), and a DragGesture that updates dragOffset.
 
 - Confirm destructive actions with .alert() or .confirmationDialog().
 - Respect Reduce Motion: wrap motion animations in UIAccessibility.isReduceMotionEnabled check.
@@ -154,6 +172,7 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
   - Education: deep teal to dark navy — Color(hex: \"0A2020\") to Color(hex: \"0A1628\")
   - Utility: dark charcoal to black — Color(hex: \"1C1C1E\") to Color(hex: \"0A0A0A\")
   - Social: deep burgundy to black — Color(hex: \"1A0A0A\") to Color(hex: \"1C1C1E\")
+  - Pomodoro/Timer: deep crimson to black — Color(hex: \"2D0A0A\") to Color(hex: \"0A0A0A\"); accent Color(hex: \"FF6B6B\") (salmon/coral). Use for any timer, focus, or countdown app—this palette looks intentional and premium.
   - Default: dark navy to black — Color(hex: \"0A0A1A\") to Color(hex: \"1C1C1E\")
 - If the user's prompt specifies a color scheme, background color, or theme — always follow their specification instead. User instructions override this default.
 - Apply the gradient as the base layer behind all content using:
@@ -179,6 +198,10 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - For distance, weight, height, and temperature: use Foundation's Measurement with UnitLength, UnitMass, UnitTemperature and format display with MeasurementFormatter. Never hardcode "km", "kg", "cm", or "°C" in user-facing strings — MeasurementFormatter automatically shows the correct unit for the user's locale.
 - Always format numeric measurements with MeasurementFormatter (e.g. formatter.string(from: Measurement(value: value, unit: UnitLength.kilometers)) so the system chooses miles vs km, lbs vs kg, feet/inches vs cm, °F vs °C based on locale.
 - For US locale: distance in miles not km, weight in lbs not kg, height in feet and inches not cm, temperature in °F not °C. Using Measurement + MeasurementFormatter with the default locale gives this behavior automatically; do not hardcode imperial or metric strings.
+
+=== UNIT CONVERTER APPS ===
+
+- Order units in pickers/selectors by Locale.current.measurementSystem. US (.us): Length — ft, in, yd, mi, m, cm, mm, km; Weight — lb, oz, ton, kg, g, mg; Temperature — °F, °C, K; Volume — fl oz, cup, pt, qt, gal, ml, L. Metric (.metric): Length — m, cm, mm, km, ft, in, yd, mi; Weight — kg, g, mg, lb, oz; Temperature — °C, °F, K; Volume — ml, L, fl oz, cup. Rules: (1) User's most-used units first in any picker. (2) Default \"from\" unit on launch = most common for locale (US: ft for length, lb for weight, °F for temp). (3) Never default to metric units for US locale users. (4) Kelvin always last in temperature lists—for science, not everyday use.
 
 === CURRENCY INPUT ===
 

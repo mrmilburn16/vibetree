@@ -60,6 +60,14 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       /NSAttributedString\.Key\.foregroundStyle\b/g,
       "NSAttributedString.Key.foregroundColor"
     );
+    content = content.replace(
+      /NSAttributedString\.Key\.fontStyle\b/g,
+      "NSAttributedString.Key.font"
+    );
+    content = content.replace(
+      /NSAttributedString\.Key\.backgroundStyle\b/g,
+      "NSAttributedString.Key.backgroundColor"
+    );
 
     content = content.replace(
       /\bTheme\.accentColor\b/g,

@@ -56,9 +56,9 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 90,
-    "firstAttemptCompile": 61,
-    "compileRate": 68,
+    "totalBuilds": 95,
+    "firstAttemptCompile": 64,
+    "compileRate": 67,
     "functionalSuccesses": 2,
     "functionalRate": 2,
     "commonErrors": [
@@ -67,7 +67,8 @@
       "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Decodable'",
       "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Encodable'",
       "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Hashable'",
-      "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Equatable'"
+      "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Equatable'",
+      "type 'NSAttributedString.Key' has no member 'foregroundStyle'"
     ],
     "goldenExamples": [
       {

@@ -39,12 +39,14 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 1,
+    "totalBuilds": 2,
     "firstAttemptCompile": 0,
     "compileRate": 0,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "type 'NSAttributedString.Key' has no member 'foregroundStyle'"
+    ],
     "goldenExamples": []
   }
 }
