@@ -1,7 +1,7 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import {
   BarChart3,
@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronUp,
   Square,
+  Clipboard,
 } from "lucide-react";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
@@ -55,6 +56,8 @@ type BuildResult = {
   attempts: number;
   autoFixUsed: boolean;
   compilerErrors: string[];
+  /** Full history of errors per attempt (when available). */
+  errorHistory?: Array<{ attempt: number; errors: string[] }>;
   fileCount: number;
   fileNames: string[];
   durationMs: number;
@@ -63,6 +66,30 @@ type BuildResult = {
   userFunctionalScore: number | null;
   userImagePath: string | null;
   issueTags: string[];
+  /** Estimated API cost in USD for the generation that produced this build. */
+  generationCostUsd?: number | null;
+};
+
+/** One attempt's compiler errors in error history. */
+type ErrorHistoryEntry = { attempt: number; errors: string[] };
+
+/** Active build job from /api/build-jobs/active (in progress or auto-fixing). */
+type ActiveBuildJob = {
+  id: string;
+  createdAt: number;
+  startedAt?: number;
+  status: "queued" | "running" | "succeeded" | "failed" | "generating";
+  request: {
+    projectId: string;
+    projectName: string;
+    userPrompt?: string;
+    attempt?: number;
+    maxAttempts?: number;
+  };
+  compilerErrors?: string[];
+  /** Full history of errors per attempt (when available); prefer over compilerErrors for display. */
+  errorHistory?: ErrorHistoryEntry[];
+  autoFixInProgress?: boolean;
 };
 
 type Stats = {
@@ -78,6 +105,69 @@ type Stats = {
   avgDesignScore: number | null;
   avgFunctionalScore: number | null;
 };
+
+function CompilerErrorsBlock({ errors, className = "" }: { errors: string[]; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const count = errors.length;
+  if (count === 0) return null;
+  return (
+    <div className={className}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between text-left text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+      >
+        Compiler Errors ({count})
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+      {open && (
+        <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--badge-error)]/30 bg-[var(--badge-error)]/10 p-3">
+          <pre className="whitespace-pre-wrap break-all font-mono text-xs text-[var(--text-secondary)]">
+            {errors.join("\n\n")}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ErrorHistoryBlock({
+  errorHistory,
+  className = "",
+}: {
+  errorHistory: ErrorHistoryEntry[];
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const totalErrors = errorHistory.reduce((n, e) => n + e.errors.length, 0);
+  if (errorHistory.length === 0 || totalErrors === 0) return null;
+  return (
+    <div className={className}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between text-left text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+      >
+        Compiler Errors ({errorHistory.length} attempt{errorHistory.length !== 1 ? "s" : ""}, {totalErrors} total)
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-3 rounded-[var(--radius-md)] border border-[var(--badge-error)]/30 bg-[var(--badge-error)]/10 p-3">
+          {errorHistory.map(({ attempt, errors }) => (
+            <div key={attempt}>
+              <p className="mb-1.5 text-xs font-semibold text-[var(--text-primary)]">
+                Attempt {attempt} errors:
+              </p>
+              <pre className="whitespace-pre-wrap break-all font-mono text-xs text-[var(--text-secondary)]">
+                {errors.map((e) => `- ${e}`).join("\n")}
+              </pre>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ScoreButton({
   value,
@@ -136,9 +226,51 @@ function ResultRow({
   const [expanded, setExpanded] = useState(false);
   const [visionExpanded, setVisionExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [reportCopied, setReportCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [removing, setRemoving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const copyReport = useCallback(() => {
+    const status = result.compiled ? "Compiled" : "Failed";
+    const autoFix = result.autoFixUsed ? `${result.attempts} attempts` : "None";
+    const errorsBlock =
+      (result.errorHistory?.length ?? 0) > 0
+        ? result
+            .errorHistory!.map(
+              ({ attempt, errors }) =>
+                `Attempt ${attempt} errors:\n${errors.map((e) => `- ${e}`).join("\n")}`
+            )
+            .join("\n\n")
+        : result.compilerErrors.length > 0
+          ? result.compilerErrors.join("\n")
+          : "None";
+    const apiCost =
+      typeof result.generationCostUsd === "number"
+        ? `~$${result.generationCostUsd.toFixed(2)}`
+        : typeof visionTestReport?.total_cost_usd === "number"
+          ? `~$${visionTestReport.total_cost_usd.toFixed(2)}`
+          : "—";
+    const duration =
+      result.durationMs > 0
+        ? `${Math.round(result.durationMs / 1000)}s`
+        : "—";
+    const report = `Status: ${status}
+Prompt: ${result.prompt || "(none)"}
+Auto-fix: ${autoFix}
+Compiler Errors:
+${errorsBlock}
+API Cost: ${apiCost}
+Files: ${result.fileCount}
+Duration: ${duration}
+
+---
+Based on this, should we fix the system prompt, a skill file, or both? If so, give the exact Cursor prompt to make the change.
+`;
+    navigator.clipboard.writeText(report);
+    setReportCopied(true);
+    setTimeout(() => setReportCopied(false), 2000);
+  }, [result, visionTestReport]);
 
   useEffect(() => {
     setNotes(result.userNotes);
@@ -307,27 +439,13 @@ function ResultRow({
               Files: {result.fileNames.join(", ")}
             </p>
           )}
-          {result.compilerErrors.length > 0 && (
-            <div className="rounded-[var(--radius-md)] border border-[var(--badge-error)]/30 bg-[var(--badge-error)]/10 p-3">
-              <p className="mb-1.5 text-xs font-medium text-[var(--semantic-error)]">
-                Compiler errors
-              </p>
-              {result.compilerErrors.slice(0, 5).map((e, i) => (
-                <p
-                  key={i}
-                  className="break-all font-mono text-xs text-[var(--text-secondary)]"
-                >
-                  {e}
-                </p>
-              ))}
-              {result.compilerErrors.length > 5 && (
-                <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                  +{result.compilerErrors.length - 5} more
-                </p>
-              )}
-            </div>
-          )}
         </div>
+      )}
+
+      {result.errorHistory && result.errorHistory.length > 0 ? (
+        <ErrorHistoryBlock errorHistory={result.errorHistory} className="mt-3 border-t border-[var(--border-default)] pt-3" />
+      ) : (
+        <CompilerErrorsBlock errors={result.compilerErrors} className="mt-3 border-t border-[var(--border-default)] pt-3" />
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-4">
@@ -549,6 +667,70 @@ function ResultRow({
             </div>
           )}
         </div>
+      )}
+
+      <div className="mt-3 border-t border-[var(--border-default)] pt-3">
+        <button
+          type="button"
+          onClick={copyReport}
+          className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-tertiary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--border-subtle)] hover:text-[var(--text-primary)]"
+        >
+          <Clipboard className="h-3.5 w-3.5" aria-hidden />
+          {reportCopied ? "Copied!" : "Copy Report"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function ActiveJobCard({ job }: { job: ActiveBuildJob }) {
+  const isAutoFixing = job.status === "failed" && job.autoFixInProgress;
+  const isInProgress = job.status === "queued" || job.status === "running" || job.status === "generating";
+  const attempt = job.request.attempt ?? 1;
+  const maxAttempts = job.request.maxAttempts ?? 1;
+  const displayName = job.request.projectName || job.request.userPrompt || "Building…";
+  const errorHistory = job.errorHistory ?? [];
+  const compilerErrors = job.compilerErrors ?? [];
+
+  return (
+    <article
+      className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4 transition-all duration-[var(--transition-normal)] hover:border-[var(--border-subtle)]"
+      style={{
+        background: "var(--background-secondary)",
+        boxShadow: "0 1px 0 0 var(--border-default)",
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--semantic-warning)]/40 bg-[var(--semantic-warning)]/10 px-2.5 py-1 text-xs font-medium text-[var(--semantic-warning)]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              {isAutoFixing ? "Auto-fixing" : "Building"}
+            </span>
+            {isAutoFixing && (
+              <span className="text-xs text-[var(--text-secondary)]">
+                Auto-fixing attempt {attempt}/{maxAttempts}
+              </span>
+            )}
+            <span className="flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+              {new Date(job.createdAt).toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </span>
+          </div>
+          <p className="mt-2 text-sm font-medium text-[var(--text-primary)] line-clamp-2">
+            {displayName}
+          </p>
+        </div>
+      </div>
+      {errorHistory.length > 0 ? (
+        <ErrorHistoryBlock errorHistory={errorHistory} className="mt-3 border-t border-[var(--border-default)] pt-3" />
+      ) : (
+        <CompilerErrorsBlock errors={compilerErrors} className="mt-3 border-t border-[var(--border-default)] pt-3" />
       )}
     </article>
   );
@@ -829,6 +1011,7 @@ function base64ToBlob(rawBase64: string, mimeType: string = "image/png"): Blob {
 
 export default function BuildsPage() {
   const [results, setResults] = useState<BuildResult[]>([]);
+  const [activeJobs, setActiveJobs] = useState<ActiveBuildJob[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [filter, setFilter] = useState<"all" | "compiled" | "failed">("all");
   const [loading, setLoading] = useState(true);
@@ -871,6 +1054,67 @@ export default function BuildsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const pollBuildResults = useCallback(async () => {
+    try {
+      const [resultsRes, statsRes] = await Promise.all([
+        fetch("/api/build-results?limit=200", { cache: "no-store" }),
+        fetch("/api/build-results?stats=true", { cache: "no-store" }),
+      ]);
+      const resultsData = await resultsRes.json().catch(() => ({ results: [] }));
+      const statsData = await statsRes.json().catch(() => null);
+      const incoming = (resultsData.results ?? []) as BuildResult[];
+      setResults((prev) => {
+        const prevIds = new Set(prev.map((r) => r.id));
+        const updatedById = new Map(prev.map((r) => [r.id, r]));
+        const newBuilds: BuildResult[] = [];
+        for (const r of incoming) {
+          if (updatedById.has(r.id)) {
+            updatedById.set(r.id, r);
+          } else {
+            newBuilds.push(r);
+          }
+        }
+        const existingOrder = prev.map((r) => updatedById.get(r.id)).filter(Boolean) as BuildResult[];
+        return [...newBuilds, ...existingOrder];
+      });
+      setVisionTestReports((prev) => {
+        const next = { ...prev };
+        for (const r of incoming) {
+          const report = (r as { id: string; visionTestReport?: VisionTestReport | null }).visionTestReport;
+          if (report && typeof report === "object" && typeof report.overallScore === "number") {
+            next[r.id] = report as VisionTestReport;
+          }
+        }
+        return next;
+      });
+      if (statsData) setStats(statsData);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    pollBuildResults();
+    const interval = setInterval(pollBuildResults, 2000);
+    return () => clearInterval(interval);
+  }, [pollBuildResults]);
+
+  const pollActiveJobs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/build-jobs/active", { cache: "no-store" });
+      const data = await res.json().catch(() => ({ jobs: [] }));
+      setActiveJobs(Array.isArray(data.jobs) ? data.jobs : []);
+    } catch {
+      setActiveJobs([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    pollActiveJobs();
+    const interval = setInterval(pollActiveJobs, 2000);
+    return () => clearInterval(interval);
+  }, [pollActiveJobs]);
 
   const runVisionTest = useCallback(
     async (projectId: string, appName: string, buildResultId: string, getCurrentResult: () => BuildResult | undefined) => {
@@ -1458,6 +1702,25 @@ export default function BuildsPage() {
           filter === "compiled" ? r.compiled : !r.compiled
         );
 
+  /** Same project + within 5 min: treat as one build; show active job card only, not the result card. */
+  const SAME_BUILD_WINDOW_MS = 5 * 60 * 1000;
+  const isResultSuppressedByActiveJob = useCallback(
+    (result: BuildResult) =>
+      activeJobs.some((job) => {
+        const nameA = (result.projectName ?? "").trim().toLowerCase();
+        const nameB = (job.request?.projectName ?? "").trim().toLowerCase();
+        if (nameA !== nameB) return false;
+        const resultTime = new Date(result.timestamp).getTime();
+        return Math.abs(resultTime - job.createdAt) <= SAME_BUILD_WINDOW_MS;
+      }),
+    [activeJobs]
+  );
+
+  const resultsToShow = useMemo(
+    () => filtered.filter((r) => !isResultSuppressedByActiveJob(r)),
+    [filtered, isResultSuppressedByActiveJob]
+  );
+
   const filterOptions: SelectOption[] = [
     { value: "all", label: `All (${results.length})` },
     {
@@ -1563,7 +1826,7 @@ export default function BuildsPage() {
                 Loading build results…
               </p>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : resultsToShow.length === 0 && activeJobs.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] py-16 px-6 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--background-tertiary)] text-[var(--text-tertiary)]">
                 <Sparkles className="h-7 w-7" aria-hidden />
@@ -1587,7 +1850,10 @@ export default function BuildsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filtered.map((r) => (
+              {activeJobs.map((job) => (
+                <ActiveJobCard key={job.id} job={job} />
+              ))}
+              {resultsToShow.map((r) => (
                 <ResultRow
                   key={r.id}
                   result={r}

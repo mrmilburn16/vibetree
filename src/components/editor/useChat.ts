@@ -275,6 +275,7 @@ export function useChat(
       fixedFiles?: Array<{ path: string; content: string }>;
       attempts?: number;
       compilerErrors?: string[];
+      errorHistory?: Array<{ attempt: number; errors: string[] }>;
       fileNames?: string[];
     }>;
   }
@@ -1032,6 +1033,8 @@ export function useChat(
                     fileNames: result.fileNames ?? editedFiles,
                     durationMs: buildDuration,
                     skillsUsed: doneEvent?.skillIds ?? [],
+                    ...(typeof estimatedCostUsd === "number" && estimatedCostUsd >= 0 && { generationCostUsd: estimatedCostUsd }),
+                    ...(Array.isArray(result.errorHistory) && result.errorHistory.length > 0 && { errorHistory: result.errorHistory }),
                   }),
                 }).catch((err) => Sentry.captureException(err));
                 const validationLine =

@@ -43,6 +43,8 @@ export type BuildResult = {
   attempts: number;
   autoFixUsed: boolean;
   compilerErrors: string[];
+  /** Full history of compiler errors per attempt (when available). */
+  errorHistory?: Array<{ attempt: number; errors: string[] }>;
   fileCount: number;
   fileNames: string[];
   durationMs: number;
@@ -57,6 +59,8 @@ export type BuildResult = {
   issueTags: string[];
   /** Claude vision test report (saved when vision test completes). */
   visionTestReport?: VisionTestReportStored | null;
+  /** Estimated API cost in USD for the generation that produced this build (chat/stream). */
+  generationCostUsd?: number | null;
 };
 
 function getDb() {
@@ -93,6 +97,7 @@ function toFirestorePayload(result: BuildResult): Record<string, unknown> {
     attempts: result.attempts,
     autoFixUsed: result.autoFixUsed,
     compilerErrors: result.compilerErrors,
+    ...(Array.isArray(result.errorHistory) && result.errorHistory.length > 0 && { errorHistory: result.errorHistory }),
     fileCount: result.fileCount,
     fileNames: result.fileNames,
     durationMs: result.durationMs,
@@ -103,6 +108,7 @@ function toFirestorePayload(result: BuildResult): Record<string, unknown> {
     skillsUsed: result.skillsUsed ?? [],
     issueTags: result.issueTags ?? [],
     visionTestReport: vision ? stripScreenshotsFromReport(vision) ?? null : null,
+    generationCostUsd: typeof result.generationCostUsd === "number" ? result.generationCostUsd : null,
   };
 }
 
@@ -121,6 +127,12 @@ function fromFirestoreData(id: string, data: Record<string, unknown>): BuildResu
     attempts: typeof data.attempts === "number" ? data.attempts : 1,
     autoFixUsed: Boolean(data.autoFixUsed),
     compilerErrors: Array.isArray(data.compilerErrors) ? data.compilerErrors : [],
+    errorHistory: Array.isArray(data.errorHistory)
+      ? (data.errorHistory as Array<{ attempt: number; errors: string[] }>).filter(
+          (e): e is { attempt: number; errors: string[] } =>
+            typeof e?.attempt === "number" && Array.isArray(e?.errors)
+        )
+      : undefined,
     fileCount: typeof data.fileCount === "number" ? data.fileCount : 0,
     fileNames: Array.isArray(data.fileNames) ? data.fileNames : [],
     durationMs: typeof data.durationMs === "number" ? data.durationMs : 0,
@@ -131,6 +143,7 @@ function fromFirestoreData(id: string, data: Record<string, unknown>): BuildResu
     skillsUsed: Array.isArray(data.skillsUsed) ? data.skillsUsed : [],
     issueTags: Array.isArray(data.issueTags) ? data.issueTags : [],
     visionTestReport: vision && typeof vision === "object" ? { ...vision, screenshots: Array.isArray(vision.screenshots) ? vision.screenshots : [] } : null,
+    generationCostUsd: typeof data.generationCostUsd === "number" ? data.generationCostUsd : null,
   };
 }
 

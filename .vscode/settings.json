@@ -1,0 +1,17 @@
+{
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/ios/**/build": true,
+    "**/.vibetree-cache": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/out": true,
+    "**/ios/**/build": true,
+    "**/ios/**/DerivedData": true,
+    "**/.vibetree-cache": true,
+    "**/data/*.jsonl": true
+  }
+}

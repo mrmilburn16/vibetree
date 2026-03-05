@@ -234,6 +234,7 @@ export function EditorLayout({
       fixedFiles?: Array<{ path: string; content: string }>;
       attempts?: number;
       compilerErrors?: string[];
+      errorHistory?: Array<{ attempt: number; errors: string[] }>;
       fileNames?: string[];
     }> => {
       if (typeof window === "undefined") return { status: "failed", error: "Not in browser" };
@@ -342,6 +343,7 @@ export function EditorLayout({
           }
           const attempt = job?.request?.attempt ?? 1;
           const errors = Array.isArray(job?.compilerErrors) ? job.compilerErrors : [];
+          const errorHistory = Array.isArray(job?.errorHistory) ? job.errorHistory : undefined;
           const fNames = Array.isArray(job?.request?.files)
             ? job.request.files.map((f: { path: string }) => f.path)
             : [];
@@ -351,7 +353,14 @@ export function EditorLayout({
               : errors.length > 0
                 ? String(errors[0]).trim()
                 : "Build failed";
-          return { status: "failed", error: err, attempts: attempt, compilerErrors: errors, fileNames: fNames };
+          return {
+            status: "failed",
+            error: err,
+            attempts: attempt,
+            compilerErrors: errors,
+            ...(errorHistory?.length ? { errorHistory } : {}),
+            fileNames: fNames,
+          };
         }
         await new Promise((r) => setTimeout(r, VALIDATE_POLL_MS));
       }

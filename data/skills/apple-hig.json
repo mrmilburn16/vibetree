@@ -55,14 +55,15 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 69,
+    "totalBuilds": 70,
     "firstAttemptCompile": 38,
-    "compileRate": 55,
+    "compileRate": 54,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
       "type 'Theme' has no member 'accentColor'",
-      "type 'NSAttributedString.Key' has no member 'foregroundStyle'"
+      "type 'NSAttributedString.Key' has no member 'foregroundStyle'",
+      "cannot find 'UIGraphicsEndPDFPage' in scope"
     ],
     "goldenExamples": []
   }

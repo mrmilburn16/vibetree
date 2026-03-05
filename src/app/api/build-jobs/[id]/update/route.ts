@@ -3,6 +3,7 @@ import {
   getBuildJob,
   setBuildJobStatus,
   setBuildJobCompilerErrors,
+  appendBuildJobErrorHistory,
   setBuildJobAutoFixInProgress,
 } from "@/lib/buildJobs";
 import { sendBackgroundRefreshPush, sendBuildNotification } from "@/lib/apns";
@@ -85,7 +86,11 @@ export async function POST(
   const compilerErrors = Array.isArray(body?.compilerErrors)
     ? body.compilerErrors.filter((x: any) => typeof x === "string")
     : [];
-  if (compilerErrors.length) setBuildJobCompilerErrors(id, compilerErrors);
+  if (compilerErrors.length) {
+    setBuildJobCompilerErrors(id, compilerErrors);
+    const attempt = job.request.attempt ?? 1;
+    appendBuildJobErrorHistory(id, attempt, compilerErrors);
+  }
 
   const status = typeof body?.status === "string" ? body.status : undefined;
   const exitCode = typeof body?.exitCode === "number" ? body.exitCode : undefined;

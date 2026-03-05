@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { Unlock, Loader2 } from "lucide-react";
 import { Modal, Button, QRCode, Input } from "@/components/ui";
 
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
@@ -110,6 +111,9 @@ export function RunOnDeviceModal({
   const [installStartedAt, setInstallStartedAt] = useState<number | null>(
     null
   );
+  const [launchStatus, setLaunchStatus] = useState<"idle" | "launching" | "succeeded" | "failed">("idle");
+  const [launchJobId, setLaunchJobId] = useState<string | null>(null);
+  const [launchMessage, setLaunchMessage] = useState<string | null>(null);
   const [showTeamIdInput, setShowTeamIdInput] = useState(false);
 
   const projectType =
@@ -255,6 +259,8 @@ export function RunOnDeviceModal({
 
         setInstallStatus(status);
         if (status === "succeeded" || status === "failed") {
+          const jobError = typeof job.error === "string" ? job.error : null;
+          setError(jobError || null);
           onConsumedBackgroundJob?.();
           return;
         }
@@ -268,6 +274,37 @@ export function RunOnDeviceModal({
       cancelled = true;
     };
   }, [isOpen, installJobId, onConsumedBackgroundJob]);
+
+  // Poll launch-only job
+  useEffect(() => {
+    if (!isOpen || !launchJobId || launchStatus !== "launching") return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/build-jobs/${launchJobId}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json().catch(() => ({}));
+        const job = data?.job;
+        if (!job || cancelled) return;
+        const status = typeof job.status === "string" ? job.status : null;
+        if (status === "succeeded") {
+          setLaunchStatus("succeeded");
+          setLaunchMessage(null);
+          return;
+        }
+        if (status === "failed") {
+          setLaunchStatus("failed");
+          setLaunchMessage(typeof job.error === "string" ? job.error : "Unlock your iPhone first, then try again.");
+          return;
+        }
+        setTimeout(poll, 2000);
+      } catch {
+        if (!cancelled) setTimeout(poll, 2000);
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [isOpen, launchJobId, launchStatus]);
 
   // Install elapsed timer
   useEffect(() => {
@@ -286,6 +323,9 @@ export function RunOnDeviceModal({
     setInstallLogTail([]);
     setInstallStartedAt(Date.now());
     setInstallElapsed(0);
+    setLaunchStatus("idle");
+    setLaunchJobId(null);
+    setLaunchMessage(null);
     try {
       const backgroundJobId = backgroundInstallJobIdRef?.current ?? null;
       if (backgroundJobId) {
@@ -391,6 +431,31 @@ export function RunOnDeviceModal({
       setInstallStatus("failed");
     } finally {
       setInstallLoading(false);
+    }
+  }
+
+  async function handleLaunchApp() {
+    setLaunchStatus("launching");
+    setLaunchMessage(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/launch-on-device`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setLaunchStatus("failed");
+        setLaunchMessage((data?.message ?? data?.error ?? "Launch request failed. Try again.") as string);
+        return;
+      }
+      const data = (await res.json()) as { job?: { id?: string } };
+      const jobId = data?.job?.id;
+      if (jobId) {
+        setLaunchJobId(jobId);
+      } else {
+        setLaunchStatus("failed");
+        setLaunchMessage("Launch request failed. Try again.");
+      }
+    } catch {
+      setLaunchStatus("failed");
+      setLaunchMessage("Launch request failed. Try again.");
     }
   }
 
@@ -562,8 +627,25 @@ export function RunOnDeviceModal({
           )}
 
           {error && (
-            <div className="rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-2">
-              <p className="text-sm text-red-400">{error}</p>
+            <div
+              className={
+                /locked/i.test(error)
+                  ? "flex items-start gap-3 rounded border border-amber-500/50 bg-amber-500/10 px-3 py-2.5"
+                  : "rounded border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-2"
+              }
+            >
+              {/locked/i.test(error) && (
+                <Unlock className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" aria-hidden />
+              )}
+              <p
+                className={
+                  /locked/i.test(error)
+                    ? "text-sm font-medium text-amber-200"
+                    : "text-sm text-red-400"
+                }
+              >
+                {error}
+              </p>
             </div>
           )}
 
@@ -702,39 +784,84 @@ export function RunOnDeviceModal({
           {/* ── Build progress ── */}
           {installStatus && (
             <div className="rounded border border-[var(--border-default)] bg-[var(--background-default)] p-3">
-              <div className="flex items-center gap-2">
-                {isBuilding && (
-                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--primary-default)]" />
-                )}
-                {installStatus === "succeeded" && (
-                  <span className="text-green-400">&#10003;</span>
-                )}
-                {installStatus === "failed" && (
-                  <span className="text-red-400">&#10007;</span>
-                )}
-                <span
-                  className={
-                    installStatus === "succeeded"
-                      ? "text-sm font-medium text-[var(--text-default)]"
-                      : installStatus === "failed"
-                        ? "text-sm text-red-400"
-                        : "text-xs text-[var(--text-tertiary)]"
-                  }
-                >
-                  {installStatus === "queued" &&
-                    "Waiting for Mac runner to start build\u2026"}
-                  {installStatus === "running" &&
-                    "Building for device & installing\u2026"}
-                  {installStatus === "succeeded" &&
-                    "Your app is installed! Check your iPhone."}
-                  {installStatus === "failed" &&
-                    "Install failed \u2014 try downloading for Xcode instead."}
-                </span>
-              </div>
-              {installLogTail.length > 0 && (
-                <pre className="mt-2 max-h-[120px] overflow-auto rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
-                  {installLogTail.join("\n")}
-                </pre>
+              {installStatus === "succeeded" &&
+              installLogTail.some((l) =>
+                /installed but could not auto-launch|installed but auto-launch failed|BSErrorCodeDescription = Locked/i.test(l)
+              ) ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-400">&#10003;</span>
+                    <span className="text-sm font-medium text-[var(--text-default)]">
+                      App installed successfully!
+                    </span>
+                  </div>
+                  <div className="mt-2 rounded border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                    Couldn&apos;t auto-launch — your iPhone was locked.
+                  </div>
+                  <div className="mt-3 flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleLaunchApp}
+                      disabled={launchStatus === "launching"}
+                      className="w-full"
+                    >
+                      {launchStatus === "launching" ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                          Launching…
+                        </>
+                      ) : (
+                        "Launch App"
+                      )}
+                    </Button>
+                    {launchStatus === "succeeded" && (
+                      <p className="text-sm text-green-400">App launched! Check your iPhone.</p>
+                    )}
+                    {launchStatus === "failed" && launchMessage && (
+                      <p className="text-sm text-amber-200">{launchMessage}</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    {isBuilding && (
+                      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--primary-default)]" />
+                    )}
+                    {installStatus === "succeeded" && (
+                      <span className="text-green-400">&#10003;</span>
+                    )}
+                    {installStatus === "failed" && (
+                      <span className="text-red-400">&#10007;</span>
+                    )}
+                    <span
+                      className={
+                        installStatus === "succeeded"
+                          ? "text-sm font-medium text-[var(--text-default)]"
+                          : installStatus === "failed"
+                            ? "text-sm text-red-400"
+                            : "text-xs text-[var(--text-tertiary)]"
+                      }
+                    >
+                      {installStatus === "queued" &&
+                        "Waiting for Mac runner to start build\u2026"}
+                      {installStatus === "running" &&
+                        "Building for device & installing\u2026"}
+                      {installStatus === "succeeded" &&
+                        (error && /locked/i.test(error)
+                          ? "Unlock your iPhone and tap Install again."
+                          : "Your app is installed! Check your iPhone.")}
+                      {installStatus === "failed" &&
+                        "Install failed \u2014 try downloading for Xcode instead."}
+                    </span>
+                  </div>
+                  {installLogTail.length > 0 && (
+                    <pre className="mt-2 max-h-[120px] overflow-auto rounded border border-[var(--border-default)] bg-[var(--background-secondary)] p-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                      {installLogTail.join("\n")}
+                    </pre>
+                  )}
+                </>
               )}
             </div>
           )}

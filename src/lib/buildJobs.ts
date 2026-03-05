@@ -11,8 +11,8 @@ export type BuildJobCreateRequest = {
   maxAttempts?: number;
   parentJobId?: string;
   userPrompt?: string;
-  /** "build" = simulator only (default); "ipa" = archive + export signed IPA; "device" = build + install via devicectl */
-  outputType?: "build" | "ipa" | "device";
+  /** "build" = simulator only (default); "ipa" = archive + export signed IPA; "device" = build + install via devicectl; "launch" = launch-only (devicectl device process launch, no build) */
+  outputType?: "build" | "ipa" | "device" | "launch";
 };
 
 export type BuildJobRecord = {
@@ -27,6 +27,8 @@ export type BuildJobRecord = {
   exitCode?: number;
   error?: string;
   compilerErrors?: string[];
+  /** Full history of compiler errors per attempt (attempt number + errors). Appended on each failed attempt; retry job gets copy of parent history. */
+  errorHistory?: Array<{ attempt: number; errors: string[] }>;
   /** Points to the retry job created by auto-fix. */
   nextJobId?: string;
   /** True while auto-fix is running; tells clients to keep polling. */
@@ -103,6 +105,23 @@ export function setBuildJobCompilerErrors(id: string, errors: string[]): void {
   const rec = jobs.get(id);
   if (!rec) return;
   rec.compilerErrors = errors;
+  jobs.set(id, rec);
+}
+
+/** Append one attempt's errors to the job's error history (used when runner reports failure with compilerErrors). */
+export function appendBuildJobErrorHistory(id: string, attempt: number, errors: string[]): void {
+  const rec = jobs.get(id);
+  if (!rec) return;
+  const next = [...(rec.errorHistory ?? []), { attempt, errors }];
+  rec.errorHistory = next;
+  jobs.set(id, rec);
+}
+
+/** Set full error history (e.g. when creating a retry job, copy parent history + parent's attempt). */
+export function setBuildJobErrorHistory(id: string, history: Array<{ attempt: number; errors: string[] }>): void {
+  const rec = jobs.get(id);
+  if (!rec) return;
+  rec.errorHistory = history;
   jobs.set(id, rec);
 }
 

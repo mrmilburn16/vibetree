@@ -82,7 +82,8 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Property names: Never use property names that repeat the same word (e.g. colorColor, nameLabel, titleTitle, carColorColor). Use a single clear descriptor per concept: color, name, title, labelText. Double-word typos cause "value of type X has no member" compiler errors.
 - MapKit (SwiftUI Map): Always use the modern Map initializer with MapContentBuilder and Marker for annotations (e.g. Map { Marker("Title", coordinate: coord) }). Never use the deprecated Map(coordinateRegion:) initializer or MapMarker—they are deprecated in iOS 17 and must not be generated.
 - Model–view consistency: Every property referenced in a view must be explicitly declared on the corresponding model or type. Never reference a property in a view (e.g. CarDetailView, BookingSheet) that does not exist on the model (e.g. Car, Booking). If a view uses item.someProperty, someProperty must be defined on that item's type. Referencing undefined properties causes compiler errors.
-- NSAttributedString (rich text): When using NSAttributedString for rich text editing, use UIKit attribute keys only—never SwiftUI modifiers. Use .foregroundColor (not .foregroundStyle), .font (not .fontStyle), .backgroundColor (not .backgroundStyle). .foregroundStyle is a SwiftUI view modifier and does NOT exist on NSAttributedString.Key. Never mix SwiftUI view modifiers with NSAttributedString attributes; they are separate APIs.
+- NSAttributedString (rich text): NEVER use SwiftUI attribute names on NSAttributedString.Key. When using NSAttributedString for rich text editing, use UIKit attribute keys only—never SwiftUI modifiers. Use .foregroundColor (not .foregroundStyle), .font (not .fontStyle), .backgroundColor (not .backgroundStyle). .foregroundStyle is a SwiftUI view modifier and does NOT exist on NSAttributedString.Key. Never mix SwiftUI view modifiers with NSAttributedString attributes; they are separate APIs. Never use .foregroundStyle, .fontStyle, or .backgroundStyle as NSAttributedString.Key values — these do not exist. The correct keys are .foregroundColor (takes a UIColor), .font (takes a UIFont), .backgroundColor (takes a UIColor). This is a compile error that auto-fix must always correct on the first attempt. This error appears frequently in ARKit, PDF, and rich text contexts. The auto-fix must correct this on the first attempt by replacing any .foregroundStyle key with .foregroundColor and passing a UIColor value.
+- PDF generation: Never use UIGraphicsBeginPDFContextToData, UIGraphicsBeginPDFPage, or UIGraphicsEndPDFPage — these are not available in SwiftUI projects. Always use UIGraphicsPDFRenderer with its writePDF(to:withActions:) or pdfData(actions:) method. Example: let renderer = UIGraphicsPDFRenderer(bounds: pageRect); let data = renderer.pdfData { ctx in ctx.beginPage(); /* draw content */ }.
 - No duplicate declarations in the same type.
 - AsyncStream requires for await, not for-in.
 - Async functions in sync context require Task { await ... }.
@@ -119,23 +120,16 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Loading states: show ProgressView(). Never leave screens blank.
 - Circular progress rings (Circle + .trim()): (1) Start trim at 12 o'clock using .trim(from: 0, to: progress). (2) Rotate -90° so 0% is at top: .rotationEffect(.degrees(-90)). (3) Clamp progress to 0...1: let clampedProgress = min(max(progress, 0), 1). (4) Use .trim(from: 0, to: clampedProgress) so there is never a visible gap at the start of an empty ring. This prevents the dark sliver artifact at 12 o'clock.
 - AsyncImage with placeholder and failure view for remote images.
-- Post/feed images: Use .aspectRatio(contentMode: .fit) to show the entire image (no crop). .fill zooms and crops to fill the frame and can cut off edges. For a feed (e.g. Instagram-style) where you use .fill for a fixed-height cell, constrain the frame and always add .clipped(): Image(...).resizable().aspectRatio(contentMode: .fill).frame(maxWidth: .infinity).frame(height: 300).clipped(). Never use .fill without .clipped()—without it the image bleeds outside its frame and appears zoomed/cropped.
-- Share button on feed posts: Must open the native iOS share sheet. Use UIActivityViewController(activityItems: [postURL or postCaption], applicationActivities: nil) and present it from the window's rootViewController (e.g. UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.windows.first?.rootViewController?.present(activityVC, animated: true)). Never make a share button that only fires haptics and does nothing else—every button must do something visible and functional.
-- Comment and post likes: Must show immediate visual feedback. Empty heart → filled red heart on tap; like count increments by 1 instantly; use the same heart fill animation for both post and comment likes. Never have a like button that only triggers haptics without a visible state change. A button with no visible state change after tap is a broken interaction.
-- Run tracking screen (Strava/Apple Fitness layout): (1) Map is full screen edge to edge using .ignoresSafeArea(). (2) KPI cards (Distance, Pace, Time) float at the top in a horizontal row with .background(.ultraThinMaterial) (frosted glass bar). (3) Pause and Finish buttons float at the bottom in a frosted glass bar (.background(.ultraThinMaterial)). (4) Draw the run route with MapPolyline from an array of CLLocationCoordinate2D points that grows in real time; use stroke color Color(hex: \"FF6B6B\") (coral/salmon) and line width 4. (5) No separate stats cards below the map—all UI (KPIs and buttons) lives on top of the map in overlay bars.
 - Prefer SF Symbols via Image(systemName:). Use .symbolRenderingMode for depth.
 - Avoid emojis in UI text. Prefer clean typography and SF Symbols sparingly.
 - Never use sparkle, star, or magic wand icons (e.g. sparkles, star.fill, wand.and.stars) as app icons or primary UI elements—they are overused in AI-generated interfaces and signal low quality. App icons must reflect the app's function: Fitness → figure, heart, flame; Finance → chart, dollar sign, wallet; Productivity → checkmark, clock, list; Food → fork, plate; Weather → sun, cloud, thermometer. Use SF Symbols that are literal and functional, not decorative or \"magical\".
 - Animation: .spring(response: 0.35, dampingFraction: 0.85) for natural feel. Always animate state transitions.
-- Breathing/meditation animations: Must alternate between both states—\"Breathe In\" during expand phase and \"Breathe Out\" during contract phase. Never show only one state. Use a timer or animation completion callback to toggle between the two labels.
-- Core feature text: Instructional text that guides the user's primary action (breathe in/out, tap here, swipe up, etc.) must be minimum font size 22, bold or semibold, high contrast against background, centered and clearly visible. Never make core instruction text smaller than supporting UI elements.
 - Animations and layout: When an animation changes an element's size (scale, expand/contract), use .scaleEffect() instead of changing frame size so the element does not push other views. Never animate width/height directly—it causes layout shifts.
 - Use .buttonStyle(.borderedProminent) for primary actions (one per screen), .bordered for secondary.
 - Use TabView for 3-5 top-level sections. Each tab gets its own NavigationStack.
 - Use .sheet for non-blocking tasks, .fullScreenCover only for immersive content.
 - Use Form { Section { } } for settings screens.
 - Use List with .listStyle(.insetGrouped) for settings, .plain for feeds.
-- Numeric goal-setting (calorie goals, step goals, weight targets, etc.): Never show only 2–3 preset buttons as the only input. Always combine: (1) large prominent number display showing current value, (2) +/- stepper buttons for fine control with meaningful increments (e.g. calories: 50, steps: 500, weight: 1 lb, water: 1 glass), (3) optional 2–3 quick preset buttons as shortcuts. This gives users both speed (presets) and precision (stepper) without requiring keyboard input.
 
 === LIST INTERACTIONS (standard iOS patterns) ===
 
@@ -147,46 +141,22 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - When a list item has a customizable icon and color, the icon and color must be visibly rendered on the list row—not only in the edit/creation form. The custom emoji or SF Symbol must display in the list row (not a placeholder circle). The custom color must be applied to the icon background or accent in the list row. The same icon and color shown in the creation form must match exactly what appears in the list. Test: if a user picks red and a running emoji, the list row must show a red circle with that emoji inside it.
 - List rows with a number badge and text must vertically align to center: use HStack(alignment: .center) { number badge, text }. Never use .top alignment unless the text is guaranteed to be multi-line. .center handles both single-line (number and text centered) and multi-line (number sits at center of the text block) correctly.
 - Expandable/collapsible sections: The entire row must be tappable to toggle expand/collapse, not just the chevron. Use Button(action: { isExpanded.toggle() }) { HStack { row content; Spacer(); Image(systemName: \"chevron.down\").rotationEffect(isExpanded ? .degrees(180) : .degrees(0)) } }.contentShape(Rectangle()) so the full row is the hit target.
-
-=== TASK COMPLETION UI (checklists / todo) ===
-
-- When a task is marked complete, apply these patterns so checklist/todo apps meet universal expectations: (1) Circle checkbox: empty circle = incomplete, filled circle with ✓ = complete; animate the transition with a spring animation. (2) Task title strikethrough: Text(task.title).strikethrough(task.isComplete, color: .secondary).foregroundColor(task.isComplete ? .secondary : .primary). (3) Completed tasks visually dim: use opacity 0.5–0.6 to de-emphasize. (4) Sort so completed tasks appear at the bottom of the list, below all incomplete tasks.
+- Form validation on submit: Any form with required fields must validate before saving. If required fields are empty, do NOT silently ignore the tap. Instead: (1) Show inline red error text beneath each empty required field e.g. \"Name is required\". (2) Scroll to the first empty field automatically using ScrollViewProxy. (3) Apply a red border or red tint to the empty field. Never let a user tap Add/Save and have nothing happen with no explanation.
+- Tappable list rows: Every list row with a chevron must be tappable across the entire row width using .contentShape(Rectangle()). This applies equally to all rows regardless of section or category — assets and liabilities rows must behave identically. Never make rows in one section tappable and rows in another section non-tappable.
+- Custom calendar date picker: Any custom-built calendar grid where the user selects a date must make every day number tappable. Each day cell must use a Button with .contentShape(Rectangle()) so the entire cell area is the tap target — not just the number label. Never use Text alone for day cells in a selectable calendar. The selected date must show a filled circle highlight. Tapping a date must update the bound Date value immediately. If using a LazyVGrid or HStack for the grid, wrap each day in a Button, not a plain Text or VStack.
+- Undo after swipe delete: After a swipe-to-delete action on any list item, show a brief undo toast at the bottom of the screen for 4 seconds with an \"Undo\" button. If the user taps Undo, restore the deleted item. If the timer expires, permanently delete it. Use a ZStack with an overlay toast anchored to .bottom. This applies to all lists where swipe-to-delete is present.
+- Catastrophic delete confirmation: For any item that contains child data (a project with tasks, a category with entries, a folder with items, a list with subtasks), never allow swipe-to-delete alone. Instead, tapping delete (from a context menu or edit mode) must show a confirmation that requires the user to type \"DELETE\" in a TextField before the confirm button becomes enabled. Never use a simple yes/no alert for parent items that would cascade-delete child data. Simple items with no children (individual tasks, single entries) use standard swipe-to-delete with undo toast only.
+- Quantity display on list rows: When a list item has a quantity or count value, display it on the list row as a suffix with an \"x\" multiplier — e.g. \"3x\" shown below or beside the item name in a smaller caption font. Never show a bare number with no context. Never spell out \"Quantity:\" as a label — the \"x\" suffix is universally understood and more compact. Example: item name in .body font, quantity as \"3x\" in .caption with .secondary foreground color beneath it.
 
 === MODE TOGGLE SWITCHES (segmented control / Focus-Break, Day-Week-Month, etc.) ===
 
 - Any segmented control or toggle that switches between modes must: (1) Switch immediately on tap—never require a separate confirm or reset button to apply the mode change. The user expects tapping a toggle to work instantly, like a tab bar. (2) If switching would interrupt an active timer or process, show a brief confirmation alert instead of switching silently: e.g. \"Switch to Short Break? This will reset the current timer.\" with Cancel and Switch buttons; only then apply the change. (3) Never silently ignore a tap—always give immediate visual feedback that the tap registered (selection highlight, animation).
 - Segmented control labels must never be truncated (no \"...\"). If labels are too long to fit: (1) Shorten with abbreviations (e.g. \"Word → Translation\" → \"W → T\", \"T → W\", \"Mixed\") or use SF Symbol icons (arrow.right, arrow.left, shuffle). (2) Never let a segment show \"...\" truncation—it looks broken. (3) If you need long labels, use a Picker with .pickerStyle(.menu) dropdown instead of a segmented control. Rule: if any label exceeds ~12 characters, either shorten it or use a different picker style.
 
-=== SESSION COMPLETION (Try Again / Study Again / Restart) ===
-
-- Any \"Try Again\", \"Study Again\", \"Play Again\", or \"Restart\" button on a results/completion screen must: (1) Reset all session state (score, current index, answers, timer) to initial values. (2) Navigate back to the first item/question of the session—not back to the same results screen. (3) Never create a loop where the restart button returns to the same screen. Correct flow: Results screen → tap \"Study Again\" → first flashcard/question with fresh state. Wrong: Results screen → tap \"Study Again\" → same results screen.
-
-=== SWIPEABLE CARDS (correct/incorrect, accept/reject) ===
-
-- Any card that can be swiped left/right to indicate correct/incorrect (or accept/reject) must show a swipe indicator: (1) Swipe RIGHT → green \"CORRECT\" label with checkmark in top-left of card, opacity tied to drag amount. (2) Swipe LEFT → red \"INCORRECT\" label with X in top-right of card, opacity tied to drag amount. (3) Card rotates slightly during drag (max ~15°). (4) Indicator opacity = min(abs(dragOffset)/100, 1.0). Use a ZStack over the card content: Label(\"CORRECT\", systemImage: \"checkmark\").foregroundColor(.green).opacity(dragOffset > 0 ? min(dragOffset/100, 1) : 0) and Label(\"INCORRECT\", systemImage: \"xmark\").foregroundColor(.red).opacity(dragOffset < 0 ? min(-dragOffset/100, 1) : 0); apply .rotationEffect(.degrees(dragOffset/20)), .offset(x: dragOffset), and a DragGesture that updates dragOffset.
-
 - Confirm destructive actions with .alert() or .confirmationDialog().
 - Respect Reduce Motion: wrap motion animations in UIAccessibility.isReduceMotionEnabled check.
 - Add .accessibilityLabel() to icon buttons and non-text controls.
 - Minimum color contrast: 4.5:1 for body text, 3:1 for large text.
-
-=== BACKGROUND DESIGN ===
-
-- Never use a flat single-color background. Always use a subtle gradient background that fits the app's category as the default. Never use purple, violet, or magenta in gradients unless the user explicitly requests it—purple is overused in AI-generated apps and looks generic.
-  - Fitness/Health: dark navy to black — Color(hex: \"0A0A1A\") to Color(hex: \"1C1C2E\")
-  - Weather: deep blue to navy — Color(hex: \"0A1628\") to Color(hex: \"1C2951\")
-  - Finance/Budget: dark green to black — Color(hex: \"0A1A0A\") to Color(hex: \"1C1C1E\")
-  - Productivity/Todo: dark slate to black — Color(hex: \"1A1A2E\") to Color(hex: \"0A0A0A\")
-  - Food/Recipe: warm dark brown to black — Color(hex: \"1A0A00\") to Color(hex: \"1C1C1E\")
-  - Education: deep teal to dark navy — Color(hex: \"0A2020\") to Color(hex: \"0A1628\")
-  - Utility: dark charcoal to black — Color(hex: \"1C1C1E\") to Color(hex: \"0A0A0A\")
-  - Social: deep burgundy to black — Color(hex: \"1A0A0A\") to Color(hex: \"1C1C1E\")
-  - Pomodoro/Timer: deep crimson to black — Color(hex: \"2D0A0A\") to Color(hex: \"0A0A0A\"); accent Color(hex: \"FF6B6B\") (salmon/coral). Use for any timer, focus, or countdown app—this palette looks intentional and premium.
-  - Default: dark navy to black — Color(hex: \"0A0A1A\") to Color(hex: \"1C1C1E\")
-- If the user's prompt specifies a color scheme, background color, or theme — always follow their specification instead. User instructions override this default.
-- Apply the gradient as the base layer behind all content using:
-  LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom)
-  .ignoresSafeArea()
 
 === HAPTIC FEEDBACK ===
 
@@ -207,17 +177,6 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - For distance, weight, height, and temperature: use Foundation's Measurement with UnitLength, UnitMass, UnitTemperature and format display with MeasurementFormatter. Never hardcode "km", "kg", "cm", or "°C" in user-facing strings — MeasurementFormatter automatically shows the correct unit for the user's locale.
 - Always format numeric measurements with MeasurementFormatter (e.g. formatter.string(from: Measurement(value: value, unit: UnitLength.kilometers)) so the system chooses miles vs km, lbs vs kg, feet/inches vs cm, °F vs °C based on locale.
 - For US locale: distance in miles not km, weight in lbs not kg, height in feet and inches not cm, temperature in °F not °C. Using Measurement + MeasurementFormatter with the default locale gives this behavior automatically; do not hardcode imperial or metric strings.
-
-=== UNIT CONVERTER APPS ===
-
-- Order units in pickers/selectors by Locale.current.measurementSystem. US (.us): Length — ft, in, yd, mi, m, cm, mm, km; Weight — lb, oz, ton, kg, g, mg; Temperature — °F, °C, K; Volume — fl oz, cup, pt, qt, gal, ml, L. Metric (.metric): Length — m, cm, mm, km, ft, in, yd, mi; Weight — kg, g, mg, lb, oz; Temperature — °C, °F, K; Volume — ml, L, fl oz, cup. Rules: (1) User's most-used units first in any picker. (2) Default \"from\" unit on launch = most common for locale (US: ft for length, lb for weight, °F for temp). (3) Never default to metric units for US locale users. (4) Kelvin always last in temperature lists—for science, not everyday use.
-
-=== CURRENCY INPUT ===
-
-- Currency input must use calculator-style input, not a standard TextField with text cursor. (1) Display starts at $0.00. (2) Each digit typed shifts in from the right: 6 → $0.06, 0 → $0.60, 0 → $6.00. (3) Backspace removes the rightmost digit. (4) Use a custom input that intercepts number pad taps and builds the value as an integer of cents; do not use a standard TextField. (5) Never allow the cursor to be positioned mid-number. Store the value internally as Int (cents) and display as a formatted currency string (e.g. NumberFormatter .currency style, Locale.current).
-- Any field that accepts a monetary amount must: (1) show the currency symbol (e.g. $ for US locale) inside or preceding the field; (2) format the displayed value with NumberFormatter using .currency style and Locale.current; (3) never show a plain "0.00" without the symbol. For calculator-style inputs, display the formatted string derived from the cents value.
-- Large currency input displays (amount is the focal point of the screen) must: (1) center the value horizontally; (2) use a large font size (minimum 36pt) so the amount is prominent; (3) show the currency symbol inline with the number, same size—not as a separate smaller prefix label. Example: Text(\"$600.00\").font(.system(size: 48, weight: .bold)).multilineTextAlignment(.center).frame(maxWidth: .infinity). Small inline currency fields (in a list row or form) can be left or trailing aligned; use judgment based on context.
-- When a currency text field loses focus (onSubmit or .onChange(of: isFocused)), normalize the value to 2 decimal places so \"85.6\" becomes \"85.60\", \"600\" becomes \"600.00\", and \"85.60\" stays \"85.60\". Use .onChange(of: isFocused) { focused in if !focused { if let value = Double(amountText) { amountText = String(format: \"%.2f\", value) } } }. Applies to any currency input where the user types a dollar amount.
 
 === KEYBOARD DISMISS ===
 
@@ -240,18 +199,6 @@ ScrollView {
     }
 }
 .ignoresSafeArea(.keyboard, edges: .bottom)
-
-=== NOTIFICATION SETTINGS ===
-
-- Any app that sends push notifications must include a settings screen where the user can configure when they get notified. Never hardcode notification timing. For birthday/event reminders, offer: On the day (day of), 1 day before, 3 days before, 1 week before, Custom (let user pick days before). Use multi-select so users can pick multiple options (e.g. \"1 week before\" AND \"day of\"). Display the current selection clearly in the settings row so the user knows what's active without tapping in (e.g. \"Reminders  →  1 week before, day of\"). Never show hardcoded timing like \"Day-of + 1 day before\" without giving the user a way to change it.
-
-=== CHART INTERACTIVITY ===
-
-- Any app that includes a bar chart, line chart, or any Swift Charts chart MUST make it interactive. Do not generate static non-interactive charts unless the user prompt specifically asks for "simple display only" or "static chart only".
-- Make each bar, point, or segment tappable. Use ChartProxy with .chartOverlay (or equivalent) for tap detection in Swift Charts; resolve the tapped position to the nearest data point or bar.
-- When the user taps a bar or point: show a tooltip or detail view with the exact value and date/label for that element.
-- Visually highlight the selected bar or point (e.g. brighter color, border, or distinct foregroundStyle) so the user sees what they selected.
-- This applies to all chart types (BarMark, LineMark, PointMark, AreaMark, etc.) in all generated apps.
 
 === ARCHITECTURE RULES (3+ screens) ===
 

@@ -3,6 +3,7 @@
  * patterns once, and exposes matchSkills() / getMatchedSkillNames() for prompt injection.
  *
  * Expected JSON shape: { "name": string, "triggers": string[], "promptBlock": string }
+ * Optional: "alwaysLoad": true — skill is included on every request (triggers may be empty).
  */
 
 import { readFileSync, readdirSync, existsSync } from "fs";
@@ -12,16 +13,18 @@ export interface SkillDef {
   name: string;
   triggers: string[];
   promptBlock: string;
+  alwaysLoad?: boolean;
 }
 
 function isSkillDef(obj: unknown): obj is SkillDef {
   if (!obj || typeof obj !== "object") return false;
   const o = obj as Record<string, unknown>;
+  const hasTriggers = Array.isArray(o.triggers) && o.triggers.every((t) => typeof t === "string");
+  const alwaysLoad = o.alwaysLoad === true;
   return (
     typeof o.name === "string" &&
-    Array.isArray(o.triggers) &&
-    o.triggers.every((t) => typeof t === "string") &&
-    typeof o.promptBlock === "string"
+    typeof o.promptBlock === "string" &&
+    (alwaysLoad || (hasTriggers && (o.triggers as string[]).length > 0))
   );
 }
 
@@ -38,6 +41,7 @@ interface CachedSkill {
   name: string;
   promptBlock: string;
   patterns: RegExp[];
+  alwaysLoad?: boolean;
 }
 
 const SKILLS_DIR = join(process.cwd(), "data", "skills");
@@ -66,16 +70,18 @@ function loadAndCacheSkills(): CachedSkill[] {
       const parsed = JSON.parse(raw) as unknown;
       if (!isSkillDef(parsed)) continue;
 
-      const patterns = parsed.triggers
+      const triggers = Array.isArray(parsed.triggers) ? parsed.triggers : [];
+      const patterns = triggers
         .filter((t: string) => t && typeof t === "string")
         .map((t: string) => compileTriggerPattern(t));
 
-      if (patterns.length === 0) continue;
+      if (!parsed.alwaysLoad && patterns.length === 0) continue;
 
       skills.push({
         name: parsed.name,
         promptBlock: parsed.promptBlock,
         patterns,
+        alwaysLoad: parsed.alwaysLoad === true,
       });
     } catch {
       // Skip invalid or unreadable files
@@ -127,7 +133,7 @@ export function matchSkills(userMessage: string): string {
   const blocks: string[] = [];
   const matchedNames: string[] = [];
   for (const skill of skills) {
-    const matches = skill.patterns.some((re) => re.test(message));
+    const matches = skill.alwaysLoad || skill.patterns.some((re) => re.test(message));
     if (matches) {
       blocks.push(skill.promptBlock);
       matchedNames.push(skill.name);
@@ -147,6 +153,6 @@ export function getMatchedSkillNames(userMessage: string): string[] {
   const message = userMessage ?? "";
 
   return skills
-    .filter((skill) => skill.patterns.some((re) => re.test(message)))
+    .filter((skill) => skill.alwaysLoad || skill.patterns.some((re) => re.test(message)))
     .map((skill) => skill.name);
 }

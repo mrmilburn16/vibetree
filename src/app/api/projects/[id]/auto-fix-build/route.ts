@@ -3,6 +3,7 @@ import {
   getBuildJob,
   createBuildJob,
   setBuildJobNextJob,
+  setBuildJobErrorHistory,
   appendBuildJobLogs,
   setBuildJobAutoFixInProgress,
 } from "@/lib/buildJobs";
@@ -253,6 +254,9 @@ export async function POST(
     ? `\nADDITIONAL ERROR LINES FROM BUILD LOG:\n${logErrorLines.slice(-200).join("\n")}`
     : "";
 
+  console.log("[auto-fix] attempt", attempt, "errors sent to LLM:", errorSection || "(none)");
+  appendBuildJobLogs(failedJobId, ["--- Errors sent to LLM (attempt " + attempt + ") ---", errorSection, logErrorSection].filter(Boolean));
+
   const fullLogTail = logLines.length > 0
     ? `\nFULL BUILD LOG (last 200 lines):\n${logLines.slice(-200).join("\n")}`
     : "";
@@ -413,6 +417,13 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       userPrompt: failedJob.request.userPrompt,
       outputType: failedJob.request.outputType,
     });
+
+    const failedAttempt = failedJob.request.attempt ?? 1;
+    const fullHistory = [
+      ...(failedJob.errorHistory ?? []),
+      { attempt: failedAttempt, errors: failedJob.compilerErrors ?? [] },
+    ];
+    setBuildJobErrorHistory(retryJob.id, fullHistory);
 
     setBuildJobNextJob(failedJobId, retryJob.id);
     appendBuildJobLogs(failedJobId, [`Created retry job ${retryJob.id} (attempt ${attempt}/${maxAttempts})`]);

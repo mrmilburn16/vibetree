@@ -36,12 +36,15 @@
     "NSRemindersUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 3,
+    "totalBuilds": 4,
     "firstAttemptCompile": 2,
-    "compileRate": 67,
+    "compileRate": 50,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "cannot find 'UIGraphicsEndPDFPage' in scope",
+      "type 'NSAttributedString.Key' has no member 'foregroundStyle'"
+    ],
     "goldenExamples": []
   }
 }

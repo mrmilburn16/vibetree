@@ -32,9 +32,9 @@ describe("System prompt token estimation", () => {
         breakdown.qaRulesBlock.chars +
         breakdown.integrationsBlock.chars
     );
-    // SYSTEM_PROMPT_SWIFT alone is ~36k chars / ~9k tokens
-    expect(breakdown.basePrompt.tokensEstimate).toBeGreaterThanOrEqual(8500);
-    expect(breakdown.basePrompt.tokensEstimate).toBeLessThanOrEqual(11000);
+    // SYSTEM_PROMPT_SWIFT base (after moving sections to skills) is ~24k chars / ~6k tokens
+    expect(breakdown.basePrompt.tokensEstimate).toBeGreaterThanOrEqual(5000);
+    expect(breakdown.basePrompt.tokensEstimate).toBeLessThanOrEqual(7500);
 
     // Log breakdown when test runs (for monitoring prompt size)
     logBreakdown("Pro (no skill block)", breakdown);

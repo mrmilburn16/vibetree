@@ -312,6 +312,8 @@ const KNOWN_SYSTEM_ERRORS = [
   [/unable to connect to device/i, "Build failed — iPhone not detected. Check your USB connection or trust this computer on your iPhone."],
   [/code signing error/i, "Build failed — code signing issue. Check your Apple Developer team ID in settings."],
   [/\bkilled:\s*9\b|SIGKILL/i, "Build failed — process was killed, likely due to low memory on your Mac."],
+  // Device lock: install failed because iPhone is locked or requires unlock/passcode
+  [/\b(locked|passcode|user unlock|device (must be )?unlocked|device lock|CoreDevice.*(lock|unlock|trust)|0xE80000[0-9A-Fa-f]{2})\b/i, "Your iPhone is locked. Please unlock your iPhone and tap Install again."],
 ];
 
 function getKnownSystemErrorMessage(output) {
@@ -689,6 +691,43 @@ async function validateJob(job) {
   const unzipDir = join(tmp, "unzip");
 
   try {
+    if (job.request.outputType === "launch") {
+      const logs = [];
+      const flush = async (force = false) => {
+        if (!logs.length) return;
+        await updateJob(job.id, { logs: logs.splice(0, logs.length) });
+      };
+      const device = findConnectedDevice();
+      if (!device) {
+        await updateJob(job.id, {
+          status: "failed",
+          error: "No connected iOS device found. Connect your iPhone via USB and try again.",
+          logs: ["[launch] No connected device found."],
+        });
+        return;
+      }
+      const bundleId = job.request.bundleId || "com.vibetree.app";
+      const devicectl = getXcodeToolPath("devicectl");
+      logs.push(`[launch] Launching ${bundleId} on ${device.name}…`);
+      await flush(true);
+      const launchResult = await run(
+        "/bin/sh",
+        ["-c", `exec "${devicectl}" device process launch --device "${device.identifier}" "${bundleId}"`],
+        { cwd: "/tmp", onLine: (line) => { logs.push(line); flush(false).catch(() => {}); } }
+      );
+      if (launchResult.code === 0) {
+        logs.push("[launch] ✅ App launched on device");
+        await flush(true);
+        await updateJob(job.id, { status: "succeeded", exitCode: 0, logs: ["✅ App launched! Check your iPhone."] });
+      } else {
+        const output = (launchResult.out || "") + "\n" + (launchResult.err || "");
+        const isLocked = /locked|passcode|user unlock|BSErrorCodeDescription = Locked/i.test(output);
+        const errorMsg = isLocked ? "Unlock your iPhone first, then try again." : "Launch failed. Unlock your iPhone and try again.";
+        await updateJob(job.id, { status: "failed", error: errorMsg, logs: [...logs, `[launch] ❌ ${errorMsg}`] });
+      }
+      return;
+    }
+
     const zip = await downloadZip(job);
     const wantDevice = job.request.outputType === "device";
 

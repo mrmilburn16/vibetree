@@ -43,8 +43,8 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 39,
-    "firstAttemptCompile": 20,
+    "totalBuilds": 41,
+    "firstAttemptCompile": 21,
     "compileRate": 51,
     "functionalSuccesses": 0,
     "functionalRate": 0,
@@ -54,7 +54,8 @@
       "generic parameter 'C' could not be inferred",
       "cannot convert value of type 'Binding<C.Element>' to expected argument type 'CardTheme'",
       "cannot convert value of type 'Binding<Subject>' to expected argument type '[Color]'",
-      "for-in loop requires 'AsyncStream<[RecognizedItem]>' to conform to 'Sequence'"
+      "for-in loop requires 'AsyncStream<[RecognizedItem]>' to conform to 'Sequence'",
+      "cannot find 'UIGraphicsEndPDFPage' in scope"
     ],
     "goldenExamples": []
   }

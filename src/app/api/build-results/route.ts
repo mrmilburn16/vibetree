@@ -26,6 +26,18 @@ export async function POST(request: Request) {
     fileNames: Array.isArray(body.fileNames) ? body.fileNames : [],
     durationMs: typeof body.durationMs === "number" ? body.durationMs : 0,
     skillsUsed: Array.isArray(body.skillsUsed) ? body.skillsUsed : [],
+    ...(typeof body.generationCostUsd === "number" && body.generationCostUsd >= 0 && { generationCostUsd: body.generationCostUsd }),
+    ...(Array.isArray(body.errorHistory) &&
+      body.errorHistory.length > 0 &&
+      body.errorHistory.every(
+        (e: unknown) =>
+          typeof e === "object" &&
+          e !== null &&
+          "attempt" in e &&
+          "errors" in e &&
+          typeof (e as { attempt: unknown }).attempt === "number" &&
+          Array.isArray((e as { errors: unknown }).errors)
+      ) && { errorHistory: body.errorHistory as Array<{ attempt: number; errors: string[] }> }),
   });
   return Response.json({ result });
 }

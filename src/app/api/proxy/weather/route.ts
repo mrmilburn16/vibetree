@@ -3,7 +3,6 @@
  * Proxies OpenWeatherMap current weather or forecast.
  * Auth: valid user session (cookie/Bearer) OR X-App-Token header matching VIBETREE_APP_TOKEN.
  * Query params: lat & lon (current location) OR city (city search); type = "current" | "forecast"; debug = true to return raw OpenWeather API response (dev only).
- * Optional: debug=true — returns the full raw OpenWeather API response as JSON (for development).
  * Rate limit: 100 calls per user (or per app-token) per calendar day. Returns 429 if exceeded.
  */
 
