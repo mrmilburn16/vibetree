@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01FE45E3E3A7CA6E38BB5BD6 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77731EE663BC9493CE53320C /* ShareSheet.swift */; };
+		G00G1E5E1NF0PL1ST000002 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = G00G1E5E1NF0PL1ST000001 /* GoogleService-Info.plist */; };
 		AUTHROOT0000000000000002 /* AuthenticatedRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUTHROOT0000000000000001 /* AuthenticatedRootView.swift */; };
 		07D286F23F943D7791D694C9 /* CreditsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D387383822D7E75BFAC5E0 /* CreditsView.swift */; };
 		0F726B26A336512F0D06B712 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C6405D7C6E05BEB87C8672 /* Project.swift */; };
@@ -129,6 +130,7 @@
 		F112C79AB2C2D07F287F44B4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FBE7F19BDFCCD81AB931B5AA /* ProBuildPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProBuildPreviewView.swift; sourceTree = "<group>"; };
 		FDB1CEDE17D469B2199726DC /* Preflight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preflight.swift; sourceTree = "<group>"; };
+		G00G1E5E1NF0PL1ST000001 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -206,6 +208,7 @@
 			isa = PBXGroup;
 			children = (
 				F112C79AB2C2D07F287F44B4 /* Assets.xcassets */,
+				G00G1E5E1NF0PL1ST000001 /* GoogleService-Info.plist */,
 				87D36B420412F0C0ED6F5E2B /* VibeTreeCompanionApp.swift */,
 				29DC0DF156C3E43F81351478 /* Models */,
 				EBFF3AA317FF1B6804257EEF /* Services */,
@@ -267,6 +270,8 @@
 			);
 			name = VibeTreeCompanion;
 			packageProductDependencies = (
+				F1R3B4S3CORE00000000001 /* FirebaseCore */,
+				F1R3B4S3AUTH00000000001 /* FirebaseAuth */,
 			);
 			productName = VibeTreeCompanion;
 			productReference = 87ABF0F270515D3B7C65F15F /* VibeTreeCompanion.app */;
@@ -318,6 +323,9 @@
 			);
 			mainGroup = 44D8EAA37CA0DE532742349E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F1R3B4S3PKG000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
@@ -334,6 +342,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E72493CFE1665D2FBBC31E19 /* Assets.xcassets in Resources */,
+				G00G1E5E1NF0PL1ST000002 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -600,6 +609,30 @@
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F1R3B4S3PKG000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F1R3B4S3AUTH00000000001 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1R3B4S3PKG000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		F1R3B4S3CORE00000000001 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1R3B4S3PKG000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCConfigurationList section */
 		1BAE0F8F26540EDAB50DC60B /* Build configuration list for PBXNativeTarget "VibeTreeCompanion" */ = {

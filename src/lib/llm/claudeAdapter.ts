@@ -79,6 +79,9 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Don't pass formatted strings into numeric APIs. Keep numbers as Double/Int for ProgressView, Gauge, charts; only format to String for Text display.
 - Never create an accentColor property on custom types. Only valid use is Color.accentColor.
 - Write Color once only (Color.primary, not ColorColor). Color has no .quaternary property.
+- Property names: Never use property names that repeat the same word (e.g. colorColor, nameLabel, titleTitle, carColorColor). Use a single clear descriptor per concept: color, name, title, labelText. Double-word typos cause "value of type X has no member" compiler errors.
+- MapKit (SwiftUI Map): Always use the modern Map initializer with MapContentBuilder and Marker for annotations (e.g. Map { Marker("Title", coordinate: coord) }). Never use the deprecated Map(coordinateRegion:) initializer or MapMarker—they are deprecated in iOS 17 and must not be generated.
+- Model–view consistency: Every property referenced in a view must be explicitly declared on the corresponding model or type. Never reference a property in a view (e.g. CarDetailView, BookingSheet) that does not exist on the model (e.g. Car, Booking). If a view uses item.someProperty, someProperty must be defined on that item's type. Referencing undefined properties causes compiler errors.
 - NSAttributedString (rich text): When using NSAttributedString for rich text editing, use UIKit attribute keys only—never SwiftUI modifiers. Use .foregroundColor (not .foregroundStyle), .font (not .fontStyle), .backgroundColor (not .backgroundStyle). .foregroundStyle is a SwiftUI view modifier and does NOT exist on NSAttributedString.Key. Never mix SwiftUI view modifiers with NSAttributedString attributes; they are separate APIs.
 - No duplicate declarations in the same type.
 - AsyncStream requires for await, not for-in.

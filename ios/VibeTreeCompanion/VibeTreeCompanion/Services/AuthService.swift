@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import FirebaseAuth
 
 @MainActor
 final class AuthService: ObservableObject {
@@ -18,7 +19,10 @@ final class AuthService: ObservableObject {
     }
 
     init() {
-        if loadTokenFromKeychain() != nil {
+        if let user = Auth.auth().currentUser {
+            isAuthenticated = true
+            userEmail = user.email ?? UserDefaults.standard.string(forKey: "vibetree-user-email")
+        } else if loadTokenFromKeychain() != nil {
             isAuthenticated = true
             userEmail = UserDefaults.standard.string(forKey: "vibetree-user-email")
         }
@@ -28,10 +32,14 @@ final class AuthService: ObservableObject {
         isLoading = true
         error = nil
         do {
-            let token = try await performSignIn(email: email, password: password)
-            saveTokenToKeychain(token)
-            userEmail = email
-            UserDefaults.standard.set(email, forKey: "vibetree-user-email")
+            let customToken = try await fetchCustomToken(email: email, password: password)
+            let cred = try await Auth.auth().signIn(withCustomToken: customToken)
+            guard let idToken = try await cred.user.getIDToken() else {
+                throw APIError.invalidResponse
+            }
+            saveTokenToKeychain(idToken)
+            userEmail = cred.user.email ?? email
+            UserDefaults.standard.set(userEmail, forKey: "vibetree-user-email")
             isAuthenticated = true
         } catch {
             self.error = error.localizedDescription
@@ -40,15 +48,27 @@ final class AuthService: ObservableObject {
     }
 
     func signOut() {
+        try? Auth.auth().signOut()
         deleteTokenFromKeychain()
         userEmail = nil
         UserDefaults.standard.removeObject(forKey: "vibetree-user-email")
         isAuthenticated = false
     }
 
+    /// Returns a valid Firebase ID token for API requests, refreshing if needed (tokens expire after ~1 hour).
+    func getValidIDToken() async -> String? {
+        if let user = Auth.auth().currentUser {
+            if let token = try? await user.getIDTokenForcingRefresh(false) {
+                saveTokenToKeychain(token)
+                return token
+            }
+        }
+        return loadTokenFromKeychain()
+    }
+
     // MARK: - API
 
-    private func performSignIn(email: String, password: String) async throws -> String {
+    private func fetchCustomToken(email: String, password: String) async throws -> String {
         let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
         guard let url = URL(string: "\(baseURL)/api/auth/login") else {
             throw APIError.invalidURL
@@ -60,9 +80,12 @@ final class AuthService: ObservableObject {
         req.timeoutInterval = 15
 
         let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw APIError.httpError(code, "Sign in failed")
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        guard (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8)
+            throw APIError.httpError(http.statusCode, body)
         }
 
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

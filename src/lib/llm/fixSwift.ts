@@ -202,15 +202,25 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       }
     }
 
-    // Weather proxy returns units=imperial (Fahrenheit, mph). Remove Kelvin conversion so we don't double-convert.
+    // Weather proxy returns units=imperial (Fahrenheit, mph). Remove any temperature conversion so we display raw value.
     content = content.replace(/\s*-\s*273\.15\s*\)\s*\*\s*9\s*\/\s*5\s*\+\s*32/g, ")");
     content = content.replace(/\s*-\s*273\.15\s*\)/g, ")"); // (x - 273.15) used as Celsius → use value as-is (proxy sends Fahrenheit)
     content = content.replace(/\s*-\s*273\.15\b/g, ""); // e.g. "let celsius = kelvin - 273.15" → "let celsius = kelvin" (value is already F)
-    content = content.replace(/\bcelsius\s*\*\s*9\s*\/\s*5\s*\+\s*32\b/g, "celsius"); // fahrenheit branch: use value as-is
-    content = content.replace(/\bfahrenheit\s*=\s*celsius\s*\*\s*9\s*\/\s*5\s*\+\s*32\b/g, "fahrenheit = celsius"); // same for fahrenheit variable
+    content = content.replace(/\s*-\s*273\b(?!\.\d)/g, ""); // integer Kelvin: - 273 (not 273.15) → remove
+    content = content.replace(/\bcelsius\s*\*\s*9\s*\/\s*5\s*\+\s*32\b/g, "celsius"); // Celsius→F formula: use value as-is
+    content = content.replace(/\bcelsius\s*\*\s*1\.8\s*\+\s*32\b/g, "celsius"); // same, 1.8 variant
+    content = content.replace(/\bfahrenheit\s*=\s*celsius\s*\*\s*9\s*\/\s*5\s*\+\s*32\b/g, "fahrenheit = celsius");
+    content = content.replace(/\bfahrenheit\s*=\s*celsius\s*\*\s*1\.8\s*\+\s*32\b/g, "fahrenheit = celsius");
     content = content.replace(/\bf\s*=\s*celsius\s*\*\s*9\s*\/\s*5\s*\+\s*32\b/g, "f = celsius");
+    content = content.replace(/\bf\s*=\s*celsius\s*\*\s*1\.8\s*\+\s*32\b/g, "f = celsius");
+    // main.temp / .temp from API — remove * 9/5 + 32 or * 1.8 + 32
+    content = content.replace(/(\w*(?:\.main)?\?\.temp|main\.temp)\s*\*\s*(9\s*\/\s*5|1\.8)\s*\+\s*32/g, "$1");
+    content = content.replace(/\btemp\s*\*\s*(9\s*\/\s*5|1\.8)\s*\+\s*32\b/g, "temp");
+    content = content.replace(/\bkelvin\s*\*\s*9\s*\/\s*5\s*\+\s*32\b/g, "kelvin");
+    content = content.replace(/\bkelvin\s*\*\s*1\.8\s*\+\s*32\b/g, "kelvin");
     content = content.replace(/value:\s*celsius,\s*unit:\s*UnitTemperature\.celsius/g, "value: celsius, unit: UnitTemperature.fahrenheit"); // celsius now holds F
     content = content.replace(/Measurement\(\s*value:\s*celsius\s*\*\s*9\s*\/\s*5\s*\+\s*32\s*,\s*unit:\s*UnitTemperature\.fahrenheit\s*\)/g, "Measurement(value: celsius, unit: UnitTemperature.fahrenheit)");
+    content = content.replace(/Measurement\(\s*value:\s*celsius\s*\*\s*1\.8\s*\+\s*32\s*,\s*unit:\s*UnitTemperature\.fahrenheit\s*\)/g, "Measurement(value: celsius, unit: UnitTemperature.fahrenheit)");
     content = content.replace(/UnitTemperature\.kelvin/g, "UnitTemperature.fahrenheit");
 
     // Fallback location: avoid hardcoding a specific city (e.g. San Jose). Use skill standard so "Current Location" / API name is generic when location fails.

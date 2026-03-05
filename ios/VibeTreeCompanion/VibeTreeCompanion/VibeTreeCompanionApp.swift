@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import FirebaseCore
 
 @main
 struct VibeTreeCompanionApp: App {
@@ -18,6 +19,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        FirebaseApp.configure()
         UNUserNotificationCenter.current().delegate = self
 
         // Migrate stale localhost serverURL to the Mac's local IP

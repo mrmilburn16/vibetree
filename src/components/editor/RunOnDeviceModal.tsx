@@ -76,6 +76,8 @@ export function RunOnDeviceModal({
   expoUrl: expoUrlProp,
   onExpoUrl,
   projectType: projectTypeProp,
+  backgroundInstallJobIdRef,
+  onConsumedBackgroundJob,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -87,6 +89,10 @@ export function RunOnDeviceModal({
   expoUrl?: string | null;
   onExpoUrl?: (url: string) => void;
   projectType?: "standard" | "pro";
+  /** If set, Install on iPhone can use this job id instead of POSTing build-install (background build from validation). */
+  backgroundInstallJobIdRef?: React.MutableRefObject<string | null>;
+  /** Called when install flow completes (success or failure) so parent can clear the background job ref. */
+  onConsumedBackgroundJob?: () => void;
 }) {
   const [expoUrlLocal, setExpoUrlLocal] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -248,7 +254,10 @@ export function RunOnDeviceModal({
         }
 
         setInstallStatus(status);
-        if (status === "succeeded" || status === "failed") return;
+        if (status === "succeeded" || status === "failed") {
+          onConsumedBackgroundJob?.();
+          return;
+        }
         setTimeout(poll, 2000);
       } catch {
         // ignore
@@ -258,7 +267,7 @@ export function RunOnDeviceModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, installJobId]);
+  }, [isOpen, installJobId, onConsumedBackgroundJob]);
 
   // Install elapsed timer
   useEffect(() => {
@@ -278,6 +287,35 @@ export function RunOnDeviceModal({
     setInstallStartedAt(Date.now());
     setInstallElapsed(0);
     try {
+      const backgroundJobId = backgroundInstallJobIdRef?.current ?? null;
+      if (backgroundJobId) {
+        const jobRes = await fetch(`/api/build-jobs/${backgroundJobId}`);
+        if (jobRes.ok) {
+          const jobData = await jobRes.json().catch(() => ({}));
+          const job = jobData?.job;
+          const status = typeof job?.status === "string" ? job.status : null;
+          if (status === "succeeded") {
+            setInstallJobId(backgroundJobId);
+            setInstallStatus("succeeded");
+            setInstallStartedAt(Date.now());
+            const logs = Array.isArray(job?.logs) ? job.logs.filter((x: unknown) => typeof x === "string") : [];
+            setInstallLogTail(logs.slice(-10));
+            onConsumedBackgroundJob?.();
+            setInstallLoading(false);
+            return;
+          }
+          if (status === "failed") {
+            onConsumedBackgroundJob?.();
+            // Fall through to existing POST flow
+          } else {
+            setInstallJobId(backgroundJobId);
+            setInstallStatus(status === "running" ? "running" : "queued");
+            setInstallLoading(false);
+            return;
+          }
+        }
+      }
+
       let files: { path: string; content: string }[] = [];
       if (typeof window !== "undefined") {
         try {

@@ -102,6 +102,8 @@ export function EditorLayout({
   } | null>(null);
   const [simulatorBalanceRanOutOpen, setSimulatorBalanceRanOutOpen] = useState(false);
   const simulatorDeductIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const backgroundInstallJobIdRef = useRef<string | null>(null);
+  const [backgroundInstallStatus, setBackgroundInstallStatus] = useState<"idle" | "building" | "ready" | "failed">("idle");
 
   useEffect(() => {
     setChatWidth(getStoredChatWidth());
@@ -295,6 +297,29 @@ export function EditorLayout({
         const nextJobId = typeof job?.nextJobId === "string" ? job.nextJobId : null;
         onProgress?.(formatValidateProgress(job ?? {}));
         if (status === "succeeded") {
+          // Fire-and-forget: kick off background device build so it is ready when user clicks Install on iPhone
+          (() => {
+            fetch(`/api/projects/${projectId}/build-install`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...(files.length > 0 ? { files } : {}),
+                projectName,
+                bundleId: finalBundleId,
+                developmentTeam: teamId.trim() || undefined,
+                autoFix: false,
+              }),
+            })
+              .then((res) => (res.ok ? res.json() : Promise.reject()))
+              .then((data: { job?: { id?: string } }) => {
+                const id = data?.job?.id;
+                if (typeof id === "string") {
+                  backgroundInstallJobIdRef.current = id;
+                  setBackgroundInstallStatus("building");
+                }
+              })
+              .catch(() => setBackgroundInstallStatus("failed"));
+          })();
           const attempt = job?.request?.attempt ?? 1;
           const fNames = Array.isArray(job?.request?.files)
             ? job.request.files.map((f: { path: string }) => f.path)
@@ -334,6 +359,44 @@ export function EditorLayout({
     },
     []
   );
+
+  // Poll background device build until it succeeds or fails (for "Preparing device build..." label)
+  useEffect(() => {
+    if (backgroundInstallStatus !== "building" || !backgroundInstallJobIdRef.current) return;
+    const jobId = backgroundInstallJobIdRef.current;
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch(`/api/build-jobs/${jobId}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json().catch(() => ({}));
+        const job = data?.job;
+        if (!job || cancelled) return;
+        const status = typeof job.status === "string" ? job.status : null;
+        if (status === "succeeded") {
+          setBackgroundInstallStatus("ready");
+          return;
+        }
+        if (status === "failed") {
+          setBackgroundInstallStatus("failed");
+          return;
+        }
+        setTimeout(poll, 2000);
+      } catch {
+        if (!cancelled) setTimeout(poll, 2000);
+      }
+    };
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [backgroundInstallStatus]);
+
+  const clearBackgroundInstallJobId = useCallback(() => {
+    backgroundInstallJobIdRef.current = null;
+    setBackgroundInstallStatus("idle");
+  }, []);
 
   return (
     <div className="flex h-screen flex-col bg-[var(--background-primary)]">
@@ -396,6 +459,11 @@ export function EditorLayout({
             <Smartphone className="h-3.5 w-3.5 shrink-0" aria-hidden />
             Run on device
           </Button>
+          {backgroundInstallStatus === "building" && (
+            <span className="text-xs text-[var(--text-tertiary)] whitespace-nowrap" aria-live="polite">
+              Preparing device build...
+            </span>
+          )}
           <Button
             variant="secondary"
             className="gap-1.5 text-xs"
@@ -515,6 +583,8 @@ export function EditorLayout({
         isAgentTyping={isAgentTyping}
         expoUrl={expoUrl}
         onExpoUrl={setExpoUrl}
+        backgroundInstallJobIdRef={backgroundInstallJobIdRef}
+        onConsumedBackgroundJob={clearBackgroundInstallJobId}
       />
       <ShareModal
         isOpen={shareOpen}
