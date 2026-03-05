@@ -2,7 +2,8 @@
  * GET /api/proxy/weather
  * Proxies OpenWeatherMap current weather or forecast.
  * Auth: valid user session (cookie/Bearer) OR X-App-Token header matching VIBETREE_APP_TOKEN.
- * Query params: lat & lon (current location) OR city (city search); type = "current" | "forecast".
+ * Query params: lat & lon (current location) OR city (city search); type = "current" | "forecast"; debug = true to return raw OpenWeather API response (dev only).
+ * Optional: debug=true — returns the full raw OpenWeather API response as JSON (for development).
  * Rate limit: 100 calls per user (or per app-token) per calendar day. Returns 429 if exceeded.
  */
 
@@ -61,6 +62,7 @@ export async function GET(request: Request) {
   const lon = searchParams.get("lon");
   const city = searchParams.get("city")?.trim();
   const type = searchParams.get("type") ?? "current";
+  const debug = searchParams.get("debug") === "true";
   const auth = await resolveAuth(request);
   console.log("🌤️ WEATHER REQUEST", {
     auth: auth ? { rateLimitKey: auth.rateLimitKey } : null,
@@ -121,6 +123,11 @@ export async function GET(request: Request) {
   try {
     const res = await fetch(url);
     const data = await res.json().catch(() => ({}));
+
+    if (debug) {
+      incrementCount(auth.rateLimitKey);
+      return NextResponse.json(data, { status: res.status });
+    }
 
     if (!res.ok) {
       const message =
