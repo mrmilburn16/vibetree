@@ -3,7 +3,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Settings, Smartphone, Share2, Keyboard } from "lucide-react";
+import { Settings, Smartphone, Share2, Keyboard, Monitor } from "lucide-react";
 import { Button, BetaBadge, Toast } from "@/components/ui";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
 import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
@@ -14,6 +14,14 @@ import { ProjectSettingsModal } from "./ProjectSettingsModal";
 import { RunOnDeviceModal } from "./RunOnDeviceModal";
 import { ShareModal } from "./ShareModal";
 import { OutOfCreditsModal } from "./OutOfCreditsModal";
+import { useSimulatorWallet } from "@/hooks/useSimulatorWallet";
+import {
+  SimulatorTopUpModal,
+  SimulatorConfirmModal,
+  SimulatorSessionPill,
+  SimulatorSummaryModal,
+  SimulatorBalanceRanOutModal,
+} from "./SimulatorModals";
 
 const CHAT_WIDTH_KEY = "vibetree-editor-chat-width";
 const CHAT_WIDTH_MIN = 300;
@@ -78,6 +86,22 @@ export function EditorLayout({
   const [isResizing, setIsResizing] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [runOnDeviceTitle, setRunOnDeviceTitle] = useState("Preview on your iPhone with Expo Go");
+  const { balanceCents, planId, refresh: refreshSimulatorWallet, canUseSimulator } = useSimulatorWallet();
+  const [simulatorTopUpOpen, setSimulatorTopUpOpen] = useState(false);
+  const [simulatorConfirmOpen, setSimulatorConfirmOpen] = useState(false);
+  const [simulatorSession, setSimulatorSession] = useState<{
+    startTime: number;
+    initialBalanceCents: number;
+    deductedCents: number;
+    liveBalanceCents: number;
+  } | null>(null);
+  const [simulatorSummary, setSimulatorSummary] = useState<{
+    sessionSeconds: number;
+    costCents: number;
+    balanceAfterCents: number;
+  } | null>(null);
+  const [simulatorBalanceRanOutOpen, setSimulatorBalanceRanOutOpen] = useState(false);
+  const simulatorDeductIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     setChatWidth(getStoredChatWidth());
@@ -110,6 +134,50 @@ export function EditorLayout({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  // Simulator session: deduct every 60 seconds at $0.20/min (20 cents/min)
+  useEffect(() => {
+    if (!simulatorSession) return;
+    const deduct = async () => {
+      try {
+        const res = await fetch("/api/simulator-wallet/deduct", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amountCents: 20 }),
+          credentials: "include",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+        const newBalance = data.balanceCents ?? 0;
+        setSimulatorSession((s) =>
+          s
+            ? {
+                ...s,
+                deductedCents: s.deductedCents + 20,
+                liveBalanceCents: newBalance,
+              }
+            : null
+        );
+        if (newBalance <= 0) {
+          if (simulatorDeductIntervalRef.current) {
+            clearInterval(simulatorDeductIntervalRef.current);
+            simulatorDeductIntervalRef.current = null;
+          }
+          setSimulatorSession(null);
+          setSimulatorBalanceRanOutOpen(true);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    simulatorDeductIntervalRef.current = setInterval(deduct, 60 * 1000);
+    return () => {
+      if (simulatorDeductIntervalRef.current) {
+        clearInterval(simulatorDeductIntervalRef.current);
+        simulatorDeductIntervalRef.current = null;
+      }
+    };
+  }, [simulatorSession?.startTime]);
 
   useEffect(() => {
     if (!project.id) return;
@@ -307,6 +375,21 @@ export function EditorLayout({
           <Button
             variant="secondary"
             className="gap-1.5 text-xs"
+            disabled={!canUseSimulator}
+            title={canUseSimulator ? "Test your app in the browser simulator" : "Upgrade to access simulator preview"}
+            onClick={async () => {
+              if (!canUseSimulator) return;
+              const data = await refreshSimulatorWallet();
+              if ((data.balanceCents ?? 0) <= 0) setSimulatorTopUpOpen(true);
+              else setSimulatorConfirmOpen(true);
+            }}
+          >
+            <Monitor className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Preview in Simulator
+          </Button>
+          <Button
+            variant="secondary"
+            className="gap-1.5 text-xs"
             onClick={() => setRunOnDeviceOpen(true)}
             title={runOnDeviceTitle}
           >
@@ -441,6 +524,83 @@ export function EditorLayout({
       <OutOfCreditsModal
         isOpen={outOfCreditsOpen}
         onClose={() => setOutOfCreditsOpen(false)}
+      />
+
+      <SimulatorTopUpModal
+        isOpen={simulatorTopUpOpen}
+        onClose={() => setSimulatorTopUpOpen(false)}
+        onTopUpSuccess={() => refreshSimulatorWallet()}
+      />
+      <SimulatorConfirmModal
+        isOpen={simulatorConfirmOpen}
+        onClose={() => setSimulatorConfirmOpen(false)}
+        appName={projectName}
+        balanceCents={balanceCents}
+        onStart={() => {
+          setSimulatorSession({
+            startTime: Date.now(),
+            initialBalanceCents: balanceCents,
+            deductedCents: 0,
+            liveBalanceCents: balanceCents,
+          });
+        }}
+      />
+      {simulatorSession && (
+        <SimulatorSessionPill
+          sessionStartTime={simulatorSession.startTime}
+          initialBalanceCents={simulatorSession.initialBalanceCents}
+          balanceCents={simulatorSession.liveBalanceCents}
+          onEndSession={async () => {
+            if (simulatorDeductIntervalRef.current) {
+              clearInterval(simulatorDeductIntervalRef.current);
+              simulatorDeductIntervalRef.current = null;
+            }
+            const elapsedMs = Date.now() - simulatorSession.startTime;
+            const elapsedMins = elapsedMs / (60 * 1000);
+            const totalCostCents = Math.min(
+              Math.floor(elapsedMins * 20),
+              simulatorSession.initialBalanceCents
+            );
+            const alreadyDeducted = simulatorSession.deductedCents;
+            const remainingToDeduct = totalCostCents - alreadyDeducted;
+            if (remainingToDeduct > 0) {
+              try {
+                await fetch("/api/simulator-wallet/deduct", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ amountCents: remainingToDeduct }),
+                  credentials: "include",
+                });
+              } catch {
+                // ignore
+              }
+            }
+            const balanceAfter = simulatorSession.initialBalanceCents - totalCostCents;
+            setSimulatorSession(null);
+            setSimulatorSummary({
+              sessionSeconds: Math.floor(elapsedMs / 1000),
+              costCents: totalCostCents,
+              balanceAfterCents: balanceAfter,
+            });
+            refreshSimulatorWallet();
+          }}
+          lowBalanceWarning={simulatorSession.liveBalanceCents < 100 && simulatorSession.liveBalanceCents > 0}
+        />
+      )}
+      <SimulatorSummaryModal
+        isOpen={simulatorSummary !== null}
+        onClose={() => setSimulatorSummary(null)}
+        sessionSeconds={simulatorSummary?.sessionSeconds ?? 0}
+        costCents={simulatorSummary?.costCents ?? 0}
+        balanceCentsAfter={simulatorSummary?.balanceAfterCents ?? 0}
+      />
+      <SimulatorBalanceRanOutModal
+        isOpen={simulatorBalanceRanOutOpen}
+        onClose={() => setSimulatorBalanceRanOutOpen(false)}
+        onTopUp={() => {
+          setSimulatorBalanceRanOutOpen(false);
+          setSimulatorTopUpOpen(true);
+        }}
       />
     </div>
   );

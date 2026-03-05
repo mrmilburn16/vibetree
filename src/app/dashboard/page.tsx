@@ -409,6 +409,9 @@ export default function DashboardPage() {
               </span>
             )}
             <CreditsWidget />
+            <Link href="/settings">
+              <Button variant="ghost" size="sm">Settings</Button>
+            </Link>
             <Link href="/sign-in">
               <Button variant="ghost" size="sm">Sign out</Button>
             </Link>

@@ -6,12 +6,38 @@ import { Nav } from "@/components/landing/Nav";
 import { Footer } from "@/components/landing/Footer";
 import { Button } from "@/components/ui";
 import { Card } from "@/components/ui";
-import {
-  PLANS,
-  CREDIT_USAGE,
-  type Plan,
-  type BillingInterval,
-} from "@/lib/pricing";
+import { Modal } from "@/components/ui/Modal";
+import { PLANS, CREDIT_USAGE, type Plan, type PlanFeature } from "@/lib/pricing";
+
+/** Simulator add-on note shown under the simulator feature on paid plans. */
+const SIMULATOR_ADDON_NOTE = "Simulator available as add-on — $0.20/min, pay as you go";
+/** Subtitle under "Test your app on your computer" on paid plans. */
+const SIMULATOR_SUBTITLE = "See your full UI and UX in your browser. Haptic feedback and some hardware features not supported.";
+
+function SimulatorExplanationModal({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Simulator preview"
+      footer={
+        <Button variant="primary" onClick={onClose}>
+          Got it
+        </Button>
+      }
+    >
+      <p className="text-[var(--text-secondary)] text-sm leading-relaxed">
+        Test your app directly in your browser without needing your iPhone. Tap through screens, validate your UI and UX, and see how your app feels — all on your computer. Note: haptic feedback and some hardware features aren&apos;t supported. Billed at $0.20/min from a prepaid wallet balance. You load funds upfront — no surprise charges, no unpaid bills. When your balance runs out, the session ends automatically.
+      </p>
+    </Modal>
+  );
+}
 
 function CreditTable() {
   return (
@@ -52,96 +78,99 @@ function CreditTable() {
 
 function PlanCard({
   plan,
-  interval,
+  onOpenSimulatorExplanation,
 }: {
   plan: Plan;
-  interval: BillingInterval;
+  onOpenSimulatorExplanation: () => void;
 }) {
-  const price =
-    interval === "annual" && plan.annualPrice !== null
-      ? plan.annualPrice
-      : plan.monthlyPrice;
-  const isAnnual = interval === "annual";
-  const showAnnualEquivalent =
-    isAnnual &&
-    plan.annualMonthlyEquivalent !== null &&
-    plan.annualMonthlyEquivalent > 0;
+  const variant = plan.ctaVariant ?? "primary";
+  const isSimulatorFeature = (f: PlanFeature) =>
+    f.text.toLowerCase().includes("test your app") && f.text.toLowerCase().includes("computer");
 
   return (
     <Card
       className={`relative flex h-full flex-col ${
         plan.highlighted
-          ? "ring-2 ring-[var(--button-primary-bg)] border-[var(--button-primary-bg)]"
+          ? "ring-2 ring-[var(--semantic-success)] border-[var(--semantic-success)]"
           : ""
       }`}
     >
       {plan.highlighted && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--button-primary-bg)] px-3 py-0.5 text-xs font-medium text-white">
-          Most popular
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--semantic-success)] px-3 py-0.5 text-xs font-medium text-white">
+          Most Popular
         </div>
       )}
-      <div className="mb-4">
+      {/* Fixed min-height so first feature row aligns across cards */}
+      <div className="mb-4 min-h-[72px]">
         <h3 className="text-heading-card">{plan.name}</h3>
         <p className="text-body-muted mt-1 text-sm">{plan.description}</p>
       </div>
-      <div className="mb-6">
-        {price === 0 ? (
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-bold text-[var(--text-primary)]">$0</span>
-            <span className="text-[var(--text-tertiary)]">/month</span>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-[var(--text-primary)]">
-                ${isAnnual && plan.annualMonthlyEquivalent != null ? plan.annualMonthlyEquivalent.toFixed(0) : price}
-              </span>
-              <span className="text-[var(--text-tertiary)]">/month</span>
-            </div>
-            {isAnnual && plan.annualPrice != null && plan.annualPrice > 0 && (
-              <p className="text-caption mt-1">
-                Billed ${plan.annualPrice}/year (save 2 months)
-              </p>
-            )}
-          </>
-        )}
-        {plan.creditsPerMonth !== null && (
-          <p className="text-caption mt-1">
-            {plan.creditsPerMonth.toLocaleString()} credits/month
+      <div className="mb-6 min-h-[64px]">
+        <div className="flex items-baseline gap-1">
+          <span className="text-3xl font-bold text-[var(--text-primary)]">
+            ${plan.monthlyPrice}
+          </span>
+          <span className="text-[var(--text-tertiary)]">/month</span>
+        </div>
+        <p className="text-caption mt-1">
+          {plan.promptsPerMonth.toLocaleString()} prompts/month
+        </p>
+        {plan.overageNote && (
+          <p className="text-caption mt-1 text-[var(--text-tertiary)]">
+            {plan.overageNote}
           </p>
         )}
       </div>
       <ul className="mb-6 flex-1 space-y-2">
         {plan.features.map((f, i) => (
-          <li
-            key={i}
-            className={`flex items-center gap-2 text-sm ${
-              f.included ? "text-[var(--text-secondary)]" : "text-[var(--text-tertiary)]"
-            }`}
-          >
-            {f.included ? (
-              <span className="text-[var(--semantic-success)]" aria-hidden>✓</span>
-            ) : (
-              <span className="text-[var(--text-tertiary)]" aria-hidden>—</span>
+          <li key={i}>
+            <div
+              className={`flex items-start gap-2 text-sm ${
+                f.included ? "text-[var(--text-secondary)]" : "text-[var(--text-tertiary)]"
+              }`}
+            >
+              <span
+                className="mt-0.5 shrink-0"
+                aria-hidden
+              >
+                {f.included ? (
+                  <span className="text-[var(--semantic-success)]">✓</span>
+                ) : (
+                  <span className="text-[var(--text-tertiary)]">—</span>
+                )}
+              </span>
+              <span className="flex-1">
+                {f.text}
+                {f.included && isSimulatorFeature(f) && (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={onOpenSimulatorExplanation}
+                      className="text-[var(--link-default)] hover:underline text-xs"
+                    >
+                      What is this?
+                    </button>
+                  </>
+                )}
+              </span>
+            </div>
+            {plan.simulatorAddOnNote && f.included && isSimulatorFeature(f) && (
+              <div className="mt-1 pl-5 space-y-0.5">
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  {SIMULATOR_SUBTITLE}
+                </p>
+                <p className="text-xs italic text-[var(--text-tertiary)]">
+                  {SIMULATOR_ADDON_NOTE}
+                </p>
+              </div>
             )}
-            {f.text}
           </li>
         ))}
       </ul>
       <div>
-        {plan.hasFreeTrial && (
-          <p className="text-caption mb-2 text-[var(--semantic-success)]">
-            {plan.freeTrialDays}-day free trial • No card required
-          </p>
-        )}
-        <Link
-          href={plan.id === "creator" ? "/dashboard" : "/dashboard"}
-          className="block"
-        >
-          <Button
-            variant={plan.highlighted ? "primary" : "secondary"}
-            className="w-full"
-          >
+        <Link href="/dashboard" className="block">
+          <Button variant={variant} className="w-full">
             {plan.cta}
           </Button>
         </Link>
@@ -151,7 +180,7 @@ function PlanCard({
 }
 
 export default function PricingPage() {
-  const [interval, setInterval] = useState<BillingInterval>("monthly");
+  const [simulatorExplanationOpen, setSimulatorExplanationOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[var(--background-primary)]">
@@ -162,7 +191,7 @@ export default function PricingPage() {
           <div className="mx-auto max-w-3xl text-center">
             <h1 className="text-heading-hero mb-4">Simple pricing</h1>
             <p className="text-body-muted text-lg">
-              One credit system for AI and builds. Start free, upgrade when you’re ready to ship.
+              One credit system for AI and builds. Start free, upgrade when you're ready to ship.
             </p>
           </div>
         </section>
@@ -183,77 +212,56 @@ export default function PricingPage() {
           <div className="mx-auto max-w-4xl">
             <h2 className="text-heading-section mb-6">How we set pricing</h2>
             <p className="text-body-muted mb-8 max-w-2xl">
-              We asked three pricing strategists with decades of experience to review Vibetree’s features and recommend plans and prices. Here’s the synthesis.
+              We asked three pricing strategists with decades of experience to review Vibetree's features and recommend plans and prices. Here's the synthesis.
             </p>
             <div className="grid gap-6 sm:grid-cols-3">
               <Card>
                 <h3 className="text-heading-card mb-2">Value-based</h3>
                 <p className="text-body-muted text-sm">
-                  Price by outcome: learn (Free), ship (Pro), scale (Team). Pro at $25–35/mo with publish and Run on device; Team $70–90/mo with seats. Annual ~17% off.
+                  Price by outcome: learn (Free), ship (Starter), scale (Builder, Pro). Starter $25/mo, Builder $50/mo, Pro $100/mo with publish and run on device.
                 </p>
               </Card>
               <Card>
                 <h3 className="text-heading-card mb-2">Usage-based</h3>
                 <p className="text-body-muted text-sm">
-                  Transparent credits: 50 (Free), 500 (Pro), 2,000 (Team). Clear credit-per-dollar so users know what they pay for. Pro $29/mo, Team $79/mo.
+                  Transparent prompts per month: 5 (Free), 25 (Starter), 50 (Builder), 100 (Pro). Overages at $1.00 per prompt on Pro.
                 </p>
               </Card>
               <Card>
                 <h3 className="text-heading-card mb-2">Competitive</h3>
                 <p className="text-body-muted text-sm">
-                  Land with a generous free tier, convert with a 14-day Pro trial (no card). Match no-code and dev-tool expectations: $29/mo and $79/mo with annual discount.
+                  Generous free tier, then clear upgrades for run on device, code export, and App Store publish. No annual lock-in; all plans billed monthly.
                 </p>
               </Card>
             </div>
           </div>
         </section>
 
-        {/* Billing toggle + plans */}
+        {/* Plans */}
         <section className="px-4 py-12 sm:px-6 sm:py-20">
-          <div className="mx-auto max-w-5xl">
-            <div className="mb-10 flex flex-col items-center gap-4">
-              <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-1">
-                <button
-                  type="button"
-                  onClick={() => setInterval("monthly")}
-                  className={`rounded-[var(--radius-sm)] px-4 py-2 text-sm font-medium transition-colors ${
-                    interval === "monthly"
-                      ? "bg-[var(--button-primary-bg)] text-white"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                  }`}
-                >
-                  Monthly
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInterval("annual")}
-                  className={`rounded-[var(--radius-sm)] px-4 py-2 text-sm font-medium transition-colors ${
-                    interval === "annual"
-                      ? "bg-[var(--button-primary-bg)] text-white"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                  }`}
-                >
-                  Annual
-                </button>
-              </div>
-              <p className="text-caption text-[var(--semantic-success)]">
-                Save 2 months when you pay annually
-              </p>
-            </div>
-
-            <div className="grid gap-6 md:grid-cols-3">
+          <div className="mx-auto max-w-6xl">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {PLANS.map((plan) => (
-                <PlanCard key={plan.id} plan={plan} interval={interval} />
+                <PlanCard
+                  key={plan.id}
+                  plan={plan}
+                  onOpenSimulatorExplanation={() => setSimulatorExplanationOpen(true)}
+                />
               ))}
             </div>
 
             <p className="text-caption mt-10 text-center text-[var(--text-tertiary)]">
-              All prices in USD. Free trial applies to Pro and Team; no credit card required.
+              All plans billed monthly. Pricing subject to change. 1 prompt = $1.00 across all paid plans.
             </p>
           </div>
         </section>
       </main>
       <Footer />
+
+      <SimulatorExplanationModal
+        isOpen={simulatorExplanationOpen}
+        onClose={() => setSimulatorExplanationOpen(false)}
+      />
     </div>
   );
 }
