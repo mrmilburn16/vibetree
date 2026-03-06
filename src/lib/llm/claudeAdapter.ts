@@ -66,6 +66,26 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 
 === SWIFT LANGUAGE RULES ===
 
+- === CRITICAL: PROPERTY NAME COLLISION PREVENTION ===
+NEVER create a variable, function, or computed property whose name ends with a word that duplicates a property name on the object it operates on.
+THE BUG: When a model has a property like .color, .name, .type, or .category, you generate a helper such as carColor() — then at call sites you write car.carColor (WRONG) instead of car.color (RIGHT), or you chain them into carColorColor which does not exist and will not compile.
+MANDATORY NAMING CONVENTION FOR HELPERS:
+  ✅ func colorFromString(_ s: String) -> Color
+  ✅ func resolveColor(_ name: String) -> Color
+  ✅ func swiftUIColor(for name: String) -> Color
+  ❌ func carColor(_ s: String) -> Color
+  ❌ func categoryColor(_ s: String) -> Color
+CALL SITE RULES:
+  Given: struct Car { var color: String } and let car: Car
+  ✅ resolveColor(car.color)
+  ❌ car.carColor
+  ❌ carColor(car.carColor)
+  ❌ car.carColorColor
+SELF-CHECK BEFORE EMITTING ANY CALL SITE:
+  1. Is the thing after the dot an actual declared property of that type?
+  2. Does your expression contain any word repeated twice (e.g. ColorColor, NameName)? If yes, delete and rewrite.
+  3. Are you passing a helper function name where a model property should go?
+
 - Use Swift and SwiftUI. Target iOS 17+. No UIKit unless necessary.
 - Use NavigationStack (not NavigationView), .foregroundStyle (not .foregroundColor), .navigationTitle (not .navigationBarTitle).
 - App entry must be "App.swift": a struct conforming to App with @main and a WindowGroup showing ContentView().
@@ -79,7 +99,6 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Don't pass formatted strings into numeric APIs. Keep numbers as Double/Int for ProgressView, Gauge, charts; only format to String for Text display.
 - Never create an accentColor property on custom types. Only valid use is Color.accentColor.
 - Write Color once only (Color.primary, not ColorColor). Color has no .quaternary property.
-- Property names: Never use property names that repeat the same word (e.g. colorColor, nameLabel, titleTitle, carColorColor). Use a single clear descriptor per concept: color, name, title, labelText. Double-word typos cause "value of type X has no member" compiler errors.
 - MapKit (SwiftUI Map): Always use the modern Map initializer with MapContentBuilder and Marker for annotations (e.g. Map { Marker("Title", coordinate: coord) }). Never use the deprecated Map(coordinateRegion:) initializer or MapMarker—they are deprecated in iOS 17 and must not be generated.
 - Model–view consistency: Every property referenced in a view must be explicitly declared on the corresponding model or type. Never reference a property in a view (e.g. CarDetailView, BookingSheet) that does not exist on the model (e.g. Car, Booking). If a view uses item.someProperty, someProperty must be defined on that item's type. Referencing undefined properties causes compiler errors.
 - NSAttributedString (rich text): NEVER use SwiftUI attribute names on NSAttributedString.Key. When using NSAttributedString for rich text editing, use UIKit attribute keys only—never SwiftUI modifiers. Use .foregroundColor (not .foregroundStyle), .font (not .fontStyle), .backgroundColor (not .backgroundStyle). .foregroundStyle is a SwiftUI view modifier and does NOT exist on NSAttributedString.Key. Never mix SwiftUI view modifiers with NSAttributedString attributes; they are separate APIs. Never use .foregroundStyle, .fontStyle, or .backgroundStyle as NSAttributedString.Key values — these do not exist. The correct keys are .foregroundColor (takes a UIColor), .font (takes a UIFont), .backgroundColor (takes a UIColor). This is a compile error that auto-fix must always correct on the first attempt. This error appears frequently in ARKit, PDF, and rich text contexts. The auto-fix must correct this on the first attempt by replacing any .foregroundStyle key with .foregroundColor and passing a UIColor value.
@@ -96,6 +115,7 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - DatePicker requires Binding<Date>, not Binding<String>.
 - .sheet(item:) and .fullScreenCover(item:) require Binding<Item?> where Item: Identifiable.
 - .onChange(of:) in iOS 17+ uses two parameters: { oldValue, newValue in }.
+- CLLocationCoordinate2D and onChange: CLLocationCoordinate2D does not conform to Equatable and cannot be used directly with .onChange(of:). To observe coordinate changes, either (1) wrap the coordinate in a custom struct that conforms to Equatable, or (2) observe a separate @Published Double for latitude or longitude instead of the coordinate itself, or (3) use .onChange(of: location?.latitude) which compares a Double (which is Equatable). Never write .onChange(of: someCoordinate) where someCoordinate is CLLocationCoordinate2D or CLLocationCoordinate2D? — it will not compile.
 - .accessibilityLabel() takes a String, not a complex View.
 - When using @Observable (iOS 17+), use @Bindable in child views for bindings.
 - @StateObject in root views, @ObservedObject in child views; pass the object itself, not a binding.
@@ -103,6 +123,8 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Timer.publish: store subscription in @StateObject and cancel in onDisappear.
 - UIViewRepresentable: implement updateUIView to apply SwiftUI state changes; empty updateUIView means the UIKit view won't update.
 - SwiftUI frame and geometry: Never pass a standalone 'height:' argument to a view initializer — this is not valid in SwiftUI. To set a height, use the .frame() modifier: e.g. SomeView().frame(height: 200). The only exception is GeometryReader which uses a proxy. This error commonly appears in custom calendar grids and word cloud layouts where a height parameter is incorrectly passed to a child view's initializer instead of applied as a .frame() modifier.
+- SwiftUI view type-checking: Break complex view bodies into smaller computed properties or helper functions. Never nest more than 3 levels of VStack/HStack/ZStack within a single body property. If the compiler says "unable to type-check this expression in reasonable time", extract sub-expressions into separate @ViewBuilder properties to reduce the body's complexity.
+- Complex SwiftUI expressions: If the compiler error says "unable to type-check this expression in reasonable time", the fix is to break the large view expression into smaller computed properties or separate sub-views. Never put more than 3-4 chained modifiers or complex ternary expressions inline in a view body — extract them into a computed var or a separate View struct instead.
 
 === DESIGN & UX RULES ===
 
@@ -130,6 +152,8 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 - Use TabView for 3-5 top-level sections. Each tab gets its own NavigationStack.
 - Use .sheet for non-blocking tasks, .fullScreenCover only for immersive content.
 - Use Form { Section { } } for settings screens.
+- Time pickers and scroll wheel pickers: Any DatePicker or custom scroll picker inside a card or section must be centered horizontally. Use .frame(maxWidth: .infinity) on the picker and ensure its parent container uses .multilineTextAlignment(.center) or centers its children. Never left-align a time or date picker inside a card — it looks unfinished.
+- Custom number keypads: Always use the standard iOS numpad layout — top row is 1, 2, 3 (left to right), middle row is 4, 5, 6, third row is 7, 8, 9, bottom row is a utility key (clear, minus, or blank), 0, and backspace/delete. Never invert this layout with 7-8-9 on top. This matches the iPhone dial pad and calculator layout that users expect.
 - Use List with .listStyle(.insetGrouped) for settings, .plain for feeds.
 
 === LIST INTERACTIONS (standard iOS patterns) ===
@@ -182,7 +206,7 @@ Q&A: If the user is asking a question (and NOT asking you to change the app), an
 
 === KEYBOARD DISMISS ===
 
-- Any view that contains a TextField or TextEditor must dismiss the keyboard when the user taps outside the field. Add this modifier to the root view or ScrollView in that view: .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }. This is standard iOS behavior — users expect tapping outside a text field to dismiss the keyboard.
+- Any view that contains a TextField or TextEditor must dismiss the keyboard when the user taps outside the field. Add this modifier to the root view or ScrollView in that view: .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }. This is standard iOS behavior — users expect tapping outside a text field to dismiss the keyboard. Exception for typing/input-focused apps: if the entire purpose of the screen is active text input (e.g. a typing speed test, a search screen, a text editor), do NOT dismiss the keyboard on background tap during an active session. Instead, only dismiss the keyboard when the test/session is completed or when the user explicitly navigates away. Add a visible 'Done' or 'End Test' button as the escape route instead of relying on tap-outside-to-dismiss.
 
 === KEYBOARD & SCROLL (keep field visible) ===
 

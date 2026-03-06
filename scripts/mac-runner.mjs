@@ -2,7 +2,7 @@ import { spawn, execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
-import { tmpdir, homedir } from "node:os";
+import { tmpdir, homedir, networkInterfaces } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -90,6 +90,29 @@ function getXcodebuildPath() {
 
 const rawServerUrl = process.env.VIBETREE_SERVER_URL || "http://localhost:3001";
 const SERVER_URL = /^https?:\/\//i.test(rawServerUrl) ? rawServerUrl.replace(/\/$/, "") : `http://${rawServerUrl.replace(/\/$/, "")}`;
+
+/** Best-effort URL this machine is reachable at on the local network (for device builds). Used when injecting __VIBETREE_API_BASE_URL__ so the iPhone can reach the Mac. */
+function getLocalNetworkServerURL() {
+  const port = (SERVER_URL.match(/:(\d+)$/) || [null, "3001"])[1];
+  try {
+    const ifaces = networkInterfaces();
+    for (const list of Object.values(ifaces)) {
+      if (!list) continue;
+      for (const iface of list) {
+        const family = iface.family;
+        if ((family === "IPv4" || String(family) === "4") && !iface.internal && iface.address) {
+          return `http://${iface.address}:${port}`;
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/** URL to inject into Swift as __VIBETREE_API_BASE_URL__: use local network IP when available so device builds can reach the Mac; otherwise SERVER_URL. */
+const INJECT_BASE_URL = getLocalNetworkServerURL() || SERVER_URL;
 function normalizeToken(s) {
   return (s ?? "").replace(/\r\n?|\n/g, "").trim();
 }
@@ -832,8 +855,8 @@ async function validateJob(job) {
       return;
     }
 
-    // Inject Mac's server URL and app token into Swift so device can reach proxy/API and authenticate without a browser session.
-    injectBuildSecretsInSwiftFiles(join(unzipDir, projectName), SERVER_URL, APP_TOKEN || process.env.VIBETREE_APP_TOKEN);
+    // Inject base URL and app token into Swift so device can reach proxy/API. Use local network IP (INJECT_BASE_URL) so iPhone can reach the Mac; same replacement for weather and places proxy.
+    injectBuildSecretsInSwiftFiles(join(unzipDir, projectName), INJECT_BASE_URL, APP_TOKEN || process.env.VIBETREE_APP_TOKEN);
 
     const logs = [];
     let lastFlushAt = Date.now();
@@ -1072,6 +1095,9 @@ async function sendHeartbeat() {
 
 async function main() {
   console.log(`Mac runner ${RUNNER_ID} polling ${SERVER_URL}`);
+  if (INJECT_BASE_URL !== SERVER_URL) {
+    console.log(`[mac-runner] __VIBETREE_API_BASE_URL__ will be replaced with ${INJECT_BASE_URL} (local network) so device builds can reach the Mac.`);
+  }
   await sendHeartbeat();
   setInterval(sendHeartbeat, 30 * 1000);
   // Report device list periodically so the web app can offer a dropdown.

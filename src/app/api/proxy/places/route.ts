@@ -1,0 +1,211 @@
+/**
+ * GET /api/proxy/places
+ * Proxies Apple MapKit Server API to search for nearby places.
+ * Query params: lat, lng, radius (meters, default 5000), category (coffee | gym | pharmacy).
+ * Rate limit: 100 requests per hour per IP. Returns 429 if exceeded.
+ */
+
+import { NextResponse } from "next/server";
+import * as jwt from "jsonwebtoken";
+import { getClientIp } from "@/lib/adminAuth";
+
+const APPLE_MAPS_TOKEN_URL = "https://maps-api.apple.com/v1/token";
+const APPLE_MAPS_SEARCH_URL = "https://maps-api.apple.com/v1/search";
+
+const CATEGORY_TO_QUERY: Record<string, string> = {
+  coffee: "coffee shop",
+  gym: "gym",
+  pharmacy: "pharmacy",
+};
+
+const RATE_LIMIT_MAX = 100;
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+type RateLimitEntry = { timestamps: number[] };
+
+const rateLimitMap = new Map<string, RateLimitEntry>();
+
+function getClientIpKey(request: Request): string {
+  return getClientIp(request) ?? "unknown";
+}
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+  let entry = rateLimitMap.get(key);
+  if (!entry) {
+    entry = { timestamps: [] };
+    rateLimitMap.set(key, entry);
+  }
+  entry.timestamps = entry.timestamps.filter((t) => t > cutoff);
+  return entry.timestamps.length >= RATE_LIMIT_MAX;
+}
+
+function recordRequest(key: string): void {
+  const now = Date.now();
+  let entry = rateLimitMap.get(key);
+  if (!entry) {
+    entry = { timestamps: [] };
+    rateLimitMap.set(key, entry);
+  }
+  entry.timestamps.push(now);
+  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+  entry.timestamps = entry.timestamps.filter((t) => t > cutoff);
+}
+
+function createAppleMapsJwt(): string {
+  const teamId = process.env.APPLE_MAPS_TEAM_ID?.trim();
+  const keyId = process.env.APPLE_MAPS_KEY_ID?.trim();
+  const privateKey = process.env.APPLE_MAPS_PRIVATE_KEY?.replace(/\\n/g, "\n").trim();
+
+  if (!teamId || !keyId || !privateKey) {
+    throw new Error("Apple Maps credentials not configured");
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + 30 * 60; // 30 minutes
+
+  return jwt.sign(
+    { iss: teamId, iat: now, exp },
+    privateKey,
+    { algorithm: "ES256", keyid: keyId }
+  );
+}
+
+async function getMapsAccessToken(): Promise<string> {
+  const mapsAuthToken = createAppleMapsJwt();
+  const res = await fetch(APPLE_MAPS_TOKEN_URL, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${mapsAuthToken}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Apple Maps token failed: ${res.status} ${text}`);
+  }
+
+  const data = (await res.json()) as { accessToken?: string };
+  if (!data.accessToken) {
+    throw new Error("Apple Maps token response missing accessToken");
+  }
+  return data.accessToken;
+}
+
+function haversineDistanceMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371000; // Earth radius in meters
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+interface AppleSearchResult {
+  name?: string;
+  formattedAddressLines?: string[];
+  coordinate?: { latitude?: number; longitude?: number };
+}
+
+interface AppleSearchResponse {
+  results?: AppleSearchResult[];
+}
+
+export async function GET(request: Request) {
+  const ipKey = getClientIpKey(request);
+
+  if (isRateLimited(ipKey)) {
+    return NextResponse.json(
+      { error: "Too many requests. Limit is 100 per hour per IP." },
+      { status: 429 }
+    );
+  }
+
+  const { searchParams } = new URL(request.url);
+  const latParam = searchParams.get("lat");
+  const lngParam = searchParams.get("lng");
+  const radiusParam = searchParams.get("radius");
+  const categoryParam = searchParams.get("category")?.toLowerCase().trim();
+
+  const lat = latParam != null ? Number(latParam) : NaN;
+  const lng = lngParam != null ? Number(lngParam) : NaN;
+  const radius = radiusParam != null ? Math.max(0, Number(radiusParam)) : 5000;
+  const category = categoryParam && CATEGORY_TO_QUERY[categoryParam] ? categoryParam : null;
+
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    return NextResponse.json(
+      { error: "Query params lat and lng are required and must be numbers." },
+      { status: 400 }
+    );
+  }
+
+  if (!category) {
+    return NextResponse.json(
+      { error: "Query param category is required and must be one of: coffee, gym, pharmacy." },
+      { status: 400 }
+    );
+  }
+
+  const searchQuery = CATEGORY_TO_QUERY[category];
+
+  try {
+    const accessToken = await getMapsAccessToken();
+    const appleParams = new URLSearchParams({ q: searchQuery });
+    appleParams.set("searchLocation", `${lat},${lng}`);
+    const searchUrl = `${APPLE_MAPS_SEARCH_URL}?${appleParams.toString()}`;
+    const searchRes = await fetch(searchUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!searchRes.ok) {
+      const text = await searchRes.text();
+      console.error("[proxy/places] Apple search failed:", searchRes.status, text);
+      return NextResponse.json(
+        { error: "Places search failed." },
+        { status: searchRes.status >= 500 ? 502 : searchRes.status }
+      );
+    }
+
+    const searchData = (await searchRes.json()) as AppleSearchResponse;
+    const rawResults = searchData.results ?? [];
+
+    const places = rawResults
+      .map((r) => {
+        const placeLat = r.coordinate?.latitude;
+        const placeLng = r.coordinate?.longitude;
+        if (placeLat == null || placeLng == null) return null;
+        const distance = haversineDistanceMeters(lat, lng, placeLat, placeLng);
+        if (distance > radius) return null;
+        const address = (r.formattedAddressLines ?? []).join(", ");
+        return {
+          name: r.name ?? "",
+          address,
+          lat: placeLat,
+          lng: placeLng,
+          category,
+          distance: Math.round(distance),
+        };
+      })
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+      .sort((a, b) => a.distance - b.distance);
+
+    recordRequest(ipKey);
+    return NextResponse.json({ results: places });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Places service error";
+    if (message.includes("not configured")) {
+      return NextResponse.json({ error: "Places service not configured." }, { status: 503 });
+    }
+    console.error("[proxy/places]", err);
+    return NextResponse.json({ error: "Places service unavailable." }, { status: 502 });
+  }
+}

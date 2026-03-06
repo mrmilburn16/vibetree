@@ -9,6 +9,7 @@ const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
 const XCODE_TEAM_ID_STORAGE_PREFIX = "vibetree-xcode-team-id:";
 const XCODE_BUNDLE_ID_OVERRIDE_PREFIX = "vibetree-xcode-bundle-id:";
 const XCODE_PREFERRED_DEVICE_PREFIX = "vibetree-xcode-preferred-device:";
+const SESSION_EXPIRED_MESSAGE = "Session expired — please refresh the page and try again.";
 
 type PreflightResult = {
   runner: { ok: boolean; runnerId?: string };
@@ -260,7 +261,8 @@ export function RunOnDeviceModal({
         setInstallStatus(status);
         if (status === "succeeded" || status === "failed") {
           const jobError = typeof job.error === "string" ? job.error : null;
-          setError(jobError || null);
+          const isAuthError = jobError != null && (/unauthorized|401/i.test(jobError) || jobError === "Unauthorized");
+          setError(jobError != null ? (isAuthError ? SESSION_EXPIRED_MESSAGE : jobError) : null);
           onConsumedBackgroundJob?.();
           return;
         }
@@ -327,6 +329,15 @@ export function RunOnDeviceModal({
     setLaunchJobId(null);
     setLaunchMessage(null);
     try {
+      const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
+      const sessionData = await sessionRes.json().catch(() => ({}));
+      const hasValidSession = sessionRes.ok && sessionData?.user != null;
+      if (sessionRes.status === 401 || !hasValidSession) {
+        setError(SESSION_EXPIRED_MESSAGE);
+        setInstallLoading(false);
+        return;
+      }
+
       const backgroundJobId = backgroundInstallJobIdRef?.current ?? null;
       if (backgroundJobId) {
         const jobRes = await fetch(`/api/build-jobs/${backgroundJobId}`);
@@ -416,6 +427,12 @@ export function RunOnDeviceModal({
           autoFix: buildStatus !== "live",
         }),
       });
+      if (res.status === 401) {
+        setError(SESSION_EXPIRED_MESSAGE);
+        setInstallStatus("failed");
+        setInstallLoading(false);
+        return;
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         const msg = data?.error === "mac_runner_offline" ? (data?.message ?? "Build server is offline. Builds are paused until the server comes back online.") : (data?.error ?? "Install request failed");
@@ -427,7 +444,9 @@ export function RunOnDeviceModal({
       setInstallJobId(jobId);
       setInstallStatus("queued");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Install failed. Try again.");
+      const raw = e instanceof Error ? e.message : "Install failed. Try again.";
+      const isAuthError = /unauthorized|401/i.test(raw) || raw === "Unauthorized";
+      setError(isAuthError ? SESSION_EXPIRED_MESSAGE : raw);
       setInstallStatus("failed");
     } finally {
       setInstallLoading(false);

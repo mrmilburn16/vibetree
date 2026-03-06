@@ -1,6 +1,39 @@
 export type SwiftTextFile = { path: string; content: string };
 
 /**
+ * Apply a regex replacement only in code regions — never inside Swift string literals.
+ * Prevents sanitization from corrupting e.g. "Ferrari carColorColor" in MockData.
+ */
+function replaceOutsideStringLiterals(
+  content: string,
+  pattern: RegExp,
+  replacement: string | ((...args: string[]) => string)
+): string {
+  // Swift double-quoted string: " ... " with \" and \\ inside
+  const stringLiteral = /"([^"\\]|\\.)*"/g;
+  const parts: string[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = stringLiteral.exec(content)) !== null) {
+    const codeSlice = content.slice(lastIndex, match.index);
+    parts.push(
+      typeof replacement === "function"
+        ? codeSlice.replace(pattern, replacement as (...args: string[]) => string)
+        : codeSlice.replace(pattern, replacement)
+    );
+    parts.push(match[0]);
+    lastIndex = stringLiteral.lastIndex;
+  }
+  const tail = content.slice(lastIndex);
+  parts.push(
+    typeof replacement === "function"
+      ? tail.replace(pattern, replacement as (...args: string[]) => string)
+      : tail.replace(pattern, replacement)
+  );
+  return parts.join("");
+}
+
+/**
  * Best-effort fixes for common, safe-to-repair SwiftUI compile issues in LLM output.
  * Applied to every file both during initial generation and after auto-fix.
  */
@@ -89,6 +122,16 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
     content = content.replace(/\bColorColor\b/g, "Color");
     content = content.replace(/\bcolorcolorcolor\b/g, "Color");
     content = content.replace(/\bcolorcolor\b/g, "Color");
+
+    // Post-generation sanitization: only in code, never inside string literals (avoids corrupting e.g. "Ferrari carColorColor").
+    content = replaceOutsideStringLiterals(content, /\b\w+ColorColor\b/g, "resolveColor");
+
+    // Invalid height parameter: ViewName(height: value) is not valid SwiftUI — use ViewName().frame(height: value). Skip GeometryReader (uses closure).
+    content = replaceOutsideStringLiterals(
+      content,
+      /\b(?!GeometryReader\b)([A-Z][a-zA-Z0-9_]*)\(\s*height:\s*([^,)\n(]+)\s*\)/g,
+      "$1().frame(height: $2)"
+    );
 
     const usesCharts = /\b(Chart|BarMark|LineMark|AreaMark|PointMark|RuleMark|SectorMark)\b/.test(content);
     if (usesCharts && !content.includes("import Charts")) {

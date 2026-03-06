@@ -57,9 +57,9 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 112,
-    "firstAttemptCompile": 72,
-    "compileRate": 64,
+    "totalBuilds": 124,
+    "firstAttemptCompile": 77,
+    "compileRate": 62,
     "functionalSuccesses": 2,
     "functionalRate": 2,
     "commonErrors": [
@@ -70,7 +70,15 @@
       "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Hashable'",
       "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Equatable'",
       "type 'NSAttributedString.Key' has no member 'foregroundStyle'",
-      "cannot find 'UIGraphicsEndPDFPage' in scope"
+      "cannot find 'UIGraphicsEndPDFPage' in scope",
+      "cannot convert value of type 'Binding<Subject>' to expected argument type 'Color'",
+      "value of type 'PlacesViewModel' has no dynamic member 'selectedCategoryColorColor' using key path from root type 'PlacesViewModel'",
+      "referencing subscript 'subscript(dynamicMember:)' requires wrapper 'Binding<PlacesViewModel>'",
+      "cannot find 'categoryColorColor' in scope",
+      "cannot find 'carColorColor' in scope",
+      "cannot find 'carColorColorColorColor' in scope",
+      "value of type 'Booking' has no member 'carColorColor'",
+      "missing argument for parameter 'height' in call"
     ],
     "goldenExamples": [
       {

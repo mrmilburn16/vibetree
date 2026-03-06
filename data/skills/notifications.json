@@ -56,12 +56,17 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 35,
+    "totalBuilds": 40,
     "firstAttemptCompile": 21,
-    "compileRate": 60,
+    "compileRate": 53,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "cannot find 'carColorColor' in scope",
+      "cannot find 'carColorColorColorColor' in scope",
+      "value of type 'Booking' has no member 'carColorColor'",
+      "missing argument for parameter 'height' in call"
+    ],
     "goldenExamples": []
   },
   "promptBlock": "CAPABILITY: Local Notifications (UserNotifications Framework)\n\nAPPROACH:\n- Use UNUserNotificationCenter for scheduling local notifications.\n- Request permission FIRST, then schedule notifications only if authorized.\n\nPERMISSION REQUEST:\n1. Call UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in ... }\n2. Check the granted flag — if false, show a clear UI explaining how to enable notifications in Settings.\n3. Request permission early but at a contextually appropriate time (e.g. when user creates their first reminder).\n\nSCHEDULING NOTIFICATIONS:\n1. Create UNMutableNotificationContent — set title, body, sound (.default), and optionally badge, categoryIdentifier.\n2. Create a trigger:\n   - UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: Bool) — fire after a delay.\n   - UNCalendarNotificationTrigger(dateMatching: DateComponents, repeats: Bool) — fire at specific date/time.\n   - UNLocationNotificationTrigger(region: CLCircularRegion, repeats: Bool) — fire at a location.\n3. Create UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger).\n4. Add to center: try await UNUserNotificationCenter.current().add(request).\n\nCANCELLING:\n- Store the notification identifier (UUID string) so it can be cancelled later.\n- UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])\n- To cancel ALL: removeAllPendingNotificationRequests()\n\nFOREGROUND DELIVERY:\n- By default, notifications don't show UI when the app is in the foreground.\n- Implement UNUserNotificationCenterDelegate.userNotificationCenter(_:willPresent:withCompletionHandler:) and call completionHandler([.banner, .sound]) to show them.\n- Set the delegate EARLY (in app init or onAppear of root view).\n\nREPEATING NOTIFICATIONS:\n- UNCalendarNotificationTrigger with repeats: true — ensure DateComponents only contains the repeating fields (e.g. hour + minute for daily, weekday + hour for weekly).\n- UNTimeIntervalNotificationTrigger with repeats: true — minimum interval is 60 seconds.\n\nACTIONABLE NOTIFICATIONS:\n- Define UNNotificationCategory with UNNotificationAction items.\n- Register categories: UNUserNotificationCenter.current().setNotificationCategories(categories).\n- Set content.categoryIdentifier to match.\n\nANTI-PATTERNS:\n- Do NOT schedule notifications without checking authorization status first.\n- Do NOT use repeating UNTimeIntervalNotificationTrigger with interval < 60 (crashes).\n- Do NOT forget to store notification identifiers for cancellation.\n- Do NOT assume notifications display in foreground — implement the delegate method.\n- Do NOT request notification permission on first launch with no context — explain WHY first.\n\n=== NOTIFICATION SETTINGS ===\n\n- Any app that sends push notifications must include a settings screen where the user can configure when they get notified. Never hardcode notification timing. For birthday/event reminders, offer: On the day (day of), 1 day before, 3 days before, 1 week before, Custom (let user pick days before). Use multi-select so users can pick multiple options (e.g. \"1 week before\" AND \"day of\"). Display the current selection clearly in the settings row so the user knows what's active without tapping in (e.g. \"Reminders  →  1 week before, day of\"). Never show hardcoded timing like \"Day-of + 1 day before\" without giving the user a way to change it."

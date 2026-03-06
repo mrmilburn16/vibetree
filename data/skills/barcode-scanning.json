@@ -41,12 +41,17 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 34,
+    "totalBuilds": 39,
     "firstAttemptCompile": 24,
-    "compileRate": 71,
+    "compileRate": 62,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "cannot find 'carColorColor' in scope",
+      "cannot find 'carColorColorColorColor' in scope",
+      "value of type 'Booking' has no member 'carColorColor'",
+      "missing argument for parameter 'height' in call"
+    ],
     "goldenExamples": []
   }
 }

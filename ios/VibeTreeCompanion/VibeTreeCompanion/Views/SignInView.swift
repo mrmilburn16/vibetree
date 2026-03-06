@@ -1,5 +1,4 @@
 import SwiftUI
-import AuthenticationServices
 
 struct SignInView: View {
     @StateObject private var auth = AuthService.shared
@@ -19,10 +18,12 @@ struct SignInView: View {
             }
             .padding(.horizontal, Forest.space6)
 
-            dividerRow
-
-            appleSignIn
+            Text("Use the same email and password as the website to access your projects and credits.")
+                .font(Forest.font(size: Forest.textSm))
+                .foregroundColor(Forest.textTertiary)
+                .multilineTextAlignment(.center)
                 .padding(.horizontal, Forest.space6)
+                .padding(.top, Forest.space2)
 
             if let error = auth.error {
                 Text(error)
@@ -129,47 +130,5 @@ struct SignInView: View {
     private var canSignIn: Bool {
         !email.trimmingCharacters(in: .whitespaces).isEmpty &&
         !password.isEmpty
-    }
-
-    // MARK: - Divider
-
-    private var dividerRow: some View {
-        HStack {
-            Rectangle()
-                .fill(Forest.border)
-                .frame(height: 1)
-            Text("or")
-                .font(Forest.font(size: Forest.textSm))
-                .foregroundColor(Forest.textTertiary)
-                .padding(.horizontal, Forest.space2)
-            Rectangle()
-                .fill(Forest.border)
-                .frame(height: 1)
-        }
-        .padding(.horizontal, Forest.space6)
-    }
-
-    // MARK: - Apple Sign In
-
-    private var appleSignIn: some View {
-        SignInWithAppleButton(.signIn) { request in
-            request.requestedScopes = [.email, .fullName]
-        } onCompletion: { result in
-            switch result {
-            case .success(let auth):
-                if let credential = auth.credential as? ASAuthorizationAppleIDCredential,
-                   let data = credential.identityToken,
-                   let token = String(data: data, encoding: .utf8) {
-                    self.auth.isAuthenticated = true
-                    self.auth.userEmail = credential.email
-                    _ = token
-                }
-            case .failure:
-                break
-            }
-        }
-        .signInWithAppleButtonStyle(.white)
-        .frame(height: 48)
-        .cornerRadius(Forest.radiusSm)
     }
 }

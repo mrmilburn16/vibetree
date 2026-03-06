@@ -55,15 +55,19 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 71,
-    "firstAttemptCompile": 38,
-    "compileRate": 54,
+    "totalBuilds": 77,
+    "firstAttemptCompile": 39,
+    "compileRate": 51,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
       "type 'Theme' has no member 'accentColor'",
       "type 'NSAttributedString.Key' has no member 'foregroundStyle'",
-      "cannot find 'UIGraphicsEndPDFPage' in scope"
+      "cannot find 'UIGraphicsEndPDFPage' in scope",
+      "cannot find 'carColorColor' in scope",
+      "cannot find 'carColorColorColorColor' in scope",
+      "value of type 'Booking' has no member 'carColorColor'",
+      "missing argument for parameter 'height' in call"
     ],
     "goldenExamples": []
   }

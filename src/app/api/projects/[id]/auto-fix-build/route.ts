@@ -197,6 +197,15 @@ export async function POST(
   const failedJob = getBuildJob(failedJobId);
   if (!failedJob) return Response.json({ error: "Job not found" }, { status: 404 });
   if (failedJob.status !== "failed") return Response.json({ error: "Job is not in failed state" }, { status: 400 });
+  if (failedJob.autoFixInProgress === false) {
+    return Response.json({ cancelled: true, reason: "Auto-fix was cancelled by user" });
+  }
+
+  /** Re-check job; cancel sets autoFixInProgress = false so we can abort before LLM or before creating retry. */
+  function wasCancelled(): boolean {
+    const j = getBuildJob(failedJobId);
+    return j ? j.autoFixInProgress === false : true;
+  }
 
   const attempt = (failedJob.request.attempt ?? 1) + 1;
   const maxAttempts = failedJob.request.maxAttempts ?? 8;
@@ -329,6 +338,9 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
     );
 
     const run = async (): Promise<Response> => {
+      if (wasCancelled()) {
+        return Response.json({ cancelled: true, reason: "Auto-fix was cancelled by user" });
+      }
       let result = await callLLMStreaming(prompt);
     let fixedFiles = result.fixedFiles;
     let explanation = result.explanation;
@@ -338,7 +350,10 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
         `LLM returned no files. stop_reason=${result.stopReason}`,
         `Raw output preview: ${result.raw.slice(0, 200)}`,
       ]);
-
+      if (wasCancelled()) {
+        setBuildJobAutoFixInProgress(failedJobId, false);
+        return Response.json({ cancelled: true, reason: "Auto-fix was cancelled by user" });
+      }
       appendBuildJobLogs(failedJobId, ["Retrying with all files included…"]);
       const retryPrompt = `This Swift/SwiftUI project won't compile.\n\n${errorSection}\n\nHere are ALL the files:\n\n${currentFiles.map((f) => `=== ${f.path} ===\n${f.content}`).join("\n\n")}\n\nFix the compilation errors and return the corrected files.`;
       const retryResult = await callLLMStreaming(retryPrompt);
@@ -356,6 +371,10 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       `LLM explanation: ${explanation}`,
       `LLM returned ${fixedFiles.length} fixed file(s): ${fixedFiles.map((f) => f.path).join(", ")}`,
     ]);
+    if (wasCancelled()) {
+      setBuildJobAutoFixInProgress(failedJobId, false);
+      return Response.json({ cancelled: true, reason: "Auto-fix was cancelled by user" });
+    }
 
     const fixedPathSet = new Set(fixedFiles.map((f) => f.path));
     const originalBasenames = new Set(currentFiles.map((f) => f.path.split("/").pop()!));
@@ -403,6 +422,10 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
     appendBuildJobLogs(failedJobId, [
       `Merged: ${corrected.length} total files (${fixedPathSet.size} modified by LLM).`,
     ]);
+    if (wasCancelled()) {
+      setBuildJobAutoFixInProgress(failedJobId, false);
+      return Response.json({ cancelled: true, reason: "Auto-fix was cancelled by user" });
+    }
 
     const retryJob = createBuildJob({
       projectId: failedJob.request.projectId,

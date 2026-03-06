@@ -1,6 +1,60 @@
 {
+  "id": "location-maps",
   "name": "Location & Maps",
-  "detection": { "keywords": [], "excludeKeywords": [] },
-  "triggers": ["map", "location", "GPS", "MapKit", "directions", "nearby", "geofence", "CoreLocation"],
-  "promptBlock": "Location: Set CLLocationManager.delegate before calling requestWhenInUseAuthorization() and startUpdatingLocation(), or delegate callbacks (e.g. didUpdateLocations) may never fire. Use a single retained manager (e.g. @StateObject or ObservableObject).\n// REQUIRES PLIST: NSLocationWhenInUseUsageDescription\n\nHandle .denied and .restricted with a clear message.\n\nMapKit: Use Map() view (iOS 17+) with MapContentBuilder. For annotations, use Annotation() or MapMarker. For search, use MKLocalSearch.\n\nFor background location (if needed):\n// REQUIRES PLIST: NSLocationAlwaysAndWhenInUseUsageDescription\nWarn in summary: \"Background location requires additional App ID configuration.\""
+  "frameworks": [
+    "CoreLocation",
+    "MapKit"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "map",
+      "location",
+      "GPS",
+      "MapKit",
+      "directions",
+      "nearby",
+      "geofence",
+      "CoreLocation",
+      "places",
+      "coffee",
+      "gym",
+      "pharmacy",
+      "find nearby"
+    ],
+    "excludeKeywords": []
+  },
+  "triggers": [
+    "map",
+    "location",
+    "GPS",
+    "MapKit",
+    "directions",
+    "nearby",
+    "geofence",
+    "CoreLocation"
+  ],
+  "promptBlock": "Location: Set CLLocationManager.delegate before calling requestWhenInUseAuthorization() and startUpdatingLocation(), or delegate callbacks (e.g. didUpdateLocations) may never fire. Use a single retained manager (e.g. @StateObject or ObservableObject).\n// REQUIRES PLIST: NSLocationWhenInUseUsageDescription\n\nHandle .denied and .restricted with a clear message.\n\nMapKit: Use Map() view (iOS 17+) with MapContentBuilder. For annotations, use Annotation() or MapMarker. For search, use MKLocalSearch.\n\nFor background location (if needed):\n// REQUIRES PLIST: NSLocationAlwaysAndWhenInUseUsageDescription\nWarn in summary: \"Background location requires additional App ID configuration.\"",
+  "promptInjection": "## Nearby places — use VibeTree places proxy (do not call Apple or Google Places APIs directly)\n\nFor nearby places (e.g. coffee shops, gyms, pharmacies), call the backend proxy only. Do not use MKLocalSearch for category-based nearby search, and do not call any external Places or POI API from the app.\n\n**Placeholders (mandatory — use these exact strings in Swift):** In every Swift file that calls the places proxy, you MUST declare exactly: `private let kApiBaseURL = \"__VIBETREE_API_BASE_URL__\"` and `private let kAppToken = \"__VIBETREE_APP_TOKEN__\"`. Never substitute a real URL or token; the build system replaces these at export time.\n\n**API:** GET `<baseURL>/api/proxy/places` with query params. Use the literal placeholder `__VIBETREE_API_BASE_URL__` for the base URL in Swift (e.g. build URL as `kApiBaseURL + \"/api/proxy/places\"` with query items). The build system replaces it at build time with the actual server URL (so on device, the Mac's local network IP is used; never use localhost in generated code). Params: `lat`, `lng`, `radius` (meters, optional, default 5000), `category` (one of: coffee, gym, pharmacy). Example: `__VIBETREE_API_BASE_URL__/api/proxy/places?lat=37.78&lng=-122.41&radius=2000&category=coffee`. Send the app token header on every request: `request.setValue(kAppToken, forHTTPHeaderField: \"X-App-Token\")`.\n\n**Response:** JSON with `results` array; each place has `name`, `address`, `lat`, `lng`, `category`, `distance` (meters). Display on a map or list; sort by `distance` if needed.\n\n**Errors:** 400 → missing/invalid params; 429 → rate limit (100/hour per IP); 503 → service not configured. Handle gracefully.",
+  "canonicalCode": {},
+  "antiPatterns": [],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 9,
+    "firstAttemptCompile": 2,
+    "compileRate": 22,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [
+      "cannot convert value of type 'Binding<Subject>' to expected argument type 'Color'",
+      "value of type 'PlacesViewModel' has no dynamic member 'selectedCategoryColorColor' using key path from root type 'PlacesViewModel'",
+      "referencing subscript 'subscript(dynamicMember:)' requires wrapper 'Binding<PlacesViewModel>'",
+      "cannot find 'categoryColorColor' in scope",
+      "cannot find 'carColorColor' in scope",
+      "cannot find 'carColorColorColorColor' in scope",
+      "value of type 'Booking' has no member 'carColorColor'",
+      "missing argument for parameter 'height' in call"
+    ],
+    "goldenExamples": []
+  }
 }

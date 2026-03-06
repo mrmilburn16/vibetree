@@ -28,23 +28,63 @@ final class AuthService: ObservableObject {
         }
     }
 
+    /// Sign in with email and password using Firebase Auth directly — same user as the web app (signInWithEmailAndPassword).
+    /// This ensures the same Firebase UID, so credits, projects, and build history in Firestore are shared.
     func signIn(email: String, password: String) async {
         isLoading = true
         error = nil
+        let trimmedEmail = email.trimmingCharacters(in: .whitespaces)
         do {
-            let customToken = try await fetchCustomToken(email: email, password: password)
-            let cred = try await Auth.auth().signIn(withCustomToken: customToken)
-            guard let idToken = try await cred.user.getIDToken() else {
+            let result = try await signInWithEmailPassword(email: trimmedEmail, password: password)
+            guard let idToken = try await result.user.getIDToken() else {
                 throw APIError.invalidResponse
             }
             saveTokenToKeychain(idToken)
-            userEmail = cred.user.email ?? email
+            userEmail = result.user.email ?? trimmedEmail
             UserDefaults.standard.set(userEmail, forKey: "vibetree-user-email")
             isAuthenticated = true
         } catch {
-            self.error = error.localizedDescription
+            self.error = firebaseAuthErrorMessage(error)
         }
         isLoading = false
+    }
+
+    private func signInWithEmailPassword(email: String, password: String) async throws -> AuthDataResult {
+        try await withCheckedThrowingContinuation { continuation in
+            Auth.auth().signIn(withEmail: email, password: password) { authResult, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                guard let authResult = authResult else {
+                    continuation.resume(throwing: APIError.invalidResponse)
+                    return
+                }
+                continuation.resume(returning: authResult)
+            }
+        }
+    }
+
+    private func firebaseAuthErrorMessage(_ error: Error) -> String {
+        let nsError = error as NSError
+        // Firebase Auth error domain (FIRAuthErrorDomain)
+        guard nsError.domain == "FIRAuthErrorDomain" else {
+            return error.localizedDescription
+        }
+        switch nsError.code {
+        case 17011: // .userNotFound
+        case 17009: // .wrongPassword
+        case 17010: // .invalidCredential
+            return "Invalid email or password."
+        case 17008: // .invalidEmail
+            return "Invalid email address."
+        case 17005: // .userDisabled
+            return "This account has been disabled."
+        case 17020: // .networkError
+            return "Network error. Check your connection and try again."
+        default:
+            return error.localizedDescription
+        }
     }
 
     func signOut() {
@@ -64,35 +104,6 @@ final class AuthService: ObservableObject {
             }
         }
         return loadTokenFromKeychain()
-    }
-
-    // MARK: - API
-
-    private func fetchCustomToken(email: String, password: String) async throws -> String {
-        let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
-        guard let url = URL(string: "\(baseURL)/api/auth/login") else {
-            throw APIError.invalidURL
-        }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONEncoder().encode(["email": email, "password": password])
-        req.timeoutInterval = 15
-
-        let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
-        guard (200...299).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8)
-            throw APIError.httpError(http.statusCode, body)
-        }
-
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let token = json["token"] as? String {
-            return token
-        }
-        throw APIError.invalidResponse
     }
 
     // MARK: - Keychain

@@ -50,8 +50,8 @@ async function triggerAutoFix(
       return;
     }
     try {
-      const data = JSON.parse(text) as { gaveUp?: boolean };
-      if (data?.gaveUp) setBuildJobAutoFixInProgress(jobId, false);
+      const data = JSON.parse(text) as { gaveUp?: boolean; cancelled?: boolean };
+      if (data?.gaveUp || data?.cancelled) setBuildJobAutoFixInProgress(jobId, false);
     } catch {
       // ignore parse error
     }

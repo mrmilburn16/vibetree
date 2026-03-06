@@ -37,12 +37,17 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 2,
+    "totalBuilds": 7,
     "firstAttemptCompile": 1,
-    "compileRate": 50,
+    "compileRate": 14,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "cannot find 'carColorColor' in scope",
+      "cannot find 'carColorColorColorColor' in scope",
+      "value of type 'Booking' has no member 'carColorColor'",
+      "missing argument for parameter 'height' in call"
+    ],
     "goldenExamples": []
   }
 }

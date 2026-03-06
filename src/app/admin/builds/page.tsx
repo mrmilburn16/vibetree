@@ -684,7 +684,14 @@ Based on this, should we fix the system prompt, a skill file, or both? If so, gi
   );
 }
 
-function ActiveJobCard({ job }: { job: ActiveBuildJob }) {
+function ActiveJobCard({
+  job,
+  onCancel,
+}: {
+  job: ActiveBuildJob;
+  onCancel?: (jobId: string) => Promise<void>;
+}) {
+  const [cancelling, setCancelling] = useState(false);
   const isAutoFixing = job.status === "failed" && job.autoFixInProgress;
   const isInProgress = job.status === "queued" || job.status === "running" || job.status === "generating";
   const attempt = job.request.attempt ?? 1;
@@ -692,6 +699,16 @@ function ActiveJobCard({ job }: { job: ActiveBuildJob }) {
   const displayName = job.request.projectName || job.request.userPrompt || "Building…";
   const errorHistory = job.errorHistory ?? [];
   const compilerErrors = job.compilerErrors ?? [];
+
+  const handleCancel = async () => {
+    if (!onCancel || cancelling) return;
+    setCancelling(true);
+    try {
+      await onCancel(job.id);
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <article
@@ -727,6 +744,23 @@ function ActiveJobCard({ job }: { job: ActiveBuildJob }) {
             {displayName}
           </p>
         </div>
+        {onCancel && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleCancel}
+            disabled={cancelling}
+            className="shrink-0"
+            title="Stop this build / auto-fix"
+          >
+            {cancelling ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Square className="h-4 w-4" aria-hidden />
+            )}
+            {cancelling ? "Cancelling…" : "Stop"}
+          </Button>
+        )}
       </div>
       {errorHistory.length > 0 ? (
         <ErrorHistoryBlock errorHistory={errorHistory} className="mt-3 border-t border-[var(--border-default)] pt-3" />
@@ -1889,8 +1923,48 @@ export default function BuildsPage() {
             </div>
           ) : (
             <div className="space-y-3">
+              {activeJobs.length > 0 && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-[var(--text-tertiary)]">
+                    {activeJobs.length} active job{activeJobs.length !== 1 ? "s" : ""}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      for (const job of activeJobs) {
+                        try {
+                          await fetch(`/api/build-jobs/${job.id}/cancel`, { method: "POST" });
+                        } catch {
+                          /* ignore */
+                        }
+                      }
+                      load();
+                      pollActiveJobs();
+                    }}
+                    title="Stop all building / auto-fixing jobs"
+                  >
+                    <Square className="h-4 w-4" aria-hidden />
+                    Cancel all
+                  </Button>
+                </div>
+              )}
               {activeJobs.map((job) => (
-                <ActiveJobCard key={job.id} job={job} />
+                <ActiveJobCard
+                  key={job.id}
+                  job={job}
+                  onCancel={async (jobId) => {
+                    try {
+                      const res = await fetch(`/api/build-jobs/${jobId}/cancel`, { method: "POST" });
+                      if (res.ok) {
+                        load();
+                        pollActiveJobs();
+                      }
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                />
               ))}
               {resultsToShow.map((r) => (
                 <ResultRow
