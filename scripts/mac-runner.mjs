@@ -314,6 +314,8 @@ const KNOWN_SYSTEM_ERRORS = [
   [/\bkilled:\s*9\b|SIGKILL/i, "Build failed — process was killed, likely due to low memory on your Mac."],
   // Device lock: install failed because iPhone is locked or requires unlock/passcode
   [/\b(locked|passcode|user unlock|device (must be )?unlocked|device lock|CoreDevice.*(lock|unlock|trust)|0xE80000[0-9A-Fa-f]{2})\b/i, "Your iPhone is locked. Please unlock your iPhone and tap Install again."],
+  // Connection/control channel: install step failed (build may have succeeded)
+  [/Connection reset by peer|ControlChannelConnectionError/i, "Build succeeded but install failed — unplug and replug your iPhone, keep it unlocked, and tap Install again."],
 ];
 
 function getKnownSystemErrorMessage(output) {
@@ -778,15 +780,21 @@ async function validateJob(job) {
           const installSucceeded = installed && (installed === true || installed.ok === true);
           const installOutput = installed && installed.ok === false ? installed.output : "";
           const installSystemError = getKnownSystemErrorMessage(installOutput);
-          await updateJob(job.id, {
-            status: "succeeded",
-            exitCode: 0,
-            ...(installSucceeded && { installedOnDevice: true }),
-            ...(installSystemError && { error: installSystemError }),
-            logs: installSucceeded
-              ? ["✅ Cached build", `✅ Installed on ${device.name}`]
-              : ["✅ Cached build", installSystemError || `⚠️ Install failed on ${device.name}`],
-          });
+          const installFailedMessage = "Build succeeded but install failed. Unplug and replug your iPhone, keep it unlocked, and tap Install again.";
+          if (installSucceeded) {
+            await updateJob(job.id, {
+              status: "succeeded",
+              exitCode: 0,
+              installedOnDevice: true,
+              logs: ["✅ Cached build", `✅ Installed on ${device.name}`],
+            });
+          } else {
+            await updateJob(job.id, {
+              status: "failed",
+              error: installSystemError || installFailedMessage,
+              logs: ["✅ Cached build", installSystemError || `⚠️ Install failed on ${device.name}`],
+            });
+          }
         }
         return;
       }
@@ -955,15 +963,21 @@ async function validateJob(job) {
           const installSucceeded = installed && (installed === true || installed.ok === true);
           const installOutput = installed && installed.ok === false ? installed.output : "";
           const installSystemError = getKnownSystemErrorMessage(installOutput);
-          await updateJob(job.id, {
-            status: "succeeded",
-            exitCode: 0,
-            ...(installSucceeded && { installedOnDevice: true }),
-            ...(installSystemError && { error: installSystemError }),
-            logs: installSucceeded
-              ? ["✅ Build succeeded", `✅ Installed on ${device.name}`]
-              : ["✅ Build succeeded", installSystemError || `⚠️ Install failed on ${device.name} — download the zip and run from Xcode instead`],
-          });
+          const installFailedMessage = "Build succeeded but install failed. Unplug and replug your iPhone, keep it unlocked, and tap Install again.";
+          if (installSucceeded) {
+            await updateJob(job.id, {
+              status: "succeeded",
+              exitCode: 0,
+              installedOnDevice: true,
+              logs: ["✅ Build succeeded", `✅ Installed on ${device.name}`],
+            });
+          } else {
+            await updateJob(job.id, {
+              status: "failed",
+              error: installSystemError || installFailedMessage,
+              logs: ["✅ Build succeeded", installSystemError || `⚠️ Install failed on ${device.name} — download the zip and run from Xcode instead`],
+            });
+          }
           try {
             const zipBuf = await readFile(zipPath);
             const hash = contentHash(zipBuf);

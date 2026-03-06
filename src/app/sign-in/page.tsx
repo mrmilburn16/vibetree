@@ -85,8 +85,9 @@ export default function SignInPage() {
         setLoading(false);
         return;
       }
-      router.push("/dashboard");
-      router.refresh();
+      // Full page redirect so the session cookie is sent on the next request (avoids middleware rejecting /dashboard)
+      window.location.href = "/dashboard";
+      return;
     } catch (err: unknown) {
       const message = err && typeof err === "object" && "code" in err
         ? (err as { code?: string }).code === "auth/invalid-credential" || (err as { code?: string }).code === "auth/wrong-password"

@@ -39,7 +39,10 @@ function asMessages(input: unknown): Array<{
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const auth = await requireProjectAuth(request, id);
-  if (auth instanceof NextResponse) return auth;
+  if (auth instanceof NextResponse) {
+    if (auth.status === 404) console.warn("[chat] GET 404: project not found or not owned", { projectId: id });
+    return auth;
+  }
   const chat = await getProjectChat(id);
   return NextResponse.json({ projectId: id, updatedAt: chat?.updatedAt ?? null, messages: chat?.messages ?? [] });
 }
@@ -47,7 +50,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const auth = await requireProjectAuth(request, id);
-  if (auth instanceof NextResponse) return auth;
+  if (auth instanceof NextResponse) {
+    if (auth.status === 404) console.warn("[chat] POST 404: project not found or not owned", { projectId: id });
+    return auth;
+  }
   const body = await request.json().catch(() => ({}));
   const messages = asMessages((body as any)?.messages);
   await setProjectChat(id, messages);

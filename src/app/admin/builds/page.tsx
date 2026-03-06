@@ -442,8 +442,9 @@ Based on this, should we fix the system prompt, a skill file, or both? If so, gi
         </div>
       )}
 
-      {result.errorHistory && result.errorHistory.length > 0 ? (
-        <ErrorHistoryBlock errorHistory={result.errorHistory} className="mt-3 border-t border-[var(--border-default)] pt-3" />
+      {/* Always show error history when present, including for compiled builds (so auto-fix attempts are visible). */}
+      {(result.errorHistory?.length ?? 0) > 0 ? (
+        <ErrorHistoryBlock errorHistory={result.errorHistory!} className="mt-3 border-t border-[var(--border-default)] pt-3" />
       ) : (
         <CompilerErrorsBlock errors={result.compilerErrors} className="mt-3 border-t border-[var(--border-default)] pt-3" />
       )}
@@ -1095,9 +1096,28 @@ export default function BuildsPage() {
   }, []);
 
   useEffect(() => {
-    pollBuildResults();
-    const interval = setInterval(pollBuildResults, 2000);
-    return () => clearInterval(interval);
+    if (typeof document === "undefined") return;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const startPolling = () => {
+      pollBuildResults();
+      intervalId = setInterval(pollBuildResults, 10000);
+    };
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+    if (!document.hidden) startPolling();
+    const onVisibilityChange = () => {
+      if (document.hidden) stopPolling();
+      else startPolling();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      stopPolling();
+    };
   }, [pollBuildResults]);
 
   const pollActiveJobs = useCallback(async () => {
@@ -1111,9 +1131,28 @@ export default function BuildsPage() {
   }, []);
 
   useEffect(() => {
-    pollActiveJobs();
-    const interval = setInterval(pollActiveJobs, 2000);
-    return () => clearInterval(interval);
+    if (typeof document === "undefined") return;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const startPolling = () => {
+      pollActiveJobs();
+      intervalId = setInterval(pollActiveJobs, 10000);
+    };
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+    if (!document.hidden) startPolling();
+    const onVisibilityChange = () => {
+      if (document.hidden) stopPolling();
+      else startPolling();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      stopPolling();
+    };
   }, [pollActiveJobs]);
 
   const runVisionTest = useCallback(

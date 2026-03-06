@@ -49,7 +49,7 @@ const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
   icon:
     opt.value === "auto"
       ? <Zap className="h-4 w-4" />
-      : opt.value.startsWith("gpt")
+      : opt.value.startsWith("gpt") || opt.value.startsWith("codex")
         ? <OpenAILogo />
         : <AnthropicLogo />,
 }));
@@ -116,40 +116,47 @@ export default function DashboardPage() {
     setMounted(true);
   }, [router]);
 
-  const fetchProjectsFromApi = useCallback(() => {
+  const fetchProjectsFromApi = useCallback(async () => {
     if (typeof window === "undefined") return;
     setProjectsLoading(true);
     setProjectsFetchError(null);
-    fetch("/api/projects")
-      .then((res) => {
-        if (res.status === 401) {
-          setProjectsFetchError("session_expired");
-          return null;
-        }
-        if (!res.ok) return Promise.reject(res);
-        return res.json();
-      })
-      .then((data: { projects?: Array<Project & { projectType?: string }> } | null) => {
-        if (data == null) return;
-        setProjectsFetchError(null);
-        const list = Array.isArray(data.projects) ? data.projects : [];
-        const normalized: Project[] = list.map((p) => ({
-          id: p.id,
-          name: p.name,
-          bundleId: p.bundleId ?? "",
-          createdAt: typeof p.createdAt === "number" ? p.createdAt : Date.now(),
-          updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : Date.now(),
-        }));
-        setProjects(normalized);
-        saveProjects(normalized);
-      })
-      .catch(() => {
-        setProjectsFetchError("network");
-        setProjects(getProjects());
-      })
-      .finally(() => {
-        setProjectsLoading(false);
-      });
+    let user: { uid?: string } | null = null;
+    try {
+      const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
+      const sessionData = await sessionRes.json().catch(() => ({}));
+      user = sessionData?.user ?? null;
+    } catch {
+      // ignore
+    }
+    console.log("[dashboard] fetching projects for user:", user?.uid);
+    try {
+      const res = await fetch("/api/projects");
+      if (res.status === 401) {
+        setProjectsFetchError("session_expired");
+        console.log("[dashboard] projects result:", JSON.stringify([]), "error:", "session_expired");
+        return;
+      }
+      if (!res.ok) throw res;
+      const data: { projects?: Array<Project & { projectType?: string }> } = await res.json();
+      setProjectsFetchError(null);
+      const list = Array.isArray(data.projects) ? data.projects : [];
+      const normalized: Project[] = list.map((p) => ({
+        id: p.id,
+        name: p.name,
+        bundleId: p.bundleId ?? "",
+        createdAt: typeof p.createdAt === "number" ? p.createdAt : Date.now(),
+        updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : Date.now(),
+      }));
+      setProjects(normalized);
+      saveProjects(normalized);
+      console.log("[dashboard] projects result:", JSON.stringify(normalized), "error:", null);
+    } catch (err) {
+      setProjectsFetchError("network");
+      setProjects(getProjects());
+      console.log("[dashboard] projects result:", JSON.stringify(getProjects()), "error:", err);
+    } finally {
+      setProjectsLoading(false);
+    }
   }, []);
 
   useEffect(() => {

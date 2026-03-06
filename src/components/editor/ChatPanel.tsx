@@ -46,7 +46,7 @@ const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
   icon:
     opt.value === "auto"
       ? <Zap className="h-4 w-4" />
-      : opt.value.startsWith("gpt")
+      : opt.value.startsWith("gpt") || opt.value.startsWith("codex")
         ? <OpenAILogo />
         : <AnthropicLogo />,
 }));
@@ -204,6 +204,11 @@ export function ChatPanel({
     canSend,
     maxMessageLength,
     isHydrating,
+    streamProgressMessageId,
+    streamElapsedSeconds,
+    validateProgressMessageId,
+    validateProgressBase,
+    validateElapsedSeconds,
   } = useChat(projectId, {
     onError,
     projectName,
@@ -490,6 +495,11 @@ export function ChatPanel({
           isHydrating={isHydrating}
           buildStatus={buildStatus}
           projectId={projectId}
+          streamProgressMessageId={streamProgressMessageId}
+          streamElapsedSeconds={streamElapsedSeconds}
+          validateProgressMessageId={validateProgressMessageId}
+          validateProgressBase={validateProgressBase}
+          validateElapsedSeconds={validateElapsedSeconds}
           onEnterGuidedMode={
             messages.length === 0 && !guidedMode
               ? () => handleGuidedModeToggle(true)

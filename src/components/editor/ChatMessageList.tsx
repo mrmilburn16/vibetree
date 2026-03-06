@@ -12,6 +12,15 @@ function formatElapsed(ms: number): string {
   return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
 }
 
+/** Format seconds for progress elapsed (e.g. "45s", "1m 23s"). */
+function formatDurationShortSec(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
+}
+
 function formatTimeAgo(epochMs: number): string | null {
   const diff = Date.now() - epochMs;
   if (diff < 60_000) return null;
@@ -44,8 +53,12 @@ const REASONING_PHRASES = new Set([
   "Validating build on Mac…",
 ]);
 
-function isReasoningMessage(msg: { id?: string; role: string; content: string; editedFiles?: string[] }): boolean {
+function isReasoningMessage(
+  msg: { id?: string; role: string; content: string; editedFiles?: string[] },
+  validateProgressMessageId?: string | null
+): boolean {
   if (msg.role !== "assistant" || (msg.editedFiles?.length ?? 0) > 0) return false;
+  if (typeof msg.id === "string" && msg.id === validateProgressMessageId) return true;
   if (typeof msg.id === "string" && msg.id.startsWith("stream-")) return true;
   if (msg.content.startsWith("Validating build on Mac…")) return true;
   return msg.content.length < 50 || REASONING_PHRASES.has(msg.content.trim());
@@ -288,6 +301,11 @@ export function ChatMessageList({
   buildStatus,
   projectId,
   isHydrating = false,
+  streamProgressMessageId = null,
+  streamElapsedSeconds = -1,
+  validateProgressMessageId = null,
+  validateProgressBase = "",
+  validateElapsedSeconds = -1,
 }: {
   messages: ChatMessage[];
   isTyping: boolean;
@@ -295,6 +313,11 @@ export function ChatMessageList({
   onEnterGuidedMode?: () => void;
   buildStatus?: string;
   projectId?: string;
+  streamProgressMessageId?: string | null;
+  streamElapsedSeconds?: number;
+  validateProgressMessageId?: string | null;
+  validateProgressBase?: string;
+  validateElapsedSeconds?: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -420,7 +443,7 @@ export function ChatMessageList({
     }
 
     // Don't stream or show cursor for short reasoning steps — show them immediately
-    if (isReasoningMessage(last)) {
+    if (isReasoningMessage(last, validateProgressMessageId)) {
       setStreamedContent(full);
       streamStartedKeyRef.current = streamKey;
       return;
@@ -501,13 +524,18 @@ export function ChatMessageList({
 
           const isStreamFile = isStreamFileMessage(msg);
           const isStreamingThis = msg.role === "assistant" && msg.id === streamingMessageId;
-          const displayContent = isStreamingThis ? streamedContent : msg.content;
+          let displayContent = isStreamingThis ? streamedContent : msg.content;
+          if (msg.id === streamProgressMessageId && streamElapsedSeconds >= 0) {
+            displayContent = `${msg.content} · ${formatDurationShortSec(streamElapsedSeconds)}`;
+          } else if (msg.id === validateProgressMessageId && validateElapsedSeconds >= 0) {
+            displayContent = `${validateProgressBase} (${formatDurationShortSec(validateElapsedSeconds)})`;
+          }
           const streamingComplete = !isStreamingThis || streamedContent === msg.content;
           const isFilesOnly = msg.role === "assistant" && msg.content === "" && msg.editedFiles?.length;
           const assistantIndex = messages.slice(0, index).filter((m) => m.role === "assistant").length;
           const staggerDelay =
             msg.role === "assistant" ? Math.min(assistantIndex * 40, 200) : 0;
-          const isReasoning = isReasoningMessage(msg);
+          const isReasoning = isReasoningMessage(msg, validateProgressMessageId);
           const isAssistantSummary = msg.role === "assistant" && !isReasoning && !isStreamFile;
           const showAccent = isAssistantSummary;
           const displayContentForMessage = isStreamFile

@@ -288,6 +288,13 @@ export function useChat(
   const [buildStatus, setBuildStatus] = useState<"idle" | "building" | "live" | "failed">("idle");
   const [input, setInput] = useState("");
   const [canSend, setCanSend] = useState(true);
+  /** Progress message id and elapsed seconds for stream "Planning next moves…" — only this row re-renders on tick. */
+  const [streamProgressMessageId, setStreamProgressMessageId] = useState<string | null>(null);
+  const [streamElapsedSeconds, setStreamElapsedSeconds] = useState(-1);
+  /** Progress message id, base text, and elapsed seconds for "Validating build on Mac…" — only this row re-renders on tick. */
+  const [validateProgressMessageId, setValidateProgressMessageId] = useState<string | null>(null);
+  const [validateProgressBase, setValidateProgressBase] = useState("");
+  const [validateElapsedSeconds, setValidateElapsedSeconds] = useState(-1);
 
   const MAX_MESSAGE_LENGTH = 4000;
   const timeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -323,6 +330,8 @@ export function useChat(
       abortControllerRef.current?.abort();
       if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
       validateTickRef.current = null;
+      setValidateProgressMessageId(null);
+      setValidateElapsedSeconds(-1);
       abortWithReasonRef.current = null;
       cancelValidationRef.current = false;
       if (serverPersistTimeoutRef.current) clearTimeout(serverPersistTimeoutRef.current);
@@ -362,6 +371,8 @@ export function useChat(
       const messageId = validateTickRef.current.messageId;
       if (validateTickRef.current.intervalId) clearInterval(validateTickRef.current.intervalId);
       validateTickRef.current = null;
+      setValidateProgressMessageId(null);
+      setValidateElapsedSeconds(-1);
       setIsValidating(false);
       setBuildStatus("idle");
       setMessages((prev) =>
@@ -468,8 +479,11 @@ export function useChat(
               .map((x) => x.m);
           }
           console.log("[poll] merged ids:", merged.map((m) => m.id));
-          setMessages(merged);
-          saveChatMessagesToLocalStorage(projectId, merged);
+          const current = messagesRef.current;
+          if (JSON.stringify(merged) !== JSON.stringify(current)) {
+            setMessages(merged);
+            saveChatMessagesToLocalStorage(projectId, merged);
+          }
         })
         .catch(() => {});
     }, POLL_INTERVAL_MS);
@@ -580,6 +594,8 @@ export function useChat(
     const discoveredFilePaths: string[] = [];
     const emittedPhases = new Set<string>();
 
+    setStreamProgressMessageId(progressMessageId);
+    setStreamElapsedSeconds(0);
     setMessages((prev) => [
       ...prev,
       {
@@ -630,19 +646,9 @@ export function useChat(
     };
 
     const localTick = setInterval(() => {
-      const elapsedMs = Date.now() - localStartedAt;
-
-      setMessages((prev) =>
-        prev.map((m) => {
-          if (m.id !== progressMessageId) return m;
-          if (!sawServerProgress) {
-            const elapsedStr = ` · ${formatDurationShort(Math.max(1, Math.floor(elapsedMs / 1000)))}`;
-            return { ...m, content: `Planning next moves…${elapsedStr}` };
-          }
-          // Once we have phase/file steps, don't overwrite the progress line (checklist shows steps).
-          return m;
-        })
-      );
+      if (!sawServerProgress) {
+        setStreamElapsedSeconds(Math.max(1, Math.floor((Date.now() - localStartedAt) / 1000)));
+      }
     }, 1000);
 
     const watchdog = setInterval(() => {
@@ -672,6 +678,8 @@ export function useChat(
     const removeStreamMessage = () => {
       clearInterval(localTick);
       clearInterval(watchdog);
+      setStreamProgressMessageId(null);
+      setStreamElapsedSeconds(-1);
       setMessages((prev) => prev.filter((m) => m.id !== progressMessageId));
     };
 
@@ -973,6 +981,9 @@ export function useChat(
               return next;
             });
             const progressBase = "Finalizing… Waiting for runner…";
+            setValidateProgressMessageId(validateMessageId);
+            setValidateProgressBase(progressBase);
+            setValidateElapsedSeconds(0);
             validateTickRef.current = {
               messageId: validateMessageId,
               startTime: Date.now(),
@@ -982,24 +993,17 @@ export function useChat(
             const tick = () => {
               const r = validateTickRef.current;
               if (!r) return;
-              const elapsed = Math.floor((Date.now() - r.startTime) / 1000);
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === r.messageId
-                    ? { ...m, content: `${r.base} (${formatDurationShort(elapsed)})` }
-                    : m
-                )
-              );
+              setValidateElapsedSeconds(Math.floor((Date.now() - r.startTime) / 1000));
             };
             const intervalId = setInterval(tick, 1000);
             validateTickRef.current.intervalId = intervalId;
             onProBuildComplete(
               projectId,
               (status) => {
-                // Only update the ref; the 1s interval tick is the single source of setMessages for this line (avoids glitching from multiple update sources).
                 const formatted = formatStatusDurations(status);
                 const base = formatted.replace(/\s*\([^)]*\)\s*$/, "").trim();
                 if (validateTickRef.current) validateTickRef.current.base = base;
+                setValidateProgressBase(base);
               }
             )
               .then((result) => {
@@ -1011,6 +1015,8 @@ export function useChat(
                 if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
                 const buildDuration = validateTickRef.current ? Date.now() - validateTickRef.current.startTime : 0;
                 validateTickRef.current = null;
+                setValidateProgressMessageId(null);
+                setValidateElapsedSeconds(-1);
                 setIsValidating(false);
                 if (result.fixedFiles && result.fixedFiles.length > 0) {
                   saveProjectFilesToLocalStorage(projectId, result.fixedFiles);
@@ -1068,6 +1074,8 @@ export function useChat(
                 }
                 if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
                 validateTickRef.current = null;
+                setValidateProgressMessageId(null);
+                setValidateElapsedSeconds(-1);
                 setIsValidating(false);
                 fetch("/api/build-results", {
                   method: "POST",
@@ -1181,5 +1189,10 @@ export function useChat(
     setInput,
     canSend,
     maxMessageLength: MAX_MESSAGE_LENGTH,
+    streamProgressMessageId,
+    streamElapsedSeconds,
+    validateProgressMessageId,
+    validateProgressBase,
+    validateElapsedSeconds,
   };
 }

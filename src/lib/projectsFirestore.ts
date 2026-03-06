@@ -61,12 +61,12 @@ export async function listProjectsFromFirestore(userId: string): Promise<{
   const db = getDb();
   if (!db) return { projects: [], fromFirestore: false };
   try {
-    const snap = await db
-      .collection(COLLECTION)
-      .where("userId", "==", userId)
-      .orderBy("updatedAt", "desc")
-      .get();
-    const projects: ProjectDoc[] = snap.docs.map((d) => {
+    const [snap1, snap2] = await Promise.all([
+      db.collection(COLLECTION).where("userId", "==", userId).orderBy("updatedAt", "desc").get(),
+      db.collection(COLLECTION).where("userId", "==", userId).get(),
+    ]);
+    console.log("[projectsFirestore] with orderBy:", snap1.size, "without orderBy:", snap2.size);
+    const projects: ProjectDoc[] = snap1.docs.map((d) => {
       const data = d.data();
       const appetizePublicKey = data.appetizePublicKey;
       return {

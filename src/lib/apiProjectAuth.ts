@@ -21,6 +21,7 @@ export async function requireProjectAuth(
   }
   const project = await getProjectFromFirestore(projectId, user.uid);
   if (!project) {
+    console.log("[projectAuth] 404 for project:", projectId, "user:", user.uid, "— project returned:", JSON.stringify(project));
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
   return { user, project };
