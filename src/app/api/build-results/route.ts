@@ -38,6 +38,7 @@ export async function POST(request: Request) {
           typeof (e as { attempt: unknown }).attempt === "number" &&
           Array.isArray((e as { errors: unknown }).errors)
       ) && { errorHistory: body.errorHistory as Array<{ attempt: number; errors: string[] }> }),
+    ...(typeof body.errorMessage === "string" && body.errorMessage.trim() !== "" && { errorMessage: body.errorMessage.trim() }),
   });
   return Response.json({ result });
 }

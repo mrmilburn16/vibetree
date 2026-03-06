@@ -1041,6 +1041,7 @@ export function useChat(
                     skillsUsed: doneEvent?.skillIds ?? [],
                     ...(typeof estimatedCostUsd === "number" && estimatedCostUsd >= 0 && { generationCostUsd: estimatedCostUsd }),
                     ...(Array.isArray(result.errorHistory) && result.errorHistory.length > 0 && { errorHistory: result.errorHistory }),
+                    ...(result.status === "failed" && result.error && { errorMessage: result.error }),
                   }),
                 }).catch((err) => Sentry.captureException(err));
                 const validationLine =

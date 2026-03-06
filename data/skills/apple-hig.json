@@ -55,9 +55,9 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 77,
+    "totalBuilds": 78,
     "firstAttemptCompile": 39,
-    "compileRate": 51,
+    "compileRate": 50,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -67,7 +67,9 @@
       "cannot find 'carColorColor' in scope",
       "cannot find 'carColorColorColorColor' in scope",
       "value of type 'Booking' has no member 'carColorColor'",
-      "missing argument for parameter 'height' in call"
+      "missing argument for parameter 'height' in call",
+      "'nil' cannot be used in context expecting type 'Int'",
+      "type 'Calendar.Component' has no member 'week'"
     ],
     "goldenExamples": []
   }

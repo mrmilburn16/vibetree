@@ -58,6 +58,8 @@ type BuildResult = {
   compilerErrors: string[];
   /** Full history of errors per attempt (when available). */
   errorHistory?: Array<{ attempt: number; errors: string[] }>;
+  /** Human-readable reason the build failed (e.g. "Max attempts (8) reached"). */
+  errorMessage?: string | null;
   fileCount: number;
   fileNames: string[];
   durationMs: number;
@@ -440,6 +442,13 @@ Based on this, should we fix the system prompt, a skill file, or both? If so, gi
             </p>
           )}
         </div>
+      )}
+
+      {/* Show failure reason when present (e.g. "Max attempts (8) reached"). */}
+      {!result.compiled && result.errorMessage && (
+        <p className="mt-3 border-t border-[var(--border-default)] pt-3 text-sm font-medium text-[var(--semantic-error)]">
+          {result.errorMessage}
+        </p>
       )}
 
       {/* Always show error history when present, including for compiled builds (so auto-fix attempts are visible). */}

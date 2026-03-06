@@ -41,12 +41,15 @@
   "canonicalCode": {},
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 4,
+    "totalBuilds": 5,
     "firstAttemptCompile": 4,
-    "compileRate": 100,
+    "compileRate": 80,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "'nil' cannot be used in context expecting type 'Int'",
+      "type 'Calendar.Component' has no member 'week'"
+    ],
     "goldenExamples": []
   }
 }

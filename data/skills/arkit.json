@@ -57,7 +57,7 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 124,
+    "totalBuilds": 125,
     "firstAttemptCompile": 77,
     "compileRate": 62,
     "functionalSuccesses": 2,
@@ -78,7 +78,9 @@
       "cannot find 'carColorColor' in scope",
       "cannot find 'carColorColorColorColor' in scope",
       "value of type 'Booking' has no member 'carColorColor'",
-      "missing argument for parameter 'height' in call"
+      "missing argument for parameter 'height' in call",
+      "'nil' cannot be used in context expecting type 'Int'",
+      "type 'Calendar.Component' has no member 'week'"
     ],
     "goldenExamples": [
       {

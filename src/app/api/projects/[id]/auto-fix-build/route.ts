@@ -20,6 +20,23 @@ const FIX_MODEL = "claude-sonnet-4-5-20250929";
 const FIX_MAX_TOKENS = 32000;
 /** Timeout for the auto-fix Claude API call so a hung request eventually fails and we can move on. */
 const AUTO_FIX_CLAUDE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+/** Max retries per attempt when Anthropic returns 529 overloaded_error. */
+const MAX_OVERLOAD_RETRIES = 3;
+/** Delay before retrying after an overload (529) from Anthropic. */
+const OVERLOAD_RETRY_DELAY_MS = 10_000;
+
+/** True if the error is Anthropic overloaded_error (HTTP 529). Do not count as a failed attempt; retry after delay. */
+function isOverloadError(e: unknown): boolean {
+  if (e && typeof e === "object") {
+    const status = (e as { status?: number }).status;
+    if (status === 529) return true;
+    const errBody = (e as { error?: { type?: string } }).error;
+    if (errBody && typeof errBody === "object" && (errBody as { type?: string }).type === "overloaded_error")
+      return true;
+  }
+  const msg = e instanceof Error ? e.message : String(e ?? "");
+  return msg.includes("529") || msg.includes("overloaded_error") || /overloaded/i.test(msg);
+}
 
 function requireRunnerAuth(request: Request): { ok: true } | { ok: false; response: Response } {
   const token = process.env.MAC_RUNNER_TOKEN;
@@ -333,6 +350,22 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       return { fixedFiles, explanation, raw: textContent, stopReason: String(msg.stop_reason ?? "") };
     }
 
+    /** Call LLM with up to MAX_OVERLOAD_RETRIES retries on 529 overloaded_error; does not count as a failed attempt. */
+    async function callLLMWithOverloadRetry(userPrompt: string): Promise<{ fixedFiles: SwiftFile[]; explanation: string; raw: string; stopReason: string }> {
+      let lastError: unknown;
+      for (let overloadCount = 0; overloadCount <= MAX_OVERLOAD_RETRIES; overloadCount++) {
+        try {
+          return await callLLMStreaming(userPrompt);
+        } catch (e) {
+          lastError = e;
+          if (!isOverloadError(e) || overloadCount === MAX_OVERLOAD_RETRIES) throw e;
+          appendBuildJobLogs(failedJobId, ["Anthropic servers are busy, retrying in 10 seconds…"]);
+          await new Promise((r) => setTimeout(r, OVERLOAD_RETRY_DELAY_MS));
+        }
+      }
+      throw lastError;
+    }
+
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("Auto-fix Claude request timed out after 5 minutes")), AUTO_FIX_CLAUDE_TIMEOUT_MS)
     );
@@ -341,7 +374,7 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       if (wasCancelled()) {
         return Response.json({ cancelled: true, reason: "Auto-fix was cancelled by user" });
       }
-      let result = await callLLMStreaming(prompt);
+      let result = await callLLMWithOverloadRetry(prompt);
     let fixedFiles = result.fixedFiles;
     let explanation = result.explanation;
 
@@ -356,7 +389,7 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       }
       appendBuildJobLogs(failedJobId, ["Retrying with all files included…"]);
       const retryPrompt = `This Swift/SwiftUI project won't compile.\n\n${errorSection}\n\nHere are ALL the files:\n\n${currentFiles.map((f) => `=== ${f.path} ===\n${f.content}`).join("\n\n")}\n\nFix the compilation errors and return the corrected files.`;
-      const retryResult = await callLLMStreaming(retryPrompt);
+      const retryResult = await callLLMWithOverloadRetry(retryPrompt);
       fixedFiles = retryResult.fixedFiles;
       explanation = retryResult.explanation;
     }

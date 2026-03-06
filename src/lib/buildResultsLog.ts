@@ -45,6 +45,8 @@ export type BuildResult = {
   compilerErrors: string[];
   /** Full history of compiler errors per attempt (when available). */
   errorHistory?: Array<{ attempt: number; errors: string[] }>;
+  /** Human-readable reason the build failed (e.g. "Max attempts (8) reached", "Auto-fix cancelled by user"). */
+  errorMessage?: string | null;
   fileCount: number;
   fileNames: string[];
   durationMs: number;
@@ -98,6 +100,7 @@ function toFirestorePayload(result: BuildResult): Record<string, unknown> {
     autoFixUsed: result.autoFixUsed,
     compilerErrors: result.compilerErrors,
     ...(Array.isArray(result.errorHistory) && result.errorHistory.length > 0 && { errorHistory: result.errorHistory }),
+    ...(result.errorMessage != null && result.errorMessage !== "" && { errorMessage: result.errorMessage }),
     fileCount: result.fileCount,
     fileNames: result.fileNames,
     durationMs: result.durationMs,
@@ -133,6 +136,7 @@ function fromFirestoreData(id: string, data: Record<string, unknown>): BuildResu
             typeof e?.attempt === "number" && Array.isArray(e?.errors)
         )
       : undefined,
+    errorMessage: typeof data.errorMessage === "string" ? data.errorMessage : undefined,
     fileCount: typeof data.fileCount === "number" ? data.fileCount : 0,
     fileNames: Array.isArray(data.fileNames) ? data.fileNames : [],
     durationMs: typeof data.durationMs === "number" ? data.durationMs : 0,

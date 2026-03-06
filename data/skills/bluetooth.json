@@ -34,16 +34,18 @@
     "NSBluetoothAlwaysUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 14,
+    "totalBuilds": 15,
     "firstAttemptCompile": 5,
-    "compileRate": 36,
+    "compileRate": 33,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
       "cannot find 'carColorColor' in scope",
       "cannot find 'carColorColorColorColor' in scope",
       "value of type 'Booking' has no member 'carColorColor'",
-      "missing argument for parameter 'height' in call"
+      "missing argument for parameter 'height' in call",
+      "'nil' cannot be used in context expecting type 'Int'",
+      "type 'Calendar.Component' has no member 'week'"
     ],
     "goldenExamples": []
   }

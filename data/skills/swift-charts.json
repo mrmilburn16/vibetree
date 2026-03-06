@@ -52,14 +52,16 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 17,
+    "totalBuilds": 18,
     "firstAttemptCompile": 11,
-    "compileRate": 65,
+    "compileRate": 61,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
       "type 'Theme' has no member 'accentColor'",
-      "type 'ShapeStyle' has no member 'accentColor'"
+      "type 'ShapeStyle' has no member 'accentColor'",
+      "'nil' cannot be used in context expecting type 'Int'",
+      "type 'Calendar.Component' has no member 'week'"
     ],
     "goldenExamples": []
   },
