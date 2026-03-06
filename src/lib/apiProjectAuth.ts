@@ -21,7 +21,16 @@ export async function requireProjectAuth(
   }
   const project = await getProjectFromFirestore(projectId, user.uid);
   if (!project) {
-    console.log("[projectAuth] 404 for project:", projectId, "user:", user.uid, "— project returned:", JSON.stringify(project));
+    const anyProject = await getProjectFromFirestore(projectId);
+    if (anyProject) {
+      console.warn("[projectAuth] 404: project exists in Firestore but userId mismatch", {
+        projectId,
+        requestUserId: user.uid,
+        docUserId: anyProject.userId,
+      });
+    } else {
+      console.warn("[projectAuth] 404: project does not exist in Firestore", { projectId, requestUserId: user.uid });
+    }
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
   return { user, project };

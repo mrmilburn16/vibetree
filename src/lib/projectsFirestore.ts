@@ -92,7 +92,10 @@ export async function listProjectsFromFirestore(userId: string): Promise<{
 
 export async function createProjectInFirestore(doc: ProjectDoc): Promise<boolean> {
   const db = getDb();
-  if (!db) return false;
+  if (!db) {
+    console.error("[projectsFirestore] createProjectInFirestore skipped: getDb() returned null (Firebase not configured or init failed)");
+    throw new Error("FIRESTORE_UNAVAILABLE");
+  }
   try {
     const payload: Record<string, unknown> = {
       id: doc.id,
@@ -108,8 +111,11 @@ export async function createProjectInFirestore(doc: ProjectDoc): Promise<boolean
     }
     await db.collection(COLLECTION).doc(doc.id).set(payload);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    console.error("[projectsFirestore] createProjectInFirestore write failed", { projectId: doc.id, error: err });
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg) console.error("[projectsFirestore] error message:", msg);
+    throw new Error("FIRESTORE_WRITE_FAILED");
   }
 }
 

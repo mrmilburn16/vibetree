@@ -40,7 +40,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const auth = await requireProjectAuth(request, id);
   if (auth instanceof NextResponse) {
-    if (auth.status === 404) console.warn("[chat] GET 404: project not found or not owned", { projectId: id });
+    if (auth.status === 404) {
+      console.warn("[chat] GET 404: project not found or not owned (see [projectAuth] log for Firestore existence)", {
+        projectId: id,
+      });
+    }
     return auth;
   }
   const chat = await getProjectChat(id);

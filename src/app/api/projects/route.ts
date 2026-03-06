@@ -11,6 +11,7 @@ import {
   createProjectInFirestore,
   type ProjectDoc,
 } from "@/lib/projectsFirestore";
+import { hasActiveSubscription } from "@/lib/subscriptionFirestore";
 
 function toRecord(doc: ProjectDoc): { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number; appetizePublicKey?: string | null } {
   return {
@@ -54,6 +55,15 @@ export async function POST(request: Request) {
       : body.projectType === "standard"
         ? "standard"
         : "pro";
+  if (projectType === "pro") {
+    const allowed = await hasActiveSubscription(user.uid);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Pro plan requires an active subscription. Subscribe at /pricing." },
+        { status: 403 }
+      );
+    }
+  }
   const projectId = id ?? `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const now = Date.now();
   const record = {
@@ -69,16 +79,18 @@ export async function POST(request: Request) {
     userId: user.uid,
   };
   try {
-    const ok = await createProjectInFirestore(doc);
-    if (!ok) {
-      return NextResponse.json(
-        { error: "Project could not be saved. Please try again." },
-        { status: 503 }
-      );
-    }
-  } catch {
+    await createProjectInFirestore(doc);
+  } catch (err) {
+    const code = err instanceof Error && (err.message === "FIRESTORE_UNAVAILABLE" || err.message === "FIRESTORE_WRITE_FAILED")
+      ? err.message
+      : "FIRESTORE_WRITE_FAILED";
+    console.error("[api/projects] POST createProjectInFirestore failed", { projectId: doc.id, code, error: err });
+    const clientMessage =
+      code === "FIRESTORE_UNAVAILABLE"
+        ? "Project could not be saved: Firestore is not configured."
+        : "Project could not be saved. Please try again.";
     return NextResponse.json(
-      { error: "Project could not be saved. Please try again." },
+      { error: clientMessage, code },
       { status: 503 }
     );
   }

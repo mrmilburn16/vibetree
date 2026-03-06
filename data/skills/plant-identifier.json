@@ -1,0 +1,57 @@
+{
+  "id": "plant-identifier",
+  "name": "Plant Identification (Camera + Plant.id)",
+  "frameworks": [
+    "AVFoundation",
+    "SwiftData"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "plant",
+      "identify plant",
+      "plant identifier",
+      "plant id",
+      "camera identify",
+      "scan plant",
+      "what plant",
+      "plant recognition",
+      "flower identify",
+      "leaf identify",
+      "plant scanner",
+      "garden identifier"
+    ],
+    "excludeKeywords": []
+  },
+  "triggers": [
+    "plant",
+    "identify plant",
+    "plant identifier",
+    "plant id",
+    "scan plant",
+    "what plant"
+  ],
+  "promptBlock": "Plant identification: Use AVFoundation for live camera only (no third-party SDKs). Capture UIImage, convert to base64 (JPEG), POST to VibeTree proxy. Parse response and show result in a sheet/card. Persist identified plants with SwiftData. REQUIRES PLIST: NSCameraUsageDescription.",
+  "promptInjection": "## Plant Identification — VibeTree proxy (AVFoundation + Plant.id)\n\nUse **AVFoundation** for a live camera preview and **only** native SwiftUI; no third-party packages.\n\n**Placeholders (mandatory):** In Swift code that calls the plant-identify API, declare: `private let kApiBaseURL = \"__VIBETREE_API_BASE_URL__\"` and `private let kAppToken = \"__VIBETREE_APP_TOKEN__\"`. The build system replaces these at export time.\n\n**Camera UI:**\n- AVCaptureSession with AVCapturePhotoOutput for still capture. Run session on a background DispatchQueue; never startRunning() on main. Use UIViewRepresentable wrapping AVCaptureVideoPreviewLayer (frame in layoutSubviews).\n- **Camera preview:** Full screen only; no viewfinder border or overlay box.\n- **Capture control:** A circular button at the bottom center. On tap: trigger AVCapturePhotoCaptureDelegate, get the resulting UIImage (or CMSampleBuffer → CGImage → UIImage), then proceed to identify.\n\n**Identification API:**\n- **Endpoint:** POST `__VIBETREE_API_BASE_URL__/api/proxy/plant-identify`\n- **Headers:** `Content-Type: application/json`, `X-App-Token: __VIBETREE_APP_TOKEN__` (use kAppToken in code).\n- **Body:** JSON `{ \"image\": \"<base64>\" }`. Encode the captured UIImage as JPEG (e.g. jpegData(compressionQuality: 0.8)), then base64, then use the string in the JSON body.\n- **Response:** Full Plant.id JSON. Parse and display: **common name** (e.g. result.suggestions[0].details.common_names or equivalent path), **scientific name**, **watering** (best_watering), **light** (best_light_condition), **toxicity**, **description**. Handle missing keys gracefully.\n- **Result UI:** Show these fields in a **card that slides up from the bottom** (e.g. .sheet or a bottom sheet with animation). Include a \"Save\" action that persists the plant to SwiftData.\n\n**SwiftData — saved plants:**\n- **Model:** One SwiftData model for an identified plant. Required attributes: **id** (UUID or persistent ID), **commonName** (String), **scientificName** (String), **imageData** (Data — the JPEG used for the request or the same image), **wateringInfo** (String), **lightInfo** (String), **toxicity** (String), **dateIdentified** (Date). Use @Model and store in the app's ModelContainer.\n- **Collection tab:** A separate tab (e.g. \"My Plants\" or \"Collection\") that shows saved plants in a **grid** (LazyVGrid). Each cell: the plant's **photo** (Image from imageData) and **name** (commonName). Tapping a cell can show the same detail card (common name, scientific name, watering, light, toxicity, description).\n\n**Errors:** Handle camera unavailable (e.g. simulator), permission denied, and API errors (4xx/5xx). Show a short message; do not expose raw JSON to the user.\n\n**UI copy:** Do not use the text \"Plant ID\" anywhere in the UI (no navigation title, tab label, or header saying \"Plant ID\"). The app name \"Plant Identifier\" is fine; only avoid the shortened \"Plant ID\".\n\n**Constraints:** Never use any third-party packages. Only SwiftUI, AVFoundation, SwiftData, and Foundation/URLSession for the POST request.",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Using any third-party SDK or package for camera or plant ID",
+    "Calling AVCaptureSession.startRunning() on the main thread",
+    "Sending plant-identify request without base64 image in body or without X-App-Token header",
+    "Storing plant records without SwiftData (e.g. UserDefaults only) when a collection is required",
+    "Missing NSCameraUsageDescription in Info.plist or not requesting camera permission",
+    "Using \"Plant ID\" as a navigation title, tab label, or header (use \"Plant Identifier\" or other wording instead)"
+  ],
+  "requiredPermissions": [
+    "NSCameraUsageDescription"
+  ],
+  "stats": {
+    "totalBuilds": 3,
+    "firstAttemptCompile": 3,
+    "compileRate": 100,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

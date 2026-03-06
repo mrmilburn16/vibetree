@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Nav } from "@/components/landing/Nav";
 import { Footer } from "@/components/landing/Footer";
 import { Button } from "@/components/ui";
 import { Card } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { PLANS, CREDIT_USAGE, type Plan, type PlanFeature } from "@/lib/pricing";
+import { isPaidPlanId } from "@/lib/stripe";
 
 /** Simulator add-on note shown under the simulator feature on paid plans. */
 const SIMULATOR_ADDON_NOTE = "Simulator available as add-on — $0.20/min, pay as you go";
@@ -79,9 +80,13 @@ function CreditTable() {
 function PlanCard({
   plan,
   onOpenSimulatorExplanation,
+  onSelectPlan,
+  isLoading,
 }: {
   plan: Plan;
   onOpenSimulatorExplanation: () => void;
+  onSelectPlan: (planId: string) => void;
+  isLoading?: boolean;
 }) {
   const variant = plan.ctaVariant ?? "primary";
   const isSimulatorFeature = (f: PlanFeature) =>
@@ -169,18 +174,58 @@ function PlanCard({
         ))}
       </ul>
       <div>
-        <Link href="/dashboard" className="block">
-          <Button variant={variant} className="w-full">
-            {plan.cta}
-          </Button>
-        </Link>
+        <Button
+          variant={variant}
+          className="w-full"
+          onClick={() => onSelectPlan(plan.id)}
+          disabled={isLoading}
+        >
+          {isLoading ? "Redirecting…" : plan.cta}
+        </Button>
       </div>
     </Card>
   );
 }
 
 export default function PricingPage() {
+  const router = useRouter();
   const [simulatorExplanationOpen, setSimulatorExplanationOpen] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const handleSelectPlan = async (planId: string) => {
+    if (planId === "free") {
+      router.push("/dashboard");
+      return;
+    }
+    if (!isPaidPlanId(planId)) return;
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch("/api/stripe/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ planId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        const returnUrl = encodeURIComponent(
+          typeof window !== "undefined" ? window.location.pathname : "/pricing"
+        );
+        router.push(`/sign-in?returnUrl=${returnUrl}`);
+        return;
+      }
+      if (!res.ok) {
+        console.error("[pricing] create-checkout failed", res.status, data);
+        return;
+      }
+      if (typeof data.url === "string") {
+        window.location.href = data.url;
+        return;
+      }
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[var(--background-primary)]">
@@ -246,6 +291,8 @@ export default function PricingPage() {
                   key={plan.id}
                   plan={plan}
                   onOpenSimulatorExplanation={() => setSimulatorExplanationOpen(true)}
+                  onSelectPlan={handleSelectPlan}
+                  isLoading={checkoutLoading}
                 />
               ))}
             </div>

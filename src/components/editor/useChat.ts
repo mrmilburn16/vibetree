@@ -776,6 +776,7 @@ export function useChat(
                   saving_files: "Finalizing",
                   done_preview_updating: "Done",
                   retrying_request: "Retrying request…",
+                  overload_retry: "Anthropic servers are busy, retrying in 10 seconds…",
                 };
                 currentPhaseLabel = phaseMap[event.phase] ?? "Working";
                 const emitKey = (event.phase === "starting_request" || event.phase === "waiting_for_first_tokens") ? "thinking" : event.phase;

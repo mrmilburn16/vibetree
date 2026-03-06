@@ -10,6 +10,7 @@ import {
 import { getProjectFilePaths } from "@/lib/projectFileStore";
 import { updateProjectInFirestore, deleteProjectFromFirestore } from "@/lib/projectsFirestore";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
+import { hasActiveSubscription } from "@/lib/subscriptionFirestore";
 
 function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
   return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
@@ -46,6 +47,15 @@ export async function PATCH(
   if (typeof body.name === "string") updates.name = uniquifyProjectName(id, body.name.trim());
   if (typeof body.bundleId === "string") updates.bundleId = body.bundleId;
   if (body.projectType === "standard" || body.projectType === "pro") updates.projectType = body.projectType;
+  if (updates.projectType === "pro") {
+    const allowed = await hasActiveSubscription(auth.user.uid);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Pro plan requires an active subscription. Subscribe at /pricing." },
+        { status: 403 }
+      );
+    }
+  }
   const project = updateProject(id, updates);
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });

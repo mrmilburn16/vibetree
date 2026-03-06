@@ -13,8 +13,53 @@ import { enrichWithSkills } from "@/lib/llm/promptEnrichment";
 import { detectSkills, buildSkillPromptBlock } from "@/lib/skills/registry";
 import { logLLMAnalytics } from "@/lib/llm/analyticsLog";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
+import { hasActiveSubscription } from "@/lib/subscriptionFirestore";
 
 const MAX_MESSAGE_LENGTH = 4000;
+/** Max retries when Anthropic returns 529 overloaded_error (same as auto-fix route). */
+const MAX_OVERLOAD_RETRIES = 3;
+/** Delay before retrying after an overload (529). */
+const OVERLOAD_RETRY_DELAY_MS = 10_000;
+
+/** True only when error is explicitly Anthropic overload (529 or error.type === "overloaded_error"). No message-based guess. */
+function isOverloadError(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const status = (e as { status?: number }).status;
+  if (status === 529) return true;
+  const errBody = (e as { error?: { type?: string } }).error;
+  if (errBody && typeof errBody === "object" && (errBody as { type?: string }).type === "overloaded_error")
+    return true;
+  return false;
+}
+
+/** Log full error object when we are about to treat it as overload (retry or user message). */
+function logOverloadError(context: string, err: unknown): void {
+  const payload: Record<string, unknown> = {
+    context,
+    message: err instanceof Error ? err.message : String(err ?? ""),
+    name: err instanceof Error ? err.name : undefined,
+    status: (err as { status?: number }).status,
+    error: (err as { error?: unknown }).error,
+  };
+  if (err instanceof Error && err.stack) payload.stack = err.stack;
+  try {
+    if (err && typeof err === "object") {
+      const rest = { ...err } as Record<string, unknown>;
+      if (Object.keys(rest).length > 0) payload.rawKeys = Object.keys(rest);
+    }
+  } catch {
+    // ignore
+  }
+  console.warn("[message/stream] treating error as overload — full error object:", JSON.stringify(payload, null, 2));
+}
+
+/** User-facing error message; never send raw Anthropic error JSON to the client. */
+function sanitizeStreamError(err: unknown): string {
+  if (isOverloadError(err)) return "Anthropic servers are busy. Please try again in a few minutes.";
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  if (/^\s*\{/.test(msg.trim())) return "AI request failed. Please try again.";
+  return msg || "AI request failed. Please try again.";
+}
 
 function encodeLine(obj: object): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(obj) + "\n");
@@ -66,6 +111,15 @@ export async function POST(
       projectProjectType: project.projectType,
       resolved: projectType,
     });
+  }
+  if (projectType === "pro") {
+    const allowed = await hasActiveSubscription(auth.user.uid);
+    if (!allowed) {
+      return Response.json(
+        { error: "Pro features require an active subscription. Subscribe at /pricing." },
+        { status: 403 }
+      );
+    }
   }
   console.log("[message/stream] start", { projectId, projectType, model: body.model, msgLen: message.length });
   const { message: enrichedMessage, skillIds } = enrichWithSkills(projectType, message);
@@ -144,49 +198,66 @@ export async function POST(
       try {
         let result: Awaited<ReturnType<typeof getClaudeResponseStream>> | null = null;
         let lastErr: Error | null = null;
+        let overloadRetries = 0;
 
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          enqueuePhase(attempt === 1 ? "waiting_for_first_tokens" : "retrying_request");
+        outer: while (true) {
+          for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            enqueuePhase(attempt === 1 ? "waiting_for_first_tokens" : "retrying_request");
 
-          try {
-            result = await getClaudeResponseStream(
-              enrichedMessage,
-              model,
-              { currentFiles, projectType, skillPromptBlock, projectName: currentFiles ? project.name : undefined },
-              {
-                onProgress: (data) => {
-                  lastReceivedChars = data.receivedChars;
-                  if (!hasEmittedFirstTokens && data.receivedChars > 0) {
-                    hasEmittedFirstTokens = true;
-                    enqueuePhase("receiving_output");
-                    updateGenerationPhase(generation.id, "generating");
-                  }
-                  enqueueProgress(data.receivedChars);
-                },
-                onDiscoveredFilePath: (path) => {
-                  discoveredFilesCount += 1;
-                  const existing = paths.length > 0 && paths.includes(path);
-                  safeEnqueue({
-                    type: "file",
-                    path,
-                    existing,
-                    count: discoveredFilesCount,
-                    elapsedMs: Date.now() - startedAt,
-                  });
-                },
+            try {
+              result = await getClaudeResponseStream(
+                enrichedMessage,
+                model,
+                { currentFiles, projectType, skillPromptBlock, projectName: currentFiles ? project.name : undefined },
+                {
+                  onProgress: (data) => {
+                    lastReceivedChars = data.receivedChars;
+                    if (!hasEmittedFirstTokens && data.receivedChars > 0) {
+                      hasEmittedFirstTokens = true;
+                      enqueuePhase("receiving_output");
+                      updateGenerationPhase(generation.id, "generating");
+                    }
+                    enqueueProgress(data.receivedChars);
+                  },
+                  onDiscoveredFilePath: (path) => {
+                    discoveredFilesCount += 1;
+                    const existing = paths.length > 0 && paths.includes(path);
+                    safeEnqueue({
+                      type: "file",
+                      path,
+                      existing,
+                      count: discoveredFilesCount,
+                      elapsedMs: Date.now() - startedAt,
+                    });
+                  },
+                }
+              );
+              lastErr = null;
+              break outer;
+            } catch (err) {
+              lastErr = err instanceof Error ? err : new Error("AI request failed");
+              const isParseError = lastErr.message.startsWith("Invalid structured response");
+              if (isParseError && attempt < maxAttempts) {
+                continue;
               }
-            );
-            lastErr = null;
-            break;
-          } catch (err) {
-            lastErr = err instanceof Error ? err : new Error("AI request failed");
-            const isParseError = lastErr.message.startsWith("Invalid structured response");
-            if (isParseError && attempt < maxAttempts) {
-              // keep the stream open and try again once
-              continue;
+              if (isOverloadError(err) && overloadRetries < MAX_OVERLOAD_RETRIES) {
+                logOverloadError("overload_retry", err);
+                enqueuePhase("overload_retry");
+                await new Promise((r) => setTimeout(r, OVERLOAD_RETRY_DELAY_MS));
+                overloadRetries += 1;
+                break;
+              }
+              throw lastErr;
             }
-            throw lastErr;
           }
+          if (result) break;
+          if (lastErr && isOverloadError(lastErr) && overloadRetries >= MAX_OVERLOAD_RETRIES) {
+            logOverloadError("overload_final", lastErr);
+            safeEnqueue({ type: "error", error: sanitizeStreamError(lastErr) });
+            return;
+          }
+          if (lastErr && isOverloadError(lastErr)) continue;
+          break;
         }
 
         if (!result || lastErr) {
@@ -271,9 +342,8 @@ export async function POST(
           });
         } catch { /* analytics is best-effort */ }
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "AI request failed";
-        console.error("[message/stream] error", errorMessage, err);
+        const errorMessage = sanitizeStreamError(err);
+        console.error("[message/stream] error", err instanceof Error ? err.message : String(err), err);
         safeEnqueue({ type: "error", error: errorMessage });
       } finally {
         clearInterval(heartbeat);

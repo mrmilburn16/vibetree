@@ -4,6 +4,7 @@ import { setProjectFiles } from "@/lib/projectFileStore";
 import { createBuildJob } from "@/lib/buildJobs";
 import { isRunnerOnline } from "@/lib/runnerStore";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
+import { hasActiveSubscription } from "@/lib/subscriptionFirestore";
 
 type SwiftFile = { path: string; content: string };
 
@@ -70,6 +71,15 @@ export async function POST(
   if (!projectId) return Response.json({ error: "Project ID required" }, { status: 400 });
   const auth = await requireProjectAuth(request, projectId);
   if (auth instanceof NextResponse) return auth;
+  if (auth.project.projectType === "pro") {
+    const allowed = await hasActiveSubscription(auth.user.uid);
+    if (!allowed) {
+      return Response.json(
+        { error: "Run on device requires an active subscription. Subscribe at /pricing." },
+        { status: 403 }
+      );
+    }
+  }
   setProject(toRecord(auth.project));
   const body = await request.json().catch(() => ({}));
   const providedName = typeof body?.projectName === "string" ? body.projectName : "";

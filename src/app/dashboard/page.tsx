@@ -86,6 +86,7 @@ export default function DashboardPage() {
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectsFetchError, setProjectsFetchError] = useState<"session_expired" | "network" | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [pushTestLoading, setPushTestLoading] = useState(false);
   const [pushTestMessage, setPushTestMessage] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -227,34 +228,28 @@ export default function DashboardPage() {
   const doSubmitPrompt = useCallback(
     async (trimmed: string) => {
       localStorage.setItem(PENDING_PROMPT_KEY, trimmed);
+      setCreateError(null);
       try {
         const res = await fetch("/api/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: "Untitled app", projectType }),
         });
-        if (!res.ok) throw new Error("Create failed");
-        const data: { project: Project } = await res.json();
-        const project = data.project;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = typeof data?.error === "string" ? data.error : "Project could not be created.";
+          setCreateError(msg);
+          console.warn("[dashboard] POST /api/projects failed", { status: res.status, code: data?.code, error: msg });
+          return;
+        }
+        const project = (data as { project: Project }).project;
         const next = [{ ...project, bundleId: project.bundleId ?? "" }, ...projects];
         setProjects(next);
         saveProjects(next);
         router.push(`/editor/${project.id}`);
-      } catch {
-        const fallback = getProjects();
-        setProjects(fallback);
-        const id = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-        const now = Date.now();
-        const project: Project = {
-          id,
-          name: "Untitled app",
-          bundleId: `com.vibetree.${id.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 40) || "app"}`,
-          createdAt: now,
-          updatedAt: now,
-        };
-        saveProjects([project, ...fallback]);
-        setProjects(getProjects());
-        router.push(`/editor/${project.id}`);
+      } catch (e) {
+        setCreateError(e instanceof Error ? e.message : "Project could not be created.");
+        console.warn("[dashboard] POST /api/projects failed (network or other)", e);
       }
     },
     [router, projectType, projects]
@@ -273,34 +268,28 @@ export default function DashboardPage() {
   );
 
   async function handleNewApp() {
+    setCreateError(null);
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "Untitled app", projectType }),
       });
-      if (!res.ok) throw new Error("Create failed");
-      const data: { project: Project } = await res.json();
-      const project = data.project;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = typeof data?.error === "string" ? data.error : "Project could not be created.";
+        setCreateError(msg);
+        console.warn("[dashboard] handleNewApp: POST /api/projects failed", { status: res.status, code: data?.code, error: msg });
+        return;
+      }
+      const project = (data as { project: Project }).project;
       const next = [{ ...project, bundleId: project.bundleId ?? "" }, ...projects];
       setProjects(next);
       saveProjects(next);
       router.push(`/editor/${project.id}`);
-    } catch {
-      const fallback = getProjects();
-      setProjects(fallback);
-      const id = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const now = Date.now();
-      const project: Project = {
-        id,
-        name: "Untitled app",
-        bundleId: `com.vibetree.${id.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 40) || "app"}`,
-        createdAt: now,
-        updatedAt: now,
-      };
-      saveProjects([project, ...fallback]);
-      setProjects(getProjects());
-      router.push(`/editor/${project.id}`);
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "Project could not be created.");
+      console.warn("[dashboard] handleNewApp: POST /api/projects failed (network or other)", e);
     }
   }
 
@@ -338,33 +327,28 @@ export default function DashboardPage() {
     const source = projects.find((p) => p.id === id);
     if (!source) return;
     const name = `${source.name} (copy)`;
+    setCreateError(null);
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, projectType }),
       });
-      if (!res.ok) throw new Error("Create failed");
-      const data: { project: Project } = await res.json();
-      const project = data.project;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = typeof data?.error === "string" ? data.error : "Project could not be created.";
+        setCreateError(msg);
+        console.warn("[dashboard] handleDuplicate: POST /api/projects failed", { status: res.status, code: data?.code, error: msg });
+        return;
+      }
+      const project = (data as { project: Project }).project;
       const next = [{ ...project, bundleId: project.bundleId ?? "" }, ...projects];
       setProjects(next);
       saveProjects(next);
       router.push(`/editor/${project.id}`);
-    } catch {
-      const fallback = getProjects();
-      const copyId = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const now = Date.now();
-      const project: Project = {
-        id: copyId,
-        name,
-        bundleId: `com.vibetree.${copyId.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 40) || "app"}`,
-        createdAt: now,
-        updatedAt: now,
-      };
-      saveProjects([project, ...fallback]);
-      setProjects(getProjects());
-      router.push(`/editor/${project.id}`);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Project could not be created.");
+      console.warn("[dashboard] handleDuplicate: POST /api/projects failed (network or other)", err);
     }
   }
 
@@ -600,6 +584,19 @@ export default function DashboardPage() {
             <Link href="/sign-in" className="mt-2 inline-block text-sm font-medium text-[var(--link-default)] hover:underline">
               Sign in
             </Link>
+          </div>
+        )}
+
+        {createError && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-500/50 bg-red-500/10 px-4 py-3">
+            <p className="text-sm text-[var(--text-primary)]">{createError}</p>
+            <button
+              type="button"
+              onClick={() => setCreateError(null)}
+              className="shrink-0 text-sm font-medium text-[var(--link-default)] hover:underline"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
