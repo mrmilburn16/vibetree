@@ -7,7 +7,6 @@ import {
   add as storeAdd,
   setBalance as storeSetBalance,
   LOW_CREDIT_THRESHOLD,
-  type CreditState,
 } from "@/lib/credits";
 
 interface CreditsContextValue {
@@ -23,12 +22,34 @@ interface CreditsContextValue {
 const CreditsContext = createContext<CreditsContextValue | null>(null);
 
 export function CreditsProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<CreditState | null>(null);
+  const [balance, setBalanceState] = useState<number | null>(null);
+  const [serverMode, setServerMode] = useState<boolean | null>(null);
 
-  const refresh = useCallback(() => {
-    if (typeof window === "undefined") return;
-    setState(getCreditState());
+  const fetchServerBalance = useCallback(async (): Promise<number | null> => {
+    try {
+      const res = await fetch("/api/credits", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        const b = typeof data.balance === "number" ? data.balance : 0;
+        setBalanceState(b);
+        setServerMode(true);
+        return b;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
   }, []);
+
+  const refresh = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const serverBalance = await fetchServerBalance();
+    if (serverBalance === null) {
+      setServerMode(false);
+      const state = getCreditState();
+      setBalanceState(state.balance);
+    }
+  }, [fetchServerBalance]);
 
   useEffect(() => {
     refresh();
@@ -36,49 +57,66 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
 
   const deduct = useCallback(
     (amount: number): boolean => {
-      const ok = storeDeduct(amount);
-      if (ok) refresh();
-      return ok;
+      if (serverMode === true) {
+        setBalanceState((prev) => Math.max(0, (prev ?? 0) - amount));
+        fetch("/api/credits/deduct", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ amount }),
+        })
+          .then((res) => {
+            if (res.status === 402) return refresh();
+            if (res.ok) return res.json().then((data: { balance?: number }) => setBalanceState(typeof data.balance === "number" ? data.balance : 0));
+            return refresh();
+          })
+          .catch(() => refresh());
+        return true;
+      }
+      if (serverMode === false) {
+        const ok = storeDeduct(amount);
+        if (ok) setBalanceState(getCreditState().balance);
+        return ok;
+      }
+      return false;
     },
-    [refresh]
+    [serverMode, refresh]
   );
 
   const add = useCallback(
     (amount: number) => {
-      storeAdd(amount);
-      refresh();
+      if (serverMode === false) {
+        storeAdd(amount);
+        setBalanceState(getCreditState().balance);
+      } else if (serverMode === true) {
+        refresh();
+      }
     },
-    [refresh]
+    [serverMode, refresh]
   );
 
   const setBalance = useCallback(
     (amount: number) => {
-      storeSetBalance(amount);
-      refresh();
+      if (serverMode === false) {
+        storeSetBalance(amount);
+        setBalanceState(getCreditState().balance);
+      } else if (serverMode === true) {
+        refresh();
+      }
     },
-    [refresh]
+    [serverMode, refresh]
   );
 
-  const value: CreditsContextValue =
-    state === null
-      ? {
-          balance: 0,
-          isLow: true,
-          hasCreditsForMessage: false,
-          deduct: () => false,
-          add,
-          setBalance,
-          refresh,
-        }
-      : {
-          balance: state.balance,
-          isLow: state.balance < LOW_CREDIT_THRESHOLD,
-          hasCreditsForMessage: state.balance >= 1,
-          deduct,
-          add,
-          setBalance,
-          refresh,
-        };
+  const currentBalance = balance ?? 0;
+  const value: CreditsContextValue = {
+    balance: currentBalance,
+    isLow: currentBalance < LOW_CREDIT_THRESHOLD,
+    hasCreditsForMessage: currentBalance >= 1,
+    deduct,
+    add,
+    setBalance,
+    refresh,
+  };
 
   return <CreditsContext.Provider value={value}>{children}</CreditsContext.Provider>;
 }

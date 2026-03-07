@@ -1,0 +1,62 @@
+{
+  "id": "claude-ai",
+  "name": "AI / Claude chat (proxy)",
+  "frameworks": [
+    "Foundation"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "AI",
+      "claude",
+      "chat",
+      "coach",
+      "recommend",
+      "analyze",
+      "generate plan",
+      "personalized",
+      "assistant",
+      "ask AI",
+      "AI advice"
+    ],
+    "excludeKeywords": []
+  },
+  "triggers": [
+    "AI",
+    "claude",
+    "chat",
+    "coach",
+    "recommend",
+    "analyze",
+    "generate plan",
+    "personalized"
+  ],
+  "promptBlock": "AI chat: Use the VibeTree AI proxy with URLSession. Send messages and a hardcoded system prompt; never ask the user to configure the system prompt.",
+  "promptInjection": "## AI / Claude chat — VibeTree proxy (URLSession only)\n\nUse the **VibeTree AI proxy** for any in-app AI chat, coach, recommendations, or personalized advice. Use **only** Foundation and SwiftUI; **no third-party packages**. All network calls must use **URLSession**.\n\n**Placeholders (mandatory):** In Swift code that calls the AI proxy, declare: `private let kApiBaseURL = \"__VIBETREE_API_BASE_URL__\"` and `private let kAppToken = \"__VIBETREE_APP_TOKEN__\"`. The build system replaces these at export time.\n\n**Endpoint:** POST `__VIBETREE_API_BASE_URL__/api/proxy/ai`\n- **Headers:** `Content-Type: application/json`, `X-App-Token: __VIBETREE_APP_TOKEN__` (use kAppToken in code).\n- **Body:** JSON `{ \"messages\": [ { \"role\": \"user\", \"content\": \"...\" } ], \"systemPrompt\": \"...\", \"userId\": \"<user-or-device-id>\" }`. Always include a **systemPrompt** that instructs Claude to respond in a specific JSON format matching what the Swift code will decode (e.g. \"Respond only with valid JSON in this shape: { \\\"answer\\\": string, \\\"suggestions\\\": [string] }\"). The server caps `maxTokens` at 1000.\n- **Response:** JSON `{ \"response\": \"<assistant text>\" }`. The Swift code must parse the proxy response as JSON looking for a **response** field. If JSON parsing fails, fall back to using the raw response string as the message text instead of showing an error. Never show \"Could not understand AI response\" or similar — always display something to the user (either the decoded message or the raw response). Handle 401 (unauthorized), 402 (insufficient credits), and 5xx with user-friendly messages; never expose raw API errors.\n\n**System prompt:** Always write a **hardcoded** `systemPrompt` in Swift that (1) matches what the app does (e.g. fitness coach, meal recommender) and (2) explicitly instructs Claude to respond with valid JSON only in a specific structure that the Swift code expects (define that structure in the prompt and decode it with JSONDecoder). Base it on the app's purpose — **never** ask the user to configure or enter a system prompt in the UI.\n\n**User/device id:** Include a `userId` in every request body. If the app has no sign-in, use a persistent device or anonymous id (e.g. from UserDefaults or UUID stored once). This is required for credit deduction.\n\n**Message sending flow (mandatory):** When the user taps send: (1) Immediately append the user message to the local messages array (e.g. @State var messages or @Published in an ObservableObject) and clear the input field — do this before starting the API call so the user sees their message right away. (2) Then start the URLSession request. (3) When the response arrives, append the assistant message to the messages array on the main thread: use DispatchQueue.main.async { ... } (or Task { @MainActor in ... }) so the UI updates. Never wait for the API response to show the user's message. Ensure the messages array is the single source of truth for the list (e.g. @State [ChatMessage] or @Published in a view model) so that when you append to it, the view re-renders; if using a class, call objectWillChange.send() before mutating if needed, or prefer a value type array with @State.\n\n**Constraints:** URLSession only; no third-party HTTP or AI SDKs. Parse response as JSON for the response field; on decode failure use the raw response string as the message. Always show the user some text — never an error like \"Could not understand AI response\".",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Using any third-party package or SDK for HTTP or AI (use URLSession only)",
+    "Calling the AI proxy without X-App-Token header",
+    "Asking the user to configure or type a system prompt in the app UI",
+    "Omitting userId from the request body",
+    "Exposing raw API error JSON or stack traces to the user",
+    "Waiting for the API response before appending the user message to the chat — append the user message immediately on send tap, then call the API",
+    "Appending the assistant response to the messages array from a background thread without DispatchQueue.main.async or @MainActor — UI updates must happen on the main thread"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 6,
+    "firstAttemptCompile": 3,
+    "compileRate": 50,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [
+      "Consecutive statements on a line must be separated by ';'",
+      "Expected expression",
+      "consecutive statements on a line must be separated by ';'",
+      "expected expression",
+      "result values in '? :' expression have mismatching types 'Color' and 'LinearGradient'"
+    ],
+    "goldenExamples": []
+  }
+}

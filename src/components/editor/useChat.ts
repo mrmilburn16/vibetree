@@ -449,6 +449,33 @@ export function useChat(
       fetch(`/api/projects/${projectId}/chat`, { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
+          const buildJob = data?.buildJob as { status?: string; error?: string } | undefined;
+          const isCancelled =
+            buildJob?.status === "failed" &&
+            typeof buildJob?.error === "string" &&
+            /cancelled|abandoned/i.test(buildJob.error);
+          if (isCancelled) {
+            if (validateTickRef.current?.intervalId) clearInterval(validateTickRef.current.intervalId);
+            validateTickRef.current = null;
+            setValidateProgressMessageId(null);
+            setValidateElapsedSeconds(-1);
+            setIsValidating(false);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.content.includes("Finalizing…") && m.content.includes("Waiting for runner…")
+                  ? { ...m, content: "Build was cancelled." }
+                  : m
+              )
+            );
+            const next = messagesRef.current.map((m) =>
+              m.content.includes("Finalizing…") && m.content.includes("Waiting for runner…")
+                ? { ...m, content: "Build was cancelled." }
+                : m
+            );
+            messagesRef.current = next;
+            saveChatMessagesToLocalStorage(projectId, next);
+            return;
+          }
           const serverMsgs = Array.isArray(data?.messages) ? (data.messages as ChatMessage[]) : [];
           const localLen = messagesRef.current.length;
           console.log("[poll] serverMsgs.length:", serverMsgs.length, "| messagesRef.current.length:", localLen);

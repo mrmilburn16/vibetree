@@ -45,8 +45,8 @@ function saveState(state: CreditState): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-/** Default included credits for Creator plan. */
-const DEFAULT_INCLUDED = 50;
+/** Default credits for new users (app generation + AI calls). Server uses same value in userCreditsFirestore. */
+const DEFAULT_INCLUDED = 10;
 
 /**
  * Get current credit state, resetting balance to included amount if we're in a new month.

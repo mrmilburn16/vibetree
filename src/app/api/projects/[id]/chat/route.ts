@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getProjectChat, setProjectChat } from "@/lib/projectChatStore";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
+import { getAllBuildJobs } from "@/lib/buildJobs";
 
 export const runtime = "nodejs";
 
@@ -48,7 +49,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return auth;
   }
   const chat = await getProjectChat(id);
-  return NextResponse.json({ projectId: id, updatedAt: chat?.updatedAt ?? null, messages: chat?.messages ?? [] });
+  const allJobs = getAllBuildJobs();
+  const latestJob = allJobs
+    .filter((j) => j.request?.projectId === id)
+    .sort((a, b) => b.createdAt - a.createdAt)[0];
+  const buildJob =
+    latestJob ?
+      { id: latestJob.id, status: latestJob.status, error: latestJob.error ?? undefined }
+    : undefined;
+  return NextResponse.json({
+    projectId: id,
+    updatedAt: chat?.updatedAt ?? null,
+    messages: chat?.messages ?? [],
+    ...(buildJob && { buildJob }),
+  });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
