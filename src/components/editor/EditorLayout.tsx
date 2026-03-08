@@ -236,6 +236,7 @@ export function EditorLayout({
       compilerErrors?: string[];
       errorHistory?: Array<{ attempt: number; errors: string[] }>;
       fileNames?: string[];
+      sourceFiles?: Array<{ path: string; content: string }>;
     }> => {
       if (typeof window === "undefined") return { status: "failed", error: "Not in browser" };
       let files: Array<{ path: string; content: string }> = [];
@@ -246,7 +247,15 @@ export function EditorLayout({
       try {
         const raw = localStorage.getItem(`${PROJECT_FILES_PREFIX}${projectId}`);
         const parsed = raw ? JSON.parse(raw) : null;
-        files = Array.isArray(parsed?.files) ? parsed.files : [];
+        const storedFiles = Array.isArray(parsed?.files) ? parsed.files : [];
+        if (storedFiles.length > 0) {
+          try {
+            localStorage.setItem(`${PROJECT_FILES_PREFIX}${projectId}`, JSON.stringify({ updatedAt: Date.now() }));
+          } catch {
+            // ignore
+          }
+        }
+        files = [];
         const projectsRaw = localStorage.getItem("vibetree-projects");
         const projects = projectsRaw ? JSON.parse(projectsRaw) : [];
         const p = Array.isArray(projects) ? projects.find((x: { id?: string }) => x?.id === projectId) : null;
@@ -360,6 +369,7 @@ export function EditorLayout({
             compilerErrors: errors,
             ...(errorHistory?.length ? { errorHistory } : {}),
             fileNames: fNames,
+            sourceFiles: Array.isArray(job?.request?.files) ? job.request.files : undefined,
           };
         }
         await new Promise((r) => setTimeout(r, VALIDATE_POLL_MS));

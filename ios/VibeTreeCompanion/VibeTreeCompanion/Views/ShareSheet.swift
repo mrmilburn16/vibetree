@@ -35,8 +35,8 @@ struct ShareSheet: View {
                 }
             }
             .onAppear {
-                let base = UserDefaults.standard.string(forKey: "serverURL") ?? "https://vibetree.app"
-                shareURL = "\(base)/share/\(project.id)"
+                let base = UserDefaults.standard.string(forKey: "serverURL") ?? ""
+                shareURL = base.isEmpty ? "" : "\(base)/share/\(project.id)"
             }
         }
         .preferredColorScheme(.dark)
@@ -184,9 +184,9 @@ struct ShareSheet: View {
 
         Task {
             do {
-                let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
-                guard let url = URL(string: "\(baseURL)/api/projects/\(project.id)/invite-testers") else {
-                    inviteStatus = .error("Invalid server URL")
+                let baseURL = (UserDefaults.standard.string(forKey: "serverURL") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !baseURL.isEmpty, let url = URL(string: "\(baseURL)/api/projects/\(project.id)/invite-testers") else {
+                    inviteStatus = .error(baseURL.isEmpty ? "Set Server URL in Settings" : "Invalid server URL")
                     return
                 }
                 var req = URLRequest(url: url)

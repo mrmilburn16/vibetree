@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getProject, setProject, type ProjectRecord } from "@/lib/projectStore";
-import { setProjectFiles } from "@/lib/projectFileStore";
+import { getProjectFilesAsync, setProjectFiles } from "@/lib/projectFileStore";
 import { createBuildJob } from "@/lib/buildJobs";
 import { isRunnerOnline } from "@/lib/runnerStore";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
@@ -88,7 +88,13 @@ export async function POST(
     ? body.developmentTeam.trim()
     : process.env.DEFAULT_DEVELOPMENT_TEAM ?? "";
   const filesRaw = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : undefined;
-  const files = filesRaw ? normalizeSwiftFiles(filesRaw) : undefined;
+  let files: SwiftFile[] | undefined = filesRaw ? normalizeSwiftFiles(filesRaw) : undefined;
+  if (!files?.length) {
+    const store = await getProjectFilesAsync(projectId);
+    if (store && Object.keys(store).length > 0) {
+      files = Object.keys(store).map((p) => ({ path: p, content: store[p] ?? "" }));
+    }
+  }
   const userPrompt = typeof body?.userPrompt === "string" ? body.userPrompt : undefined;
 
   const project = getProject(projectId)!;
@@ -115,7 +121,7 @@ export async function POST(
     projectId,
     projectName: project.name || providedName || "Untitled app",
     bundleId,
-    ...(files ? { files } : {}),
+    ...(files?.length ? { files } : {}),
     ...(providedTeam ? { developmentTeam: providedTeam } : {}),
     ...(userPrompt ? { userPrompt } : {}),
     autoFix,

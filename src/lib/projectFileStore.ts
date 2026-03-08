@@ -1,15 +1,18 @@
 /**
- * In-memory + disk-backed store for generated Swift file contents per project.
+ * In-memory + disk + Firestore store for generated Swift file contents per project.
  * Keyed by project id; each project has a map of path -> content.
  * Used after parsing structured LLM output; export reads from here.
  *
- * On setProjectFiles the data is written to .vibetree-cache/<projectId>.json
- * so files survive dev-server restarts. getProjectFiles hydrates from disk
- * when the in-memory entry is missing.
+ * - setProjectFiles: writes to memory, .vibetree-cache/<projectId>.json, and Firestore.
+ * - getProjectFiles: reads from memory; if missing, disk; if missing, Firestore (async hydrate).
  */
 
 import fs from "fs";
 import path from "path";
+import {
+  getProjectFilesFromFirestore,
+  setProjectFilesInFirestore,
+} from "@/lib/projectFilesFirestore";
 
 export interface ProjectFiles {
   [filePath: string]: string;
@@ -66,16 +69,47 @@ export function setProjectFiles(
   }
   store.set(projectId, next);
   persistToDisk(projectId, next);
+  setProjectFilesInFirestore(projectId, next).catch(() => {});
 }
+
+/** Pending Firestore hydrations so we don't duplicate in-flight requests. */
+const firestoreHydrating = new Set<string>();
 
 export function getProjectFiles(projectId: string): ProjectFiles | undefined {
   const mem = store.get(projectId);
   if (mem) return mem;
-
   const disk = loadFromDisk(projectId);
   if (disk) {
     store.set(projectId, disk);
     return disk;
+  }
+  if (!firestoreHydrating.has(projectId)) {
+    firestoreHydrating.add(projectId);
+    getProjectFilesFromFirestore(projectId).then((fromFirestore) => {
+      firestoreHydrating.delete(projectId);
+      if (fromFirestore && Object.keys(fromFirestore).length > 0) {
+        store.set(projectId, fromFirestore);
+        persistToDisk(projectId, fromFirestore);
+      }
+    }).catch(() => { firestoreHydrating.delete(projectId); });
+  }
+  return undefined;
+}
+
+/** Async version that waits for Firestore if needed. Use when caller can await (e.g. API routes). */
+export async function getProjectFilesAsync(projectId: string): Promise<ProjectFiles | undefined> {
+  const mem = store.get(projectId);
+  if (mem) return mem;
+  const disk = loadFromDisk(projectId);
+  if (disk) {
+    store.set(projectId, disk);
+    return disk;
+  }
+  const fromFirestore = await getProjectFilesFromFirestore(projectId);
+  if (fromFirestore && Object.keys(fromFirestore).length > 0) {
+    store.set(projectId, fromFirestore);
+    persistToDisk(projectId, fromFirestore);
+    return fromFirestore;
   }
   return undefined;
 }

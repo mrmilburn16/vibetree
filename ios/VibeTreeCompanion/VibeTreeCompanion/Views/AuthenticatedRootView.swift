@@ -16,7 +16,7 @@ struct AuthenticatedRootView: View {
             }
             .task(id: deepLink.pendingProjectId) {
                 guard let projectId = deepLink.pendingProjectId, !projectId.isEmpty else { return }
-                let serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
+                let serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? ""
                 print("[DeepLink] task running for projectId:", projectId, "serverURL:", serverURL)
                 do {
                     let project = try await APIService.shared.fetchProject(id: projectId)

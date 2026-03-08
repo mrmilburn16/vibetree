@@ -333,8 +333,8 @@ struct ProjectSettingsSheet: View {
 
     private func exportXcodeZip() {
         exportLoading = true
-        let baseURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
-        guard let url = URL(string: "\(baseURL)/api/projects/\(project.id)/export-xcode") else {
+        let baseURL = (UserDefaults.standard.string(forKey: "serverURL") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !baseURL.isEmpty, let url = URL(string: "\(baseURL)/api/projects/\(project.id)/export-xcode") else {
             exportLoading = false
             return
         }

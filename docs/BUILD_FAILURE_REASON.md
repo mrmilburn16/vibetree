@@ -66,3 +66,20 @@ To make “why it failed” visible on the admin page and persistent:
 4. **On the admin builds page**, for failed builds, show **`result.errorMessage`** (e.g. above or beside the error history) when present.
 
 That way the same reason that appears in the chat will be stored and shown on the build card.
+
+---
+
+## 6. Execution path: code generation → build (where Swift sanitizer runs)
+
+**Sanitizer:** `sanitizeSwiftPostGeneration` in `src/lib/llm/fixSwift.ts`, invoked at the start of `fixSwiftCommonIssues` for every `.swift` file. It fixes patterns that cause "Consecutive statements on a line must be separated by ';'".
+
+**Where `fixSwiftCommonIssues` runs:**
+
+| Step | Route / code | When |
+|------|--------------|------|
+| 1. Stream save | `message/stream/route.ts` | When the LLM returns files: only if `projectType === "pro"` (Swift). Non‑pro projects do not run fixSwift on save. |
+| 2. Non‑stream save | `message/route.ts` | When the LLM returns files (non‑streaming path). |
+| 3. **Export for build** | **`export-xcode/route.ts` → `buildZipFromSwiftFiles`** | **Every zip used for build:** GET (files from server) or POST (e.g. runner sends `job.request.files`). Swift files are passed through `fixSwiftCommonIssues` before building the zip. |
+| 4. Auto‑fix retry | `auto-fix-build/route.ts` | After merging LLM‑fixed files, before creating the retry job. |
+
+**Build flow:** User triggers build → `validate-xcode` (or `build-install`) creates a build job with `request.files` (from client or server). Runner claims job → calls **POST** `/api/projects/[id]/export-xcode` with `body.files = job.request.files` (or GET without body). **Export-xcode runs `fixSwiftCommonIssues(files)`** and returns the zip. Runner unzips and runs `xcodebuild`. So the **sanitizer always runs on the code that is actually built**; if "Consecutive statements" still appears, the failing line likely doesn’t match the current sanitizer patterns (e.g. two `let`/`var` on one line) and the patterns in `sanitizeSwiftPostGeneration` may need to be extended.

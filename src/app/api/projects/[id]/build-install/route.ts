@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getProject, setProject, type ProjectRecord } from "@/lib/projectStore";
-import { getProjectFiles, getProjectFilePaths, setProjectFiles } from "@/lib/projectFileStore";
+import { getProjectFiles, getProjectFilesAsync, getProjectFilePaths, setProjectFiles } from "@/lib/projectFileStore";
 import { createBuildJob } from "@/lib/buildJobs";
 import { isRunnerOnline } from "@/lib/runnerStore";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
@@ -69,10 +69,9 @@ export async function POST(
 
   let files = clientFiles;
   if (files.length === 0) {
-    const paths = getProjectFilePaths(projectId);
-    const store = getProjectFiles(projectId);
-    if (paths.length > 0 && store) {
-      files = paths.map((p) => ({ path: p, content: store[p] ?? "" }));
+    const store = getProjectFiles(projectId) ?? await getProjectFilesAsync(projectId);
+    if (store && Object.keys(store).length > 0) {
+      files = Object.keys(store).map((p) => ({ path: p, content: store[p] ?? "" }));
     }
   }
 

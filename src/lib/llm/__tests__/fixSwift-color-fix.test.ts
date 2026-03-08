@@ -108,3 +108,34 @@ describe("fixSwift: black/flat background → subtle gradient", () => {
     expect(result[0].content).not.toMatch(/Color\(\s*\.systemBackground\s*\)\s*\.ignoresSafeArea/);
   });
 });
+
+describe("fixSwift: consecutive statements (sanitizeSwiftPostGeneration)", () => {
+  it("splits multiple let on one line so Swift does not require semicolons", () => {
+    const content = "func foo() { let a = 1 let b = 2 return a + b }";
+    const files = [{ path: "AppState.swift", content }];
+    const result = fixSwiftCommonIssues(files);
+    expect(result[0].content).toContain("let a = 1\nlet b = 2");
+    expect(result[0].content).not.toMatch(/let a = 1 let b = 2/);
+  });
+
+  it("splits multiple var on one line", () => {
+    const content = "var x = 0 var y = 1";
+    const files = [{ path: "A.swift", content }];
+    const result = fixSwiftCommonIssues(files);
+    expect(result[0].content).toContain("var x = 0\nvar y = 1");
+  });
+
+  it("does not split \" let \" inside a string literal", () => {
+    const content = 'let s = " something let something"';
+    const files = [{ path: "A.swift", content }];
+    const result = fixSwiftCommonIssues(files);
+    expect(result[0].content).toContain('" something let something"');
+  });
+
+  it("splits )identifier( so consecutive statements are on separate lines", () => {
+    const content = "func f() { })appendItem(x)";
+    const files = [{ path: "A.swift", content }];
+    const result = fixSwiftCommonIssues(files);
+    expect(result[0].content).toMatch(/\)\s*\n\s*appendItem\s*\(/);
+  });
+});

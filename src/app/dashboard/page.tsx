@@ -131,10 +131,11 @@ export default function DashboardPage() {
     }
     console.log("[dashboard] fetching projects for user:", user?.uid);
     try {
-      const res = await fetch("/api/projects");
+      const res = await fetch("/api/projects", { credentials: "include" });
       if (res.status === 401) {
         setProjectsFetchError("session_expired");
-        console.log("[dashboard] projects result:", JSON.stringify([]), "error:", "session_expired");
+        setProjects([]);
+        console.log("[dashboard] projects: 401, session expired");
         return;
       }
       if (!res.ok) throw res;
@@ -150,11 +151,11 @@ export default function DashboardPage() {
       }));
       setProjects(normalized);
       saveProjects(normalized);
-      console.log("[dashboard] projects result:", JSON.stringify(normalized), "error:", null);
+      console.log("[dashboard] projects loaded from API:", normalized.length, "projects");
     } catch (err) {
       setProjectsFetchError("network");
       setProjects(getProjects());
-      console.log("[dashboard] projects result:", JSON.stringify(getProjects()), "error:", err);
+      console.warn("[dashboard] projects fetch failed:", err);
     } finally {
       setProjectsLoading(false);
     }

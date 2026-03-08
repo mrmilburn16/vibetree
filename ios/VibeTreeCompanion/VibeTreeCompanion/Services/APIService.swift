@@ -4,7 +4,7 @@ actor APIService {
     static let shared = APIService()
 
     private var baseURL: String {
-        UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
+        UserDefaults.standard.string(forKey: "serverURL") ?? ""
     }
 
     private var apiToken: String {
@@ -21,7 +21,8 @@ actor APIService {
     }()
 
     private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
-        guard let url = URL(string: "\(baseURL)\(path)") else {
+        let base = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty, let url = URL(string: base.hasSuffix("/") ? "\(base.dropLast())\(path)" : "\(base)\(path)") else {
             throw APIError.invalidURL
         }
         var req = URLRequest(url: url)
@@ -146,7 +147,8 @@ actor APIService {
     }
 
     func streamMessageRequest(projectId: String, message: String, model: String, projectType: String) async throws -> URLRequest {
-        guard let url = URL(string: "\(baseURL)/api/projects/\(projectId)/message/stream") else {
+        let base = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty, let url = URL(string: "\(base)/api/projects/\(projectId)/message/stream") else {
             throw APIError.invalidURL
         }
         var req = URLRequest(url: url)
@@ -188,7 +190,9 @@ actor APIService {
     }
 
     func exportXcodeURL(projectId: String) -> URL? {
-        URL(string: "\(baseURL)/api/projects/\(projectId)/export-xcode")
+        let base = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else { return nil }
+        return URL(string: "\(base)/api/projects/\(projectId)/export-xcode")
     }
 
     func triggerDeviceInstall(projectId: String) async throws -> String {

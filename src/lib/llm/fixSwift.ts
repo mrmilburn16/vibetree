@@ -1,6 +1,44 @@
 export type SwiftTextFile = { path: string; content: string };
 
 /**
+ * Post-generation sanitization: fix common LLM output bugs that cause
+ * "Consecutive statements on a line must be separated by ';'" and similar.
+ * Runs only in code regions (not inside string literals) where applicable.
+ */
+function sanitizeSwiftPostGeneration(content: string): string {
+  let c = content;
+
+  // Strip markdown code fence lines (standalone ``` or ```json at line start/end)
+  c = c.replace(/^\s*```\w*\s*$/gm, "");
+  c = c.replace(/^\s*```\s*$/gm, "");
+  c = c.replace(/\n{3,}/g, "\n\n");
+
+  // Split multiple statements on one line: ")identifier(" → ")\nidentifier(" (e.g. )workoutHistory.append()
+  c = replaceOutsideStringLiterals(c, /\)([a-zA-Z_][a-zA-Z0-9_]*\s*\()/g, ")\n$1");
+  // ") let ", ") var ", ") return ", etc. → newline before statement
+  c = replaceOutsideStringLiterals(
+    c,
+    /\)\s*(let |var |return |if |guard |try |for |while )/g,
+    ")\n$1"
+  );
+  // "} let ", "} var ", etc. (e.g. closing brace then new statement)
+  c = replaceOutsideStringLiterals(
+    c,
+    /\}\s*(let |var |return |if |guard |try |for |while )/g,
+    "}\n$1"
+  );
+
+  // Multiple declarations on one line: "let a = 1 let b = 2" → newline before 2nd+ let/var (code only)
+  c = splitMultipleLetVarOnLineOutsideStrings(c);
+
+  // Remove unclosed string interpolation at end of line: \( with no ) on same line
+  c = c.replace(/\\(\s*)$/gm, "");
+  c = c.replace(/\\(\s*\n)/g, "\n");
+
+  return c;
+}
+
+/**
  * Apply a regex replacement only in code regions — never inside Swift string literals.
  * Prevents sanitization from corrupting e.g. "Ferrari carColorColor" in MockData.
  */
@@ -33,6 +71,43 @@ function replaceOutsideStringLiterals(
   return parts.join("");
 }
 
+/** Split multiple let/var on the same line (only in code, not inside string literals). */
+function splitMultipleLetVarOnLineOutsideStrings(content: string): string {
+  // Match start-of-line or whitespace, then "let " or "var " so we treat line-initial var/let too
+  const declPattern = /(^|\s+)(let |var )/g;
+  const stringLiteral = /"([^"\\]|\\.)*"/g;
+  const parts: string[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = stringLiteral.exec(content)) !== null) {
+    const codeSlice = content.slice(lastIndex, match.index);
+    parts.push(
+      codeSlice.split("\n").map((line) => {
+        let first = true;
+        return line.replace(declPattern, (m, prefix, kw) => {
+          const keep = first;
+          first = false;
+          return keep ? m : "\n" + kw;
+        });
+      }).join("\n")
+    );
+    parts.push(match[0]);
+    lastIndex = stringLiteral.lastIndex;
+  }
+  const tail = content.slice(lastIndex);
+  parts.push(
+    tail.split("\n").map((line) => {
+      let first = true;
+      return line.replace(declPattern, (m, prefix, kw) => {
+        const keep = first;
+        first = false;
+        return keep ? m : "\n" + kw;
+      });
+    }).join("\n")
+  );
+  return parts.join("");
+}
+
 /**
  * Best-effort fixes for common, safe-to-repair SwiftUI compile issues in LLM output.
  * Applied to every file both during initial generation and after auto-fix.
@@ -42,6 +117,7 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
     if (!f?.path?.endsWith(".swift") || typeof f.content !== "string") return f;
 
     let content = f.content;
+    content = sanitizeSwiftPostGeneration(content);
 
     if (!content.includes("@Bindable")) {
       content = content.replace(/\$viewModel(?!\.)/g, "viewModel");

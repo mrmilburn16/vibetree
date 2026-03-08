@@ -25,15 +25,16 @@ export interface ChatMessage {
 const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
 const CHAT_MESSAGES_STORAGE_PREFIX = "vibetree-chat-messages:";
 
+/** Store only a lightweight stub (no file contents) to avoid localStorage quota. Full files live on the server; fetch via GET /api/projects/[id]/files when needed. */
 function saveProjectFilesToLocalStorage(
   projectId: string,
-  files: Array<{ path: string; content: string }>
+  _files: Array<{ path: string; content: string }>
 ) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || _files.length === 0) return;
   try {
     localStorage.setItem(
       `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`,
-      JSON.stringify({ updatedAt: Date.now(), files })
+      JSON.stringify({ updatedAt: Date.now() })
     );
   } catch {
     // ignore quota errors
@@ -277,6 +278,7 @@ export function useChat(
       compilerErrors?: string[];
       errorHistory?: Array<{ attempt: number; errors: string[] }>;
       fileNames?: string[];
+      sourceFiles?: Array<{ path: string; content: string }>;
     }>;
   }
 ) {
@@ -1070,6 +1072,10 @@ export function useChat(
                     ...(typeof estimatedCostUsd === "number" && estimatedCostUsd >= 0 && { generationCostUsd: estimatedCostUsd }),
                     ...(Array.isArray(result.errorHistory) && result.errorHistory.length > 0 && { errorHistory: result.errorHistory }),
                     ...(result.status === "failed" && result.error && { errorMessage: result.error }),
+                    ...(Array.isArray(result.sourceFiles) &&
+                      result.sourceFiles.length > 0 &&
+                      ((result.compilerErrors?.length ?? 0) > 0 || (result.errorHistory?.length ?? 0) > 0) &&
+                      { sourceFiles: result.sourceFiles }),
                   }),
                 }).catch((err) => Sentry.captureException(err));
                 const validationLine =

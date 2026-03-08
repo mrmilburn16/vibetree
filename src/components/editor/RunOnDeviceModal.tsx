@@ -374,20 +374,25 @@ export function RunOnDeviceModal({
             `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`
           );
           const parsed = raw ? JSON.parse(raw) : null;
-          files = Array.isArray(parsed?.files) ? parsed.files : [];
-        } catch {}
-      }
-      if (files.length === 0) {
-        try {
-          const filesRes = await fetch(`/api/projects/${projectId}/files`);
-          if (filesRes.ok) {
-            const data = (await filesRes.json()) as { files?: { path: string; content: string }[] };
-            if (Array.isArray(data.files) && data.files.length > 0) {
-              files = data.files;
-            }
+          if (Array.isArray(parsed?.files) && parsed.files.length > 0) {
+            try {
+              localStorage.setItem(
+                `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`,
+                JSON.stringify({ updatedAt: Date.now() })
+              );
+            } catch {}
           }
         } catch {}
       }
+      try {
+        const filesRes = await fetch(`/api/projects/${projectId}/files`);
+        if (filesRes.ok) {
+          const data = (await filesRes.json()) as { files?: { path: string; content: string }[] };
+          if (Array.isArray(data.files) && data.files.length > 0) {
+            files = data.files;
+          }
+        }
+      } catch {}
 
       let projectName = "Untitled app";
       let bundleId = "";
@@ -494,19 +499,27 @@ export function RunOnDeviceModal({
 
       if (typeof window !== "undefined") {
         try {
+          let files: { path: string; content: string }[] = [];
           const raw = localStorage.getItem(
             `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`
           );
           const parsed = raw ? JSON.parse(raw) : null;
-          const files = Array.isArray(parsed?.files) ? parsed.files : [];
-          if (files.length > 0) {
+          if (Array.isArray(parsed?.files) && parsed.files.length > 0) {
             try {
-              await fetch(`/api/projects/${projectId}/files`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ files }),
-              });
+              localStorage.setItem(
+                `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`,
+                JSON.stringify({ updatedAt: Date.now() })
+              );
             } catch {}
+          }
+          const filesRes = await fetch(`/api/projects/${projectId}/files`);
+          if (filesRes.ok) {
+            const data = (await filesRes.json()) as { files?: { path: string; content: string }[] };
+            if (Array.isArray(data.files) && data.files.length > 0) {
+              files = data.files;
+            }
+          }
+          if (files.length > 0) {
             let projectName = "Untitled app";
             let bundleId = "";
             try {

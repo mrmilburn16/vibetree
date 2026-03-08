@@ -63,6 +63,8 @@ export type BuildResult = {
   visionTestReport?: VisionTestReportStored | null;
   /** Estimated API cost in USD for the generation that produced this build (chat/stream). */
   generationCostUsd?: number | null;
+  /** Source code of Swift files that had compiler errors (path -> content), for admin display. */
+  sourceFiles?: Record<string, string> | null;
 };
 
 function getDb() {
@@ -112,6 +114,7 @@ function toFirestorePayload(result: BuildResult): Record<string, unknown> {
     issueTags: result.issueTags ?? [],
     visionTestReport: vision ? stripScreenshotsFromReport(vision) ?? null : null,
     generationCostUsd: typeof result.generationCostUsd === "number" ? result.generationCostUsd : null,
+    ...(result.sourceFiles && Object.keys(result.sourceFiles).length > 0 && { sourceFiles: result.sourceFiles }),
   };
 }
 
@@ -148,7 +151,16 @@ function fromFirestoreData(id: string, data: Record<string, unknown>): BuildResu
     issueTags: Array.isArray(data.issueTags) ? data.issueTags : [],
     visionTestReport: vision && typeof vision === "object" ? { ...vision, screenshots: Array.isArray(vision.screenshots) ? vision.screenshots : [] } : null,
     generationCostUsd: typeof data.generationCostUsd === "number" ? data.generationCostUsd : null,
+    sourceFiles:
+      data.sourceFiles && typeof data.sourceFiles === "object" && !Array.isArray(data.sourceFiles)
+        ? (data.sourceFiles as Record<string, string>)
+        : undefined,
   };
+}
+
+/** Normalize a compiler error line for grouping (strip file:line prefix). Same logic as commonErrors. */
+export function normalizeCompilerErrorForGrouping(line: string): string {
+  return line.replace(/\S+\.swift:\d+(:\d+)?:\s*/, "").trim();
 }
 
 function generateId(): string {
@@ -196,11 +208,21 @@ export async function logBuildResult(
   return result;
 }
 
-export async function getAllBuildResults(): Promise<BuildResult[]> {
+export type GetBuildResultsOptions = {
+  /** ISO date string; only results with timestamp >= since are returned. */
+  since?: string;
+  limit?: number;
+};
+
+export async function getAllBuildResults(options?: GetBuildResultsOptions): Promise<BuildResult[]> {
   const db = getDb();
   if (!db) return [];
+  const limit = options?.limit ?? 2000;
   try {
-    const snap = await db.collection(COLLECTION).orderBy("timestamp", "desc").get();
+    const coll = db.collection(COLLECTION);
+    const snap = options?.since
+      ? await coll.where("timestamp", ">=", options.since).orderBy("timestamp", "desc").limit(limit).get()
+      : await coll.orderBy("timestamp", "desc").limit(limit).get();
     return snap.docs.map((d) => fromFirestoreData(d.id, d.data()));
   } catch {
     return [];
@@ -291,7 +313,12 @@ export async function updateBuildResult(
   }
 }
 
-export async function getBuildStats(): Promise<{
+export type GetBuildStatsOptions = {
+  /** ISO date string; only builds with timestamp >= since are included in stats. */
+  since?: string;
+};
+
+export async function getBuildStats(options?: GetBuildStatsOptions): Promise<{
   total: number;
   compiled: number;
   failed: number;
@@ -304,7 +331,10 @@ export async function getBuildStats(): Promise<{
   avgDesignScore: number | null;
   avgFunctionalScore: number | null;
 }> {
-  const results = await getAllBuildResults();
+  const results = await getAllBuildResults({
+    since: options?.since,
+    limit: 5000,
+  });
   const total = results.length;
   if (total === 0) {
     return {
@@ -342,7 +372,7 @@ export async function getBuildStats(): Promise<{
     if (r.compiled) byCategory[cat].compiled++;
 
     for (const e of r.compilerErrors) {
-      const normalized = e.replace(/\S+\.swift:\d+(:\d+)?:\s*/, "").trim();
+      const normalized = normalizeCompilerErrorForGrouping(e);
       if (normalized) errorCounts[normalized] = (errorCounts[normalized] || 0) + 1;
     }
   }

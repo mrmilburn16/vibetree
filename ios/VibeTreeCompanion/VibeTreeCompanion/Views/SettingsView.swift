@@ -3,7 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("serverURL") private var serverURL = "http://192.168.12.40:3001"
+    @AppStorage("serverURL") private var serverURL = ""
     @AppStorage("apiToken") private var apiToken = ""
     @StateObject private var notifications = NotificationService.shared
     @StateObject private var auth = AuthService.shared

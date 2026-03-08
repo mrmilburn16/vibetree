@@ -70,6 +70,8 @@ type BuildResult = {
   issueTags: string[];
   /** Estimated API cost in USD for the generation that produced this build. */
   generationCostUsd?: number | null;
+  /** Source code of Swift files that had compiler errors (path -> content), for display. */
+  sourceFiles?: Record<string, string> | null;
 };
 
 /** One attempt's compiler errors in error history. */
@@ -107,6 +109,152 @@ type Stats = {
   avgDesignScore: number | null;
   avgFunctionalScore: number | null;
 };
+
+type DateRangeKey = "today" | "7d" | "30d" | "all";
+
+const DATE_RANGE_OPTIONS: SelectOption[] = [
+  { value: "today", label: "Today" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "all", label: "All time" },
+];
+
+function sinceParam(range: DateRangeKey): string | undefined {
+  if (range === "all") return undefined;
+  const now = new Date();
+  if (range === "today") {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  }
+  const d = new Date(now);
+  d.setDate(d.getDate() - (range === "7d" ? 7 : 30));
+  return d.toISOString();
+}
+
+/** Normalize compiler error for grouping (match server logic). */
+function normalizeError(line: string): string {
+  return line.replace(/\S+\.swift:\d+(:\d+)?:\s*/, "").trim();
+}
+
+function buildContainsError(b: BuildResult, normalizedError: string): boolean {
+  const all = [
+    ...b.compilerErrors,
+    ...(b.errorHistory ?? []).flatMap((e) => e.errors ?? []),
+  ];
+  return all.some((e) => normalizeError(e) === normalizedError);
+}
+
+type ErrorPatternStatusValue = "Open" | "Fixed" | "Wontfix" | "Regression";
+type ErrorPatternStatusDoc = {
+  error: string;
+  status: ErrorPatternStatusValue;
+  fixedAt: string | null;
+  updatedAt: string;
+};
+
+/** Parse "Path.swift:85:69: error: ..." -> { fileRef, line }. */
+function parseErrorLocations(errors: string[]): Array<{ fileRef: string; line: number }> {
+  const out: Array<{ fileRef: string; line: number }> = [];
+  for (const line of errors) {
+    const m = line.match(/([^\s:]+\.swift):(\d+)(?::\d+)?/);
+    if (m) out.push({ fileRef: m[1], line: parseInt(m[2], 10) });
+  }
+  return out;
+}
+
+/** Build map: source path -> set of line numbers that have errors. */
+function errorLinesBySourcePath(
+  errors: string[],
+  errorHistory: Array<{ attempt: number; errors: string[] }> | undefined,
+  sourcePaths: string[]
+): Record<string, Set<number>> {
+  const locations = parseErrorLocations(errors);
+  if (Array.isArray(errorHistory)) {
+    for (const e of errorHistory) for (const loc of parseErrorLocations(e.errors ?? [])) locations.push(loc);
+  }
+  const byPath: Record<string, Set<number>> = {};
+  for (const path of sourcePaths) {
+    const set = new Set<number>();
+    const base = path.split("/").pop() ?? path;
+    for (const { fileRef, line } of locations) {
+      if (path === fileRef || path.endsWith("/" + fileRef) || base === fileRef) set.add(line);
+    }
+    if (set.size > 0) byPath[path] = set;
+  }
+  return byPath;
+}
+
+function FailingSourceView({
+  compilerErrors,
+  errorHistory,
+  sourceFiles,
+  className = "",
+  defaultExpanded = false,
+}: {
+  compilerErrors: string[];
+  errorHistory?: Array<{ attempt: number; errors: string[] }>;
+  sourceFiles: Record<string, string>;
+  className?: string;
+  defaultExpanded?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultExpanded);
+  useEffect(() => {
+    if (defaultExpanded) setOpen(true);
+  }, [defaultExpanded]);
+  const paths = Object.keys(sourceFiles);
+  const errorLines = useMemo(
+    () => errorLinesBySourcePath(compilerErrors, errorHistory, paths),
+    [compilerErrors, errorHistory, paths]
+  );
+  const filesWithErrors = paths.filter((p) => (errorLines[p]?.size ?? 0) > 0);
+  if (filesWithErrors.length === 0) return null;
+  return (
+    <div className={className}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between text-left text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+      >
+        Failing source ({filesWithErrors.length} file{filesWithErrors.length !== 1 ? "s" : ""})
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-tertiary)] p-3">
+          {filesWithErrors.map((path) => {
+            const content = sourceFiles[path] ?? "";
+            const lines = content.split("\n");
+            const highlight = errorLines[path];
+            return (
+              <div key={path}>
+                <p className="mb-1.5 font-mono text-[10px] font-medium text-[var(--text-tertiary)]">{path}</p>
+                <div className="overflow-x-auto rounded border border-[var(--border-default)] bg-[var(--background-elevated)]">
+                  <table className="w-full border-collapse font-mono text-xs text-[var(--text-secondary)]">
+                    <tbody>
+                      {lines.map((line, i) => {
+                        const lineNum = i + 1;
+                        const isError = highlight?.has(lineNum);
+                        return (
+                          <tr
+                            key={lineNum}
+                            className={isError ? "bg-[var(--badge-error)]/20" : ""}
+                          >
+                            <td className="w-10 shrink-0 select-none border-r border-[var(--border-default)] pr-2 text-right align-top text-[var(--text-tertiary)]">
+                              {lineNum}
+                            </td>
+                            <td className="min-w-0 whitespace-pre break-all pl-2">{line || " "}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CompilerErrorsBlock({ errors, className = "" }: { errors: string[]; className?: string }) {
   const [open, setOpen] = useState(false);
@@ -208,6 +356,7 @@ function ResultRow({
   onReTestVision,
   onStopVisionTest,
   claudeAutoPopulated,
+  selectedErrorFilter = null,
 }: {
   result: BuildResult;
   onUpdate: () => void;
@@ -220,6 +369,7 @@ function ResultRow({
   onReTestVision?: () => void;
   onStopVisionTest?: () => void;
   claudeAutoPopulated?: { functionality?: boolean; notes?: boolean; screenshot?: boolean };
+  selectedErrorFilter?: string | null;
 }) {
   const [notes, setNotes] = useState(result.userNotes);
   const [saving, setSaving] = useState(false);
@@ -457,6 +607,17 @@ Based on this, should we fix the system prompt, a skill file, or both? If so, gi
       ) : (
         <CompilerErrorsBlock errors={result.compilerErrors} className="mt-3 border-t border-[var(--border-default)] pt-3" />
       )}
+      {result.sourceFiles &&
+        Object.keys(result.sourceFiles).length > 0 &&
+        (result.compilerErrors.length > 0 || (result.errorHistory?.length ?? 0) > 0) && (
+          <FailingSourceView
+            compilerErrors={result.compilerErrors}
+            errorHistory={result.errorHistory}
+            sourceFiles={result.sourceFiles}
+            className="mt-3 border-t border-[var(--border-default)] pt-3"
+            defaultExpanded={!!(selectedErrorFilter && buildContainsError(result, selectedErrorFilter))}
+          />
+        )}
 
       <div className="mt-3 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
@@ -821,9 +982,50 @@ function StatCard({
   );
 }
 
-function StatsPanel({ stats }: { stats: Stats }) {
+function StatsPanel({
+  stats,
+  dateRange,
+  onDateRangeChange,
+  showFailuresOnly,
+  onShowFailuresOnlyChange,
+  errorStatuses,
+  selectedErrorFilter,
+  onSelectErrorFilter,
+  onSetErrorStatus,
+}: {
+  stats: Stats;
+  dateRange: DateRangeKey;
+  onDateRangeChange: (v: DateRangeKey) => void;
+  showFailuresOnly: boolean;
+  onShowFailuresOnlyChange: (v: boolean) => void;
+  errorStatuses: Record<string, ErrorPatternStatusDoc>;
+  selectedErrorFilter: string | null;
+  onSelectErrorFilter: (error: string | null) => void;
+  onSetErrorStatus: (error: string, status: ErrorPatternStatusValue) => void;
+}) {
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-[var(--text-tertiary)]">Date range</span>
+          <DropdownSelect
+            options={DATE_RANGE_OPTIONS}
+            value={dateRange}
+            onChange={(v) => onDateRangeChange(v as DateRangeKey)}
+            aria-label="Date range"
+            className="min-w-[140px]"
+          />
+        </div>
+        <label className="flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            checked={showFailuresOnly}
+            onChange={(e) => onShowFailuresOnlyChange(e.target.checked)}
+            className="h-4 w-4 rounded border-[var(--border-default)]"
+          />
+          <span className="text-sm text-[var(--text-secondary)]">Show failures only</span>
+        </label>
+      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Total builds" value={stats.total} icon={BarChart3} />
         <StatCard
@@ -907,20 +1109,48 @@ function StatsPanel({ stats }: { stats: Stats }) {
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
             Most common errors
           </h3>
+          <p className="mb-2 text-xs text-[var(--text-tertiary)]">
+            Click an error to filter builds; use the badge to set status.
+          </p>
           <div className="space-y-1.5">
-            {stats.commonErrors.slice(0, 10).map((e, i) => (
-              <div
-                key={i}
-                className="flex items-start justify-between gap-2 text-xs"
-              >
-                <span className="min-w-0 flex-1 break-all font-mono text-[var(--text-secondary)]">
-                  {e.error}
-                </span>
-                <span className="shrink-0 tabular-nums text-[var(--text-tertiary)]">
-                  {e.count}×
-                </span>
-              </div>
-            ))}
+            {stats.commonErrors.slice(0, 10).map((e, i) => {
+              const status = errorStatuses[e.error]?.status ?? "Open";
+              const isSelected = selectedErrorFilter === e.error;
+              return (
+                <div
+                  key={i}
+                  className={`flex items-start justify-between gap-2 text-xs ${isSelected ? "rounded-md bg-[var(--badge-error)]/15 ring-1 ring-[var(--badge-error)]/40" : ""}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelectErrorFilter(isSelected ? null : e.error)}
+                    className="min-w-0 flex-1 cursor-pointer break-all text-left font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline"
+                    title={isSelected ? "Clear filter" : "Filter builds by this error"}
+                  >
+                    {e.error}
+                  </button>
+                  <div className="flex shrink-0 items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
+                    <span className="tabular-nums text-[var(--text-tertiary)]">
+                      {e.count}×
+                    </span>
+                    <DropdownSelect
+                      options={[
+                        { value: "Open", label: "Open" },
+                        { value: "Fixed", label: "Fixed" },
+                        { value: "Wontfix", label: "Wontfix" },
+                        { value: "Regression", label: "Regression" },
+                      ]}
+                      value={status}
+                      onChange={(v) => {
+                        onSetErrorStatus(e.error, v as ErrorPatternStatusValue);
+                      }}
+                      aria-label="Status for error"
+                      className="min-w-0 w-24 text-[10px]"
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -1058,6 +1288,10 @@ export default function BuildsPage() {
   const [activeJobs, setActiveJobs] = useState<ActiveBuildJob[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [filter, setFilter] = useState<"all" | "compiled" | "failed">("all");
+  const [dateRange, setDateRange] = useState<DateRangeKey>("7d");
+  const [showFailuresOnly, setShowFailuresOnly] = useState(false);
+  const [errorStatuses, setErrorStatuses] = useState<Record<string, ErrorPatternStatusDoc>>({});
+  const [selectedErrorFilter, setSelectedErrorFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [visionTestRunningId, setVisionTestRunningId] = useState<string | null>(null);
   const [visionTestStep, setVisionTestStep] = useState(0);
@@ -1072,14 +1306,17 @@ export default function BuildsPage() {
     resultsRef.current = results;
   }, [results]);
 
+  const since = sinceParam(dateRange);
+
   const load = useCallback(async () => {
+    const sinceQ = since ? `&since=${encodeURIComponent(since)}` : "";
     const [resultsRes, statsRes] = await Promise.all([
-      fetch("/api/build-results?limit=200"),
-      fetch("/api/build-results?stats=true"),
+      fetch(`/api/build-results?limit=200${sinceQ}`),
+      fetch(`/api/build-results?stats=true${sinceQ}`),
     ]);
     const resultsData = await resultsRes.json().catch(() => ({ results: [] }));
     const statsData = await statsRes.json().catch(() => null);
-    const resultsList = resultsData.results ?? [];
+    const resultsList = (resultsData.results ?? []) as BuildResult[];
     setResults(resultsList);
     setVisionTestReports(() => {
       const map: Record<string, VisionTestReport> = {};
@@ -1092,18 +1329,55 @@ export default function BuildsPage() {
       return map;
     });
     setStats(statsData);
+
+    if (resultsList.length > 0 && statsData?.commonErrors?.length) {
+      try {
+        const reconcileRes = await fetch("/api/admin/error-pattern-status/reconcile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ builds: resultsList }),
+        });
+        if (reconcileRes.ok) {
+          const { statuses } = await reconcileRes.json().catch(() => ({ statuses: {} }));
+          setErrorStatuses(statuses);
+        } else {
+          const errorsParam = encodeURIComponent(JSON.stringify(statsData.commonErrors.map((c: { error: string }) => c.error)));
+          const statusRes = await fetch(`/api/admin/error-pattern-status?errors=${errorsParam}`);
+          if (statusRes.ok) {
+            const { statuses } = await statusRes.json().catch(() => ({ statuses: {} }));
+            setErrorStatuses(statuses);
+          }
+        }
+      } catch {
+        const errorsParam = encodeURIComponent(JSON.stringify(statsData.commonErrors.map((c: { error: string }) => c.error)));
+        const statusRes = await fetch(`/api/admin/error-pattern-status?errors=${errorsParam}`);
+        if (statusRes.ok) {
+          const { statuses } = await statusRes.json().catch(() => ({ statuses: {} }));
+          setErrorStatuses(statuses);
+        }
+      }
+    } else if (statsData?.commonErrors?.length) {
+      const errorsParam = encodeURIComponent(JSON.stringify(statsData.commonErrors.map((c: { error: string }) => c.error)));
+      const statusRes = await fetch(`/api/admin/error-pattern-status?errors=${errorsParam}`);
+      if (statusRes.ok) {
+        const { statuses } = await statusRes.json().catch(() => ({ statuses: {} }));
+        setErrorStatuses(statuses);
+      }
+    }
+
     setLoading(false);
-  }, []);
+  }, [since]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const pollBuildResults = useCallback(async () => {
+    const sinceQ = since ? `&since=${encodeURIComponent(since)}` : "";
     try {
       const [resultsRes, statsRes] = await Promise.all([
-        fetch("/api/build-results?limit=200", { cache: "no-store" }),
-        fetch("/api/build-results?stats=true", { cache: "no-store" }),
+        fetch(`/api/build-results?limit=200${sinceQ}`, { cache: "no-store" }),
+        fetch(`/api/build-results?stats=true${sinceQ}`, { cache: "no-store" }),
       ]);
       const resultsData = await resultsRes.json().catch(() => ({ results: [] }));
       const statsData = await statsRes.json().catch(() => null);
@@ -1136,7 +1410,7 @@ export default function BuildsPage() {
     } catch {
       // ignore
     }
-  }, []);
+  }, [since]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -1777,12 +2051,16 @@ export default function BuildsPage() {
     [runVisionTest, results]
   );
 
-  const filtered =
+  let filtered =
     filter === "all"
       ? results
       : results.filter((r) =>
           filter === "compiled" ? r.compiled : !r.compiled
         );
+  if (showFailuresOnly) filtered = filtered.filter((r) => !r.compiled);
+  if (selectedErrorFilter) {
+    filtered = filtered.filter((r) => buildContainsError(r, selectedErrorFilter));
+  }
 
   /** Same project + within 5 min: treat as one build; show active job card only, not the result card. */
   const SAME_BUILD_WINDOW_MS = 5 * 60 * 1000;
@@ -1861,7 +2139,33 @@ export default function BuildsPage() {
           </p>
         </section>
 
-        {stats && <StatsPanel stats={stats} />}
+        {stats && (
+          <StatsPanel
+            stats={stats}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            showFailuresOnly={showFailuresOnly}
+            onShowFailuresOnlyChange={setShowFailuresOnly}
+            errorStatuses={errorStatuses}
+            selectedErrorFilter={selectedErrorFilter}
+            onSelectErrorFilter={setSelectedErrorFilter}
+            onSetErrorStatus={async (error, status) => {
+              try {
+                const res = await fetch("/api/admin/error-pattern-status", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ error, status }),
+                });
+                if (res.ok) {
+                  const { status: doc } = await res.json();
+                  setErrorStatuses((prev) => ({ ...prev, [error]: doc }));
+                }
+              } catch {
+                // ignore
+              }
+            }}
+          />
+        )}
 
         <section className="mt-8">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1989,6 +2293,7 @@ export default function BuildsPage() {
                   onReTestVision={() => handleReTestVision(r.id, r.projectId, r.projectName)}
                   onStopVisionTest={visionTestRunningId === r.id ? handleStopVisionTest : undefined}
                   claudeAutoPopulated={autoPopulatedByClaude[r.id]}
+                  selectedErrorFilter={selectedErrorFilter}
                 />
               ))}
             </div>

@@ -150,7 +150,8 @@ struct CreditsDropdownContent: View {
     }
 
     private func openPricingURL() {
-        let base = UserDefaults.standard.string(forKey: "serverURL") ?? "http://192.168.12.40:3001"
+        let base = (UserDefaults.standard.string(forKey: "serverURL") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else { return }
         let path = base.hasSuffix("/") ? "pricing" : "/pricing"
         guard let url = URL(string: base + path) else { return }
         UIApplication.shared.open(url)

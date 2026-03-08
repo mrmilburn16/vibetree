@@ -22,9 +22,9 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         FirebaseApp.configure()
         UNUserNotificationCenter.current().delegate = self
 
-        // Migrate stale localhost serverURL to the Mac's local IP
+        // Migrate stale localhost serverURL to the Mac's local IP. Empty = user must set Server URL in Settings.
         let stored = UserDefaults.standard.string(forKey: "serverURL") ?? ""
-        if stored.isEmpty || stored.contains("localhost") {
+        if stored.contains("localhost") {
             UserDefaults.standard.set("http://192.168.12.40:3001", forKey: "serverURL")
         }
 

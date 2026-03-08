@@ -1,0 +1,52 @@
+{
+  "id": "qr-code-generation",
+  "name": "QR Code Generation (Core Image)",
+  "frameworks": [
+    "CoreImage"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "qr code",
+      "generate qr",
+      "qr image",
+      "ticket",
+      "create qr",
+      "qr code image",
+      "display qr",
+      "show qr",
+      "membership card",
+      "digital pass",
+      "event ticket",
+      "qr for",
+      "encode qr"
+    ],
+    "excludeKeywords": [
+      "scan qr",
+      "qr scanner",
+      "scan barcode",
+      "read qr",
+      "camera"
+    ]
+  },
+  "promptInjection": "CAPABILITY: QR Code Generation (Core Image CIQRCodeGenerator)\n\nUse Core Image's CIQRCodeGenerator to create QR code images from a string. No camera or scanning — this is for generating/displaying QR codes (e.g. tickets, passes, links).\n\nAPPROACH:\n- Use CIFilter(name: \"CIQRCodeGenerator\") — there is no type-safe CIFilterBuiltins variant for QR, so the string-based API is correct.\n- Set input: setValue(Data(string.utf8), forKey: \"inputMessage\"). Optional: setValue(\"H\", forKey: \"inputCorrectionLevel\") for higher error correction (L, M, Q, H).\n- The filter output is a tiny CIImage (e.g. ~27×27). Scale it for display: use outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale)) where scale = desiredSize / outputImage.extent.width, then render the scaled CIImage with CIContext.createCGImage(from:).\n- Create CIContext once and reuse (expensive); do not create a new context per generation.\n- Convert to SwiftUI: UIImage(cgImage:) then Image(uiImage:). Return SwiftUI Image or an optional placeholder when input is empty or generation fails.\n\nSWIFTUI:\n- Expose a helper that takes a String (and optional size) and returns Image. Use in views as Image or in a dedicated QR display view. Handle empty string (show placeholder text or gray rect).\n\nANTI-PATTERNS:\n- Do NOT use CIQRCodeGenerator for scanning/reading — that uses AVCaptureMetadataOutput or Vision (see barcode-scanning skill).\n- Do NOT create a new CIContext for every QR generation; reuse one.\n- Do NOT forget to scale the filter output; unscaled QR is too small to scan.\n- Do NOT assume inputMessage is a URL only — any UTF-8 string is valid.",
+  "canonicalCode": {
+    "QRCodeGenerator.swift": "import CoreImage\nimport SwiftUI\nimport UIKit\n\nenum QRCodeGenerator {\n    private static let context = CIContext()\n\n    /// Generates a SwiftUI Image of a QR code for the given string.\n    /// - Parameters:\n    ///   - string: Content to encode (URL, text, etc.). Empty string returns a placeholder.\n    ///   - size: Desired side length in points. Default 200.\n    /// - Returns: SwiftUI Image of the QR code, or a small placeholder if generation fails.\n    static func image(for string: String, size: CGFloat = 200) -> Image {\n        guard !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,\n              let filter = CIFilter(name: \"CIQRCodeGenerator\") else {\n            return Image(systemName: \"qrcode\")\n                .font(.system(size: size * 0.5))\n                .foregroundStyle(.secondary)\n        }\n        filter.setValue(Data(string.utf8), forKey: \"inputMessage\")\n        filter.setValue(\"H\", forKey: \"inputCorrectionLevel\")\n        guard let output = filter.outputImage else {\n            return Image(systemName: \"qrcode\")\n                .font(.system(size: size * 0.5))\n                .foregroundStyle(.secondary)\n        }\n        let extent = output.extent\n        let scale = size / extent.width\n        let scaled = output.transformed(by: CGAffineTransform(scaleX: scale, y: scale))\n        guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else {\n            return Image(systemName: \"qrcode\")\n                .font(.system(size: size * 0.5))\n                .foregroundStyle(.secondary)\n        }\n        return Image(uiImage: UIImage(cgImage: cgImage))\n            .interpolation(.none)\n            .resizable()\n            .scaledToFit()\n    }\n}\n"
+  },
+  "antiPatterns": [
+    "Using CIQRCodeGenerator for scanning/reading (use AVCaptureMetadataOutput or Vision instead)",
+    "Creating a new CIContext for every QR generation (reuse one)",
+    "Displaying the raw filter output without scaling (too small to scan)",
+    "Assuming only URLs can be encoded (any UTF-8 string is valid)"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

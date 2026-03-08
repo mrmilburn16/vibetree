@@ -72,9 +72,7 @@ final class AuthService: ObservableObject {
             return error.localizedDescription
         }
         switch nsError.code {
-        case 17011: // .userNotFound
-        case 17009: // .wrongPassword
-        case 17010: // .invalidCredential
+        case 17011, 17009, 17010: // .userNotFound, .wrongPassword, .invalidCredential
             return "Invalid email or password."
         case 17008: // .invalidEmail
             return "Invalid email address."

@@ -182,6 +182,10 @@ const FRAMEWORK_RULES: FrameworkRule[] = [
     framework: "AVFoundation",
   },
   {
+    patterns: [/\bimport CoreImage\b/, /\bCIFilter\b/, /\bCIContext\b/, /\bCIImage\b/, /\bCIQRCodeGenerator\b/],
+    framework: "CoreImage",
+  },
+  {
     patterns: [/\bimport CoreData\b/, /\bNSManagedObject\b/, /\bNSPersistentContainer\b/, /\b@FetchRequest\b/],
     framework: "CoreData",
   },

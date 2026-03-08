@@ -8,6 +8,9 @@ export interface Project {
 
 const STORAGE_KEY = "vibetree-projects";
 
+/** Minimal cache shape: only id and name to avoid quota. Full data comes from API. */
+type CachedProject = { id: string; name: string };
+
 function makeDefaultBundleId(id: string): string {
   const raw = id.replace(/^proj_/, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
   const suffix = raw && /^[a-z]/.test(raw) ? raw : `app${raw || "project"}`;
@@ -19,19 +22,34 @@ export function getProjects(): Project[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const projects: Project[] = JSON.parse(raw);
-    return projects.map((p) => ({
-      ...p,
-      createdAt: p.createdAt ?? p.updatedAt,
-    }));
+    const parsed = JSON.parse(raw);
+    const arr = Array.isArray(parsed) ? parsed : [];
+    return arr.map((p: unknown) => {
+      const o = p && typeof p === "object" ? (p as Record<string, unknown>) : {};
+      const id = typeof o.id === "string" ? o.id : "";
+      const name = typeof o.name === "string" ? o.name : "Untitled app";
+      return {
+        id,
+        name,
+        bundleId: makeDefaultBundleId(id),
+        createdAt: typeof o.createdAt === "number" ? o.createdAt : Date.now(),
+        updatedAt: typeof o.updatedAt === "number" ? o.updatedAt : Date.now(),
+      };
+    });
   } catch {
     return [];
   }
 }
 
+/** Cache only id and name (localStorage is just a cache; API is source of truth). Silently ignores QuotaExceededError. */
 export function saveProjects(projects: Project[]): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+  const cache: CachedProject[] = projects.map((p) => ({ id: p.id, name: p.name }));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+  } catch {
+    // QuotaExceededError or other; don't crash the flow — dashboard still shows API data
+  }
 }
 
 export function createProject(name?: string): Project {

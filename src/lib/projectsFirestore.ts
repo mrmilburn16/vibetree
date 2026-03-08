@@ -61,12 +61,8 @@ export async function listProjectsFromFirestore(userId: string): Promise<{
   const db = getDb();
   if (!db) return { projects: [], fromFirestore: false };
   try {
-    const [snap1, snap2] = await Promise.all([
-      db.collection(COLLECTION).where("userId", "==", userId).orderBy("updatedAt", "desc").get(),
-      db.collection(COLLECTION).where("userId", "==", userId).get(),
-    ]);
-    console.log("[projectsFirestore] with orderBy:", snap1.size, "without orderBy:", snap2.size);
-    const projects: ProjectDoc[] = snap1.docs.map((d) => {
+    const snap = await db.collection(COLLECTION).where("userId", "==", userId).get();
+    const projects: ProjectDoc[] = snap.docs.map((d) => {
       const data = d.data();
       const appetizePublicKey = data.appetizePublicKey;
       return {
@@ -80,6 +76,7 @@ export async function listProjectsFromFirestore(userId: string): Promise<{
         appetizePublicKey: typeof appetizePublicKey === "string" && appetizePublicKey.length > 0 ? appetizePublicKey : undefined,
       };
     });
+    projects.sort((a, b) => b.updatedAt - a.updatedAt);
     return { projects, fromFirestore: true };
   } catch (err) {
     console.error("[projects-firestore] listProjectsFromFirestore failed:", err);

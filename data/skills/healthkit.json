@@ -41,9 +41,9 @@
   "canonicalCode": {},
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 11,
-    "firstAttemptCompile": 7,
-    "compileRate": 64,
+    "totalBuilds": 16,
+    "firstAttemptCompile": 9,
+    "compileRate": 56,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -53,7 +53,8 @@
       "Expected expression",
       "consecutive statements on a line must be separated by ';'",
       "expected expression",
-      "result values in '? :' expression have mismatching types 'Color' and 'LinearGradient'"
+      "result values in '? :' expression have mismatching types 'Color' and 'LinearGradient'",
+      "instance member 'accentColor' cannot be used on type 'Color'; did you mean to use a value of this type instead?"
     ],
     "goldenExamples": []
   }
