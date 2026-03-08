@@ -47,4 +47,20 @@ If you are the **system improvement agent** (improving prompts, skills, and fixe
 
 ---
 
+## Cursor Cloud specific instructions
+
+**Service:** Single Next.js 16 app (no Docker, no database containers). All persistence is Firebase Firestore (external).
+
+**Dev server:** `npm run dev` starts on **port 3001**. Mock mode (`npm run dev:mock`) uses port 3002. The app works fully in mock mode without any API keys or `.env.local` — chat, build status, and project CRUD all use in-memory mocks.
+
+**Commands** (see `package.json` scripts and `README.md` for full details):
+- Lint: `npm run lint` (ESLint 9 flat config; pre-existing warnings are expected)
+- Test: `npm run test` (Vitest; some tests fail due to Next.js `cookies()` outside request scope — this is a known limitation, not a setup issue)
+- Build: `npm run build`
+- Dev: `npm run dev`
+
+**Environment variables:** None required for local development. Firebase, Anthropic, Stripe, and other integrations degrade gracefully to mocks/no-ops when env vars are absent.
+
+---
+
 *Keep this file updated when adding new agent roles or infrastructure so future agents remember the rules.*
