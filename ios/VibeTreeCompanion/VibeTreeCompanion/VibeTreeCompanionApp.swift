@@ -6,6 +6,27 @@ import FirebaseCore
 struct VibeTreeCompanionApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    init() {
+        Self.configureFirebaseIfValid()
+    }
+
+    /// Call FirebaseApp.configure() only when GoogleService-Info.plist is in the bundle and has real values.
+    /// Invalid or placeholder plist causes Firebase to crash; we skip configure and the app runs without Auth.
+    private static func configureFirebaseIfValid() {
+        guard let url = Bundle.main.url(forResource: "GoogleService-Info", withExtension: "plist"),
+              let plist = NSDictionary(contentsOf: url) as? [String: Any],
+              let projectId = plist["PROJECT_ID"] as? String, !projectId.isEmpty,
+              !projectId.hasPrefix("REPLACE"),
+              let apiKey = plist["API_KEY"] as? String, !apiKey.isEmpty,
+              !apiKey.hasPrefix("REPLACE") else {
+            #if DEBUG
+            print("[Firebase] GoogleService-Info.plist missing, invalid, or still has placeholders (REPLACE_WITH_*). Skipping FirebaseApp.configure(). Download the real plist from Firebase Console for your project.")
+            #endif
+            return
+        }
+        FirebaseApp.configure()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -19,7 +40,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        FirebaseApp.configure()
         UNUserNotificationCenter.current().delegate = self
 
         // Migrate stale localhost serverURL to the Mac's local IP. Empty = user must set Server URL in Settings.

@@ -9,7 +9,7 @@ actor APIService {
 
     private var apiToken: String {
         get async {
-            let token = await MainActor.run { await AuthService.shared.getValidIDToken() }
+            let token = await AuthService.shared.getValidIDToken()
             if let token, !token.isEmpty { return token }
             return UserDefaults.standard.string(forKey: "apiToken") ?? ""
         }
@@ -154,7 +154,7 @@ actor APIService {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let token = await MainActor.run { await AuthService.shared.getValidIDToken() }
+        let token = await AuthService.shared.getValidIDToken()
         if let token, !token.isEmpty {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

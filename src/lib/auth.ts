@@ -12,7 +12,8 @@ export interface SessionUser {
 
 /**
  * Get the current session from cookie or Authorization header.
- * Verifies the Firebase ID token and returns the decoded user or null.
+ * Supports both: (1) web app — session cookie vibetree-session, (2) iOS companion — Authorization: Bearer <Firebase ID token>.
+ * Verifies the token with Firebase Admin auth().verifyIdToken() and returns the decoded user or null.
  */
 export async function getSession(request?: Request): Promise<SessionUser | null> {
   let token: string | undefined;

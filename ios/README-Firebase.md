@@ -10,6 +10,8 @@ Open the project in Xcode, go to **File → Add Package Dependencies**, enter `h
    - Firebase Console → Project settings → Your apps → Add app (iOS) if needed → Download `GoogleService-Info.plist`
    - Or copy the values from your web app’s Firebase config (project ID, API key, etc.) into the existing plist.
 
+   - **Crash on launch:** If the app crashes immediately, the plist still has placeholders. The app now skips Firebase configure when it detects them; replace with the real plist so sign-in works.
+
 2. **Server env**  
    The login API uses `FIREBASE_WEB_API_KEY` or `NEXT_PUBLIC_FIREBASE_API_KEY` to verify email/password. Ensure one of these is set in `.env.local` (or your deployment env).
 

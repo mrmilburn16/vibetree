@@ -175,9 +175,37 @@ struct SettingsView: View {
 
     // MARK: - Server
 
+    /// Read from bundled GoogleService-Info.plist to show config status. Use same project as web app so credits/projects sync.
+    private static var firebaseProjectIdFromPlist: String? {
+        guard let url = Bundle.main.url(forResource: "GoogleService-Info", withExtension: "plist"),
+              let plist = NSDictionary(contentsOf: url) as? [String: Any],
+              let projectId = plist["PROJECT_ID"] as? String, !projectId.isEmpty, !projectId.hasPrefix("REPLACE") else { return nil }
+        return projectId
+    }
+
     private var serverSection: some View {
         VStack(alignment: .leading, spacing: Forest.space3) {
             sectionLabel("Server Configuration")
+
+            VStack(alignment: .leading, spacing: Forest.space2) {
+                if let projectId = Self.firebaseProjectIdFromPlist {
+                    Text("Firebase project: \(projectId)")
+                        .font(Forest.font(size: Forest.textXs))
+                        .foregroundColor(Forest.textTertiary)
+                    Text("Must match web app’s Firebase project (FIREBASE_PROJECT_ID in .env.local). If different, credits won’t sync.")
+                        .font(Forest.font(size: Forest.textXs))
+                        .foregroundColor(Forest.textTertiary)
+                } else {
+                    Text("Firebase: not configured (plist missing or placeholder). Sign-in and credits need the real GoogleService-Info.plist.")
+                        .font(Forest.font(size: Forest.textXs))
+                        .foregroundColor(Forest.warning)
+                }
+                if serverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Server URL: not set — set it below so the app talks to your backend.")
+                        .font(Forest.font(size: Forest.textXs))
+                        .foregroundColor(Forest.warning)
+                }
+            }
 
             VStack(alignment: .leading, spacing: Forest.space1) {
                 Text("Server URL")

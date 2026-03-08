@@ -55,6 +55,8 @@
 		FE03EB2CB99C71DA2B79786B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51FF0DD21A113B0673EA1D19 /* SettingsView.swift */; };
 		G00G1E5E1NF0PL1ST000002 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = G00G1E5E1NF0PL1ST000001 /* GoogleService-Info.plist */; };
 		S7R3E4AM7OD0C4RD00000001 /* StreamTodoCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = S7R3E4AM7OD0C4RD00000002 /* StreamTodoCardView.swift */; };
+		3FB016502F5D65E9009C4F1D /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 3FB0164E2F5D65E9009C4F1D /* FirebaseAuth */; };
+		3FB016512F5D65E9009C4F1D /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3FB0164F2F5D65E9009C4F1D /* FirebaseCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,6 +68,18 @@
 			remoteInfo = BuildActivityExtension;
 		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3F2B3C172F5D628B004E966F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3FB016502F5D65E9009C4F1D /* FirebaseAuth in Frameworks */,
+				3FB016512F5D65E9009C4F1D /* FirebaseCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		B7BCC4481AFF5A5B02AA3197 /* Embed Foundation Extensions */ = {
@@ -267,8 +281,9 @@
 			buildConfigurationList = 1BAE0F8F26540EDAB50DC60B /* Build configuration list for PBXNativeTarget "VibeTreeCompanion" */;
 			buildPhases = (
 				8CA770CB96D5541743F9AC07 /* Sources */,
+				3F2B3C172F5D628B004E966F /* Frameworks */,
 				746E6BA2E19B2D89BB3E0AB4 /* Resources */,
-				B7BCC4481AFF5A5B02AA3197 /* Embed Foundation Extensions */,
+			B7BCC4481AFF5A5B02AA3197 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);

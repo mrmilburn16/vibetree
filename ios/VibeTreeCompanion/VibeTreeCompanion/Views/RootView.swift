@@ -13,5 +13,8 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: auth.isAuthenticated)
         .preferredColorScheme(.dark)
+        .task {
+            auth.refreshAuthState()
+        }
     }
 }

@@ -3,20 +3,28 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>REPLACE_WITH_WEB_API_KEY</string>
+	<string>AIzaSyCDBgpvDbtt-xVJfiGILtJ0KYRQXBRAugs</string>
 	<key>GCM_SENDER_ID</key>
-	<string>REPLACE_WITH_SENDER_ID</string>
-	<key>GOOGLE_APP_ID</key>
-	<string>REPLACE_WITH_APP_ID</string>
-	<key>PROJECT_ID</key>
-	<string>REPLACE_WITH_PROJECT_ID</string>
-	<key>STORAGE_BUCKET</key>
-	<string>REPLACE_WITH_STORAGE_BUCKET</string>
-	<key>CLIENT_ID</key>
-	<string>REPLACE_WITH_CLIENT_ID</string>
-	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.REPLACE</string>
+	<string>1041828725892</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.vibetree.companion</string>
+	<key>PROJECT_ID</key>
+	<string>vibe-tree-9165f</string>
+	<key>STORAGE_BUCKET</key>
+	<string>vibe-tree-9165f.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:1041828725892:ios:c8eabd6521481b02362ed1</string>
 </dict>
 </plist>
