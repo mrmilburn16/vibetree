@@ -280,6 +280,8 @@ type ErrorCategory =
   | "optional_unwrap_failure"
   | "bundle_id_mismatch"
   | "missing_capability"
+  | "view_type_check_timeout"
+  | "foreground_style_color"
   | "other";
 
 const ERROR_PATTERNS: Array<{ category: ErrorCategory; patterns: RegExp[] }> = [
@@ -320,6 +322,18 @@ const ERROR_PATTERNS: Array<{ category: ErrorCategory; patterns: RegExp[] }> = [
       /\bNavigationView\b/i,
       /\.foregroundColor\b/i,
       /\.navigationBarTitle\b/i,
+    ],
+  },
+  {
+    category: "view_type_check_timeout",
+    patterns: [/unable to type-check this expression in reasonable time/i],
+  },
+  {
+    category: "foreground_style_color",
+    patterns: [
+      /cannot convert.*(Color|HierarchicalShapeStyle)/i,
+      /HierarchicalShapeStyle.*Color|Color.*HierarchicalShapeStyle/i,
+      /\.(white|black|gray|red|blue|green)\s*\).*foregroundStyle|foregroundStyle\s*\([^)]*\.(white|black|gray|red|blue|green)\b/i,
     ],
   },
   {
@@ -399,6 +413,8 @@ const CATEGORY_LABELS: Record<ErrorCategory, string> = {
   optional_unwrap_failure: "Optional unwrap failure",
   bundle_id_mismatch: "Bundle ID mismatch",
   missing_capability: "Missing capability",
+  view_type_check_timeout: "View body type-check timeout",
+  foreground_style_color: "ForegroundStyle Color / HierarchicalShapeStyle",
   other: "Any other error",
 };
 

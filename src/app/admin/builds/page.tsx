@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
+import { getErrorCategoryLabel } from "@/lib/errorPatterns";
 import { stripOldImages, type VisionMessage } from "@/lib/visionTestUtils";
 
 type VisionTestReport = {
@@ -1116,19 +1117,27 @@ function StatsPanel({
             {stats.commonErrors.slice(0, 10).map((e, i) => {
               const status = errorStatuses[e.error]?.status ?? "Open";
               const isSelected = selectedErrorFilter === e.error;
+              const knownLabel = getErrorCategoryLabel(e.error);
               return (
                 <div
                   key={i}
                   className={`flex items-start justify-between gap-2 text-xs ${isSelected ? "rounded-md bg-[var(--badge-error)]/15 ring-1 ring-[var(--badge-error)]/40" : ""}`}
                 >
-                  <button
-                    type="button"
-                    onClick={() => onSelectErrorFilter(isSelected ? null : e.error)}
-                    className="min-w-0 flex-1 cursor-pointer break-all text-left font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline"
-                    title={isSelected ? "Clear filter" : "Filter builds by this error"}
-                  >
-                    {e.error}
-                  </button>
+                  <div className="min-w-0 flex-1">
+                    {knownLabel && (
+                      <span className="mb-0.5 inline-block rounded bg-[var(--background-tertiary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)]">
+                        {knownLabel}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onSelectErrorFilter(isSelected ? null : e.error)}
+                      className="block w-full cursor-pointer break-all text-left font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline"
+                      title={isSelected ? "Clear filter" : "Filter builds by this error"}
+                    >
+                      {e.error}
+                    </button>
+                  </div>
                   <div className="flex shrink-0 items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
                     <span className="tabular-nums text-[var(--text-tertiary)]">
                       {e.count}×

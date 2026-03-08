@@ -71,6 +71,41 @@ function replaceOutsideStringLiterals(
   return parts.join("");
 }
 
+/**
+ * If a Swift file contains a view body (var body: some View { ... }) that exceeds maxLines
+ * and the file has no sign of extracted sub-views (@ViewBuilder or other var x: some View),
+ * log a warning. Helps catch "unable to type-check this expression in reasonable time" before compile.
+ */
+function warnLongViewBodyIfNoSubviews(file: SwiftTextFile, maxLines: number): void {
+  const content = file.content;
+  if (!/\bvar\s+body\s*:\s*some\s+View\s*\{/.test(content)) return;
+
+  const hasExtractedSubviews =
+    /@ViewBuilder/.test(content) ||
+    /(?:private\s+)?var\s+[a-zA-Z_][a-zA-Z0-9_]*\s*:\s*some\s+View\s*\{/.test(content.replace(/\bvar\s+body\s*:\s*some\s+View\s*\{/g, ""));
+
+  const bodyBlockRe = /\bvar\s+body\s*:\s*some\s+View\s*\{/g;
+  let match: RegExpExecArray | null;
+  while ((match = bodyBlockRe.exec(content)) !== null) {
+    const start = match.index + match[0].length;
+    let depth = 1;
+    let i = start;
+    while (i < content.length && depth > 0) {
+      const ch = content[i];
+      if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+      i++;
+    }
+    const bodySlice = content.slice(start, i - 1);
+    const lineCount = (bodySlice.match(/\n/g) ?? []).length + (bodySlice.length > 0 ? 1 : 0);
+    if (lineCount > maxLines && !hasExtractedSubviews) {
+      console.warn(
+        `[fixSwift] ${file.path}: view body has ${lineCount} lines (max ${maxLines}). Extract sections into @ViewBuilder helpers or child view structs to avoid "unable to type-check this expression in reasonable time".`
+      );
+    }
+  }
+}
+
 /** Split multiple let/var on the same line (only in code, not inside string literals). */
 function splitMultipleLetVarOnLineOutsideStrings(content: string): string {
   // Match start-of-line or whitespace, then "let " or "var " so we treat line-initial var/let too
@@ -345,6 +380,8 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
     // Fallback location: avoid hardcoding a specific city (e.g. San Jose). Use skill standard so "Current Location" / API name is generic when location fails.
     content = content.replace(/\bkFallbackLat\s*=\s*37\.3382\b/g, "kFallbackLat = 32.78");
     content = content.replace(/\bkFallbackLon\s*=\s*-121\.8863\b/g, "kFallbackLon = -79.93");
+
+    warnLongViewBodyIfNoSubviews({ ...f, content }, 30);
 
     return { ...f, content };
   });
