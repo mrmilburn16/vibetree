@@ -16,6 +16,7 @@
     "mac-runner": "node scripts/mac-runner.mjs",
     "mac-runner:mock": "VIBETREE_SERVER_URL=http://localhost:3002 node scripts/mac-runner.mjs",
     "test:build-results": "node scripts/test-build-results-log.mjs",
+    "validate-live-activities": "node scripts/validate-live-activities.mjs",
     "ios:install": "bash scripts/ios-companion-install.sh",
     "vercel:status": "node scripts/vercel-build-status.mjs",
     "test": "vitest run",

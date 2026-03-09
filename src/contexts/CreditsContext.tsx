@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   getCreditState,
   deduct as storeDeduct,
@@ -8,6 +9,14 @@ import {
   setBalance as storeSetBalance,
   LOW_CREDIT_THRESHOLD,
 } from "@/lib/credits";
+
+// Paths where we do not call /api/credits (no user session needed or admin-only).
+// Keeps admin/builds etc. from polling credits and affecting auth in other tabs.
+const SKIP_CREDITS_PATHS = ["/", "/sign-in", "/sign-up", "/forgot-password", "/waitlist", "/pricing", "/contact", "/terms", "/privacy", "/admin"];
+function isAuthenticatedRoute(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return !SKIP_CREDITS_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
 
 interface CreditsContextValue {
   balance: number;
@@ -22,6 +31,7 @@ interface CreditsContextValue {
 const CreditsContext = createContext<CreditsContextValue | null>(null);
 
 export function CreditsProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [balance, setBalanceState] = useState<number | null>(null);
   const [serverMode, setServerMode] = useState<boolean | null>(null);
 
@@ -52,8 +62,9 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
   }, [fetchServerBalance]);
 
   useEffect(() => {
+    if (!isAuthenticatedRoute(pathname)) return;
     refresh();
-  }, [refresh]);
+  }, [pathname, refresh]);
 
   const deduct = useCallback(
     (amount: number): boolean => {

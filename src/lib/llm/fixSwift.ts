@@ -213,19 +213,23 @@ export function fixSwiftCommonIssues(files: SwiftTextFile[]): SwiftTextFile[] {
       "NSAttributedString.Key.backgroundColor"
     );
 
+    // Color.accentColor is not a valid static property; use Color("AccentColor") for app accent.
     content = content.replace(
       /\bTheme\.accentColor\b/g,
-      "Color.accentColor"
+      "Color(\"AccentColor\")"
     );
-    // HapticPattern, BeatPattern, and other types have no member 'accentColor' — use Color.accentColor
     content = content.replace(
       /\b(HapticPattern|BeatPattern)\.accentColor\b/g,
-      "Color.accentColor"
+      "Color(\"AccentColor\")"
     );
-    // ShapeStyle has no member 'accentColor' — use Color.accentColor (e.g. in .foregroundStyle, .tint, .fill)
     content = content.replace(
-      /(?<!Color\.)\.accentColor\b/g,
-      "Color.accentColor"
+      /\bColor\.accentColor\b/g,
+      "Color(\"AccentColor\")"
+    );
+    // ShapeStyle/value .accentColor (e.g. in .foregroundStyle(.accentColor)) — use Color("AccentColor"). Do not replace .accentColor( which is the view modifier.
+    content = content.replace(
+      /\.accentColor\b(?!\s*\()/g,
+      "Color(\"AccentColor\")"
     );
 
     // LLM typo: "Color" or "color" repeated → ColorColorColor / colorcolorcolor (cannot find in scope). Fix to Color.

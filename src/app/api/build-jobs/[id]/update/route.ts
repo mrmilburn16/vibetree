@@ -92,9 +92,19 @@ export async function POST(
     appendBuildJobErrorHistory(id, attempt, compilerErrors);
   }
 
-  const status = typeof body?.status === "string" ? body.status : undefined;
+  let status = typeof body?.status === "string" ? body.status : undefined;
   const exitCode = typeof body?.exitCode === "number" ? body.exitCode : undefined;
-  const error = typeof body?.error === "string" ? body.error : undefined;
+  let error = typeof body?.error === "string" ? body.error : undefined;
+
+  // Never report success when the build log contains ** BUILD FAILED ** (xcodebuild failure).
+  const jobAfterLogs = getBuildJob(id);
+  if (status === "succeeded" && jobAfterLogs?.logs?.length) {
+    const logText = jobAfterLogs.logs.join("\n");
+    if (logText.includes("** BUILD FAILED **")) {
+      status = "failed";
+      error = error || "Build log contains BUILD FAILED.";
+    }
+  }
 
   if (status === "running" || status === "succeeded" || status === "failed") {
     setBuildJobStatus(id, {

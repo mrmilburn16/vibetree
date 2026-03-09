@@ -72,6 +72,21 @@ export function getProject(id: string): Project | undefined {
   return getProjects().find((p) => p.id === id);
 }
 
+/** Add a project to the local cache (e.g. after fetching from API). Idempotent. */
+export function addProjectToCache(project: Project): void {
+  if (typeof window === "undefined") return;
+  const projects = getProjects();
+  if (projects.some((p) => p.id === project.id)) return;
+  const withDefaults: Project = {
+    id: project.id,
+    name: project.name,
+    bundleId: project.bundleId ?? makeDefaultBundleId(project.id),
+    createdAt: typeof project.createdAt === "number" ? project.createdAt : Date.now(),
+    updatedAt: typeof project.updatedAt === "number" ? project.updatedAt : Date.now(),
+  };
+  saveProjects([withDefaults, ...projects]);
+}
+
 export function updateProject(id: string, updates: Partial<Pick<Project, "name" | "bundleId">>): void {
   const projects = getProjects();
   const idx = projects.findIndex((p) => p.id === id);

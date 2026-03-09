@@ -14,6 +14,7 @@ import {
   Activity,
   Menu,
   X,
+  DollarSign,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/admin/test-suite", label: "Test Suite", icon: FlaskConical },
   { href: "/admin/skills", label: "Skills", icon: Zap },
   { href: "/admin/builds", label: "Builds", icon: Hammer },
+  { href: "/admin/api-costs", label: "API Costs", icon: DollarSign },
   { href: "/admin/qa", label: "QA Insights", icon: ClipboardCheck },
   { href: "/admin/status", label: "Status", icon: Activity },
   { href: "/admin/dashboard/projections", label: "Projections", icon: TrendingUp },

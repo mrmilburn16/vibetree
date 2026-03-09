@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Nav } from "@/components/landing/Nav";
 import { Footer } from "@/components/landing/Footer";
@@ -249,6 +250,12 @@ export default function PricingPage() {
               Credits power AI chat and builds. Each plan includes a monthly allowance; usage resets every billing period.
             </p>
             <CreditTable />
+            <p className="text-body-muted mt-6">
+              When your generated app uses external APIs (weather, stocks, maps, AI), calls go through our proxy and are deducted from credits automatically.{" "}
+              <Link href="/pricing/apis" className="text-[var(--link-default)] hover:underline font-medium">
+                App API usage pricing →
+              </Link>
+            </p>
           </div>
         </section>
 

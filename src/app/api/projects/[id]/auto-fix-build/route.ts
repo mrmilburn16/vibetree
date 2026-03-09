@@ -73,6 +73,34 @@ const FIX_SCHEMA = {
 } as const;
 
 /**
+ * Normalize error strings for comparison (trim, collapse whitespace).
+ * Returns a sorted array of normalized lines so two error sets can be compared.
+ */
+function normalizedErrorSignature(errors: string[]): string[] {
+  return [...errors]
+    .map((e) => e.trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .sort();
+}
+
+/**
+ * True if the same errors appeared on the previous attempt (no progress).
+ */
+function isRepeatedError(
+  currentErrors: string[],
+  errorHistory: Array<{ attempt: number; errors: string[] }> | undefined,
+  currentAttempt: number
+): boolean {
+  if (currentErrors.length === 0) return false;
+  const prevEntry = errorHistory?.find((e) => e.attempt === currentAttempt - 1);
+  if (!prevEntry?.errors?.length) return false;
+  const a = normalizedErrorSignature(currentErrors);
+  const b = normalizedErrorSignature(prevEntry.errors);
+  if (a.length !== b.length) return false;
+  return a.every((line, i) => line === b[i]);
+}
+
+/**
  * Extract file names mentioned in compiler errors (e.g.
  * "Views/CardEditorSheet.swift:42:13: error: ...")
  */
@@ -156,16 +184,16 @@ Rules:
    - "Cannot find type 'X' in scope": add missing import (SwiftUI, Foundation, UIKit, AppIntents, WidgetKit, Combine) or ensure the type is defined. Check if there's a typo.
    - "unknown attribute 'Published'": Add "import Combine" at the top of the file. @Published is defined in Combine, not SwiftUI.
    - "Cannot find type 'XIntent' in scope" in a file under WidgetExtension/: the widget extension is a separate target and cannot see types from the main app. You MUST define the Intent type inside WidgetExtension/. Add a new file WidgetExtension/<Name>Intent.swift (e.g. WidgetExtension/VoiceNoteIntent.swift) that defines the App Intent struct conforming to WidgetConfigurationIntent or AppIntent, with import AppIntents. If the same Intent exists in the main app, copy its definition into WidgetExtension/ so the widget target can see it.
-   - "Cannot find type 'XAttributes' in scope" (or similar ActivityAttributes type) in a file in the main app (e.g. ViewModels/, Views/): the ActivityAttributes struct must be in a file that is part of the main app target, not only in WidgetExtension/. Add or move the struct to "LiveActivity/<Name>Attributes.swift" (or another file outside WidgetExtension/). The exporter compiles LiveActivity/ for both the app and the widget; WidgetExtension/ is widget-only, so the app cannot see types defined there.
+   - "Cannot find type 'XAttributes' in scope" (e.g. FocusTimerAttributes) in a file in the main app (ViewModels/, Views/, etc.): the ActivityAttributes struct MUST be in the main app target, not in WidgetExtension/. If it exists in WidgetExtension/, move it out. Create or move it to "LiveActivity/<Name>Attributes.swift" (e.g. LiveActivity/FocusTimerAttributes.swift) or "Models/<Name>Attributes.swift". Never define ActivityAttributes in WidgetExtension/ — the main app cannot see types there. The widget extension should only reference the type in ActivityConfiguration(for:); the Attributes file must live in LiveActivity/ or Models/ so the main app compiles it.
    - ".containerBackground(for: .dynamicIsland)" or "dynamicIsland" / ContainerBackgroundPlacement: .dynamicIsland does not exist. Remove any .containerBackground(for: .dynamicIsland) modifier. Dynamic Island UI must use only the ActivityConfiguration dynamicIsland: parameter with the DynamicIsland result builder (DynamicIslandExpandedRegion, compactLeading, compactTrailing, minimal).
    - "Extra trailing closure passed in call" or "contextual closure type" (trailing closure misuse): Remove the trailing closure and use explicit parameter labels. BarMark/LineMark/AreaMark/PointMark do NOT take trailing closures; use modifiers like .foregroundStyle(...), .annotation { }, etc. after the initializer.
-   - "Value of type 'X' has no member 'Y'" / "has no member": (1) If Y is accentColor, use Color.accentColor (Theme, ShapeStyle, HapticPattern, BeatPattern have no accentColor). (2) If X is NSAttributedString.Key, use .foregroundColor not .foregroundStyle. (3) Otherwise use the correct API for that type (check SwiftUI/UIKit docs) or fix a typo; add missing import if the type is from another module.
-   - "type 'Theme' has no member 'accentColor'" or "type 'HapticPattern' has no member 'accentColor'" or "type 'BeatPattern' has no member 'accentColor'" or "type 'ShapeStyle' has no member 'accentColor'": Use Color.accentColor instead (e.g. .foregroundStyle(Color.accentColor), .tint(Color.accentColor)). Do not use a custom type's .accentColor.
+   - "Value of type 'X' has no member 'Y'" / "has no member": (1) If Y is accentColor, use Color("AccentColor") or .tint(Color("AccentColor")) — never Color.accentColor (that is not a valid static property on Color). (2) If X is NSAttributedString.Key, use .foregroundColor not .foregroundStyle. (3) Otherwise use the correct API for that type (check SwiftUI/UIKit docs) or fix a typo; add missing import if the type is from another module.
+   - "type 'Theme' has no member 'accentColor'" or "type 'HapticPattern' has no member 'accentColor'" or "type 'BeatPattern' has no member 'accentColor'" or "type 'ShapeStyle' has no member 'accentColor'": Use Color("AccentColor") or .tint(Color("AccentColor")) — never Color.accentColor (it does not exist on Color). Do not use a custom type's .accentColor.
    - "type 'NSAttributedString.Key' has no member 'foregroundStyle'": Use NSAttributedString.Key.foregroundColor (not .foregroundStyle). .foregroundStyle is a SwiftUI modifier; for attributed strings use .foregroundColor.
    - "generic parameter 'C' could not be inferred": Often with ForEach—provide an explicit id (e.g. ForEach(items, id: \\.id)) or use ForEach(array.indices, id: \\.self) and subscript the array. Ensure the collection type is clear.
    - "cannot find type 'UIView' in scope": Add "import UIKit" at the top. UIView is from UIKit; SwiftUI does not re-export it in all contexts.
    - "cannot find type 'Context' in scope": Context in makeUIView(context: Context) comes from SwiftUI (UIViewRepresentable). Add "import SwiftUI". For TimelineProvider use "import WidgetKit" and qualify as TimelineProvider.Context if needed.
-   - "cannot find 'colorcolorcolor' in scope": LLM typo (Color repeated). Replace colorcolorcolor with Color.primary (or the intended semantic color, e.g. Color.accentColor).
+   - "cannot find 'colorcolorcolor' in scope": LLM typo (Color repeated). Replace colorcolorcolor with Color.primary (or the intended semantic color, e.g. Color("AccentColor")).
    - "for-in loop requires 'AsyncStream<...>' to conform to 'Sequence'": AsyncStream is async. Use "for await item in stream" not "for item in stream".
    - "generic struct 'StateObject' requires that 'X' conform to 'ObservableObject'": The type passed to @StateObject must conform to ObservableObject. Add ": ObservableObject" to the class declaration and ensure it has @Published properties or an objectWillChange publisher.
    - "cannot convert value of type '[X]' to expected argument type 'Binding<C>'": ForEach expects a collection and id, or a Binding. Use ForEach(items, id: \\.id) { item in ... } not ForEach($items) with a plain array. For mutable list use ForEach(items.indices, id: \\.self) { i in ... } with $items[i] if needed.
@@ -245,6 +273,13 @@ export async function POST(
   if (errors.length === 0 && logLines.length === 0) {
     setBuildJobAutoFixInProgress(failedJobId, false);
     return Response.json({ gaveUp: true, reason: "No compiler errors or build log to fix" });
+  }
+
+  const currentAttempt = failedJob.request.attempt ?? 1;
+  if (isRepeatedError(errors, failedJob.errorHistory, currentAttempt)) {
+    setBuildJobAutoFixInProgress(failedJobId, false);
+    appendBuildJobLogs(failedJobId, ["Repeated error — same errors as previous attempt; stopping to avoid loop."]);
+    return Response.json({ gaveUp: true, reason: "Repeated error — auto-fix made no progress" });
   }
 
   const simplifyInstruction = attempt >= 4

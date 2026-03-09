@@ -436,6 +436,7 @@ Based on this, should we fix the system prompt, a skill file, or both? If so, gi
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
+        credentials: "omit",
       });
       if (res.ok) {
         const json = await res.json();
@@ -734,6 +735,7 @@ Based on this, should we fix the system prompt, a skill file, or both? If so, gi
                   setRemoving(true);
                   await fetch(`/api/build-results/${result.id}/image`, {
                     method: "DELETE",
+                    credentials: "omit",
                   });
                   setRemoving(false);
                   onUpdate();
@@ -760,6 +762,7 @@ Based on this, should we fix the system prompt, a skill file, or both? If so, gi
                 await fetch(`/api/build-results/${result.id}/image`, {
                   method: "POST",
                   body: form,
+                  credentials: "omit",
                 });
                 e.target.value = "";
                 setUploading(false);
@@ -1323,8 +1326,8 @@ export default function BuildsPage() {
   const load = useCallback(async () => {
     const sinceQ = since ? `&since=${encodeURIComponent(since)}` : "";
     const [resultsRes, statsRes] = await Promise.all([
-      fetch(`/api/build-results?limit=200${sinceQ}`),
-      fetch(`/api/build-results?stats=true${sinceQ}`),
+      fetch(`/api/build-results?limit=200${sinceQ}`, { credentials: "omit" }),
+      fetch(`/api/build-results?stats=true${sinceQ}`, { credentials: "omit" }),
     ]);
     const resultsData = await resultsRes.json().catch(() => ({ results: [] }));
     const statsData = await statsRes.json().catch(() => null);
@@ -1413,8 +1416,8 @@ export default function BuildsPage() {
     const sinceQ = since ? `&since=${encodeURIComponent(since)}` : "";
     try {
       const [resultsRes, statsRes] = await Promise.all([
-        fetch(`/api/build-results?limit=200${sinceQ}`, { cache: "no-store" }),
-        fetch(`/api/build-results?stats=true${sinceQ}`, { cache: "no-store" }),
+        fetch(`/api/build-results?limit=200${sinceQ}`, { cache: "no-store", credentials: "omit" }),
+        fetch(`/api/build-results?stats=true${sinceQ}`, { cache: "no-store", credentials: "omit" }),
       ]);
       const resultsData = await resultsRes.json().catch(() => ({ results: [] }));
       const statsData = await statsRes.json().catch(() => null);
@@ -1476,7 +1479,7 @@ export default function BuildsPage() {
 
   const pollActiveJobs = useCallback(async () => {
     try {
-      const res = await fetch("/api/build-jobs/active", { cache: "no-store" });
+      const res = await fetch("/api/build-jobs/active", { cache: "no-store", credentials: "omit" });
       const data = await res.json().catch(() => ({ jobs: [] }));
       setActiveJobs(Array.isArray(data.jobs) ? data.jobs : []);
     } catch {
@@ -1588,6 +1591,7 @@ export default function BuildsPage() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ visionTestReport: report, userNotes: notes }),
+          credentials: "omit",
         }).catch((err) => console.warn("[vision-test] Failed to persist vision report", err));
       };
 
@@ -1981,6 +1985,7 @@ export default function BuildsPage() {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(updates),
+              credentials: "omit",
             });
             setAutoPopulatedByClaude((prev) => ({ ...prev, [buildResultId]: { ...prev[buildResultId], ...claudeFlags } }));
           }
@@ -1991,7 +1996,7 @@ export default function BuildsPage() {
               const file = new File([blob], "vision.png", { type: "image/png" });
               const form = new FormData();
               form.append("image", file);
-              const imgRes = await fetch(`/api/build-results/${buildResultId}/image`, { method: "POST", body: form });
+              const imgRes = await fetch(`/api/build-results/${buildResultId}/image`, { method: "POST", body: form, credentials: "omit" });
               if (imgRes.ok) {
                 setAutoPopulatedByClaude((prev) => ({ ...prev, [buildResultId]: { ...prev[buildResultId], screenshot: true } }));
               }
@@ -2082,6 +2087,7 @@ export default function BuildsPage() {
           userFunctionalScore: null,
           userImagePath: null,
         }),
+        credentials: "omit",
       }).catch((err) => Sentry.captureException(err));
       runVisionTest(projectId, projectName, buildResultId, () => resultsRef.current?.find((x) => x.id === buildResultId));
     },

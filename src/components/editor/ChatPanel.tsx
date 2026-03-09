@@ -378,17 +378,26 @@ export function ChatPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-[var(--border-default)] px-4 py-2.5">
-        <div className="flex min-w-0 items-center gap-3">
-          {buildStatus === "building" && <BuildingIndicator />}
-          {buildStatus === "live" && <ReadyIndicator label="Ready" />}
-          {buildStatus === "failed" && <FailedIndicator reason={buildFailureReason} />}
-          {buildStatus === "building" && (
-            <StopBuildButton
-              projectId={projectId}
-              onCancelled={() => setBuildStatus("failed")}
-            />
+      <div className="grid grid-cols-[minmax(220px,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b border-[var(--border-default)] px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-3 overflow-visible">
+          {(buildStatus === "building" || isValidating) && (
+            <span className="shrink-0">
+              <BuildingIndicator />
+            </span>
           )}
+          {(buildStatus === "building" || isValidating) && (
+            <span className="shrink-0">
+              <StopBuildButton
+                projectId={projectId}
+                onCancelled={() => {
+                  setBuildStatus("failed");
+                  cancelCurrent();
+                }}
+              />
+            </span>
+          )}
+          {buildStatus === "live" && !isValidating && <ReadyIndicator label="Ready" />}
+          {buildStatus === "failed" && <FailedIndicator reason={buildFailureReason} />}
           {!featureFlags.useRealLLM && (
             <span
               className="rounded bg-[var(--background-tertiary)] px-2 py-0.5 text-xs text-[var(--text-tertiary)]"

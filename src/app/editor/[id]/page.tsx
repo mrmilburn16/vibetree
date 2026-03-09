@@ -1,26 +1,53 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getProject } from "@/lib/projects";
+import { getProject, addProjectToCache } from "@/lib/projects";
 import { EditorLayout } from "@/components/editor/EditorLayout";
 import type { Project } from "@/lib/projects";
 
 export default function EditorPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    const p = getProject(id);
-    if (!p) {
-      setNotFound(true);
+    const fromCache = getProject(id);
+    if (fromCache) {
+      setProject(fromCache);
       return;
     }
-    setProject(p);
+    // Project may have just been created; fetch from API and add to cache
+    let cancelled = false;
+    fetch(`/api/projects/${encodeURIComponent(id)}`, { credentials: "include" })
+      .then((res) => {
+        if (cancelled) return null;
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((data: { id?: string; name?: string; bundleId?: string; createdAt?: number; updatedAt?: number } | null) => {
+        if (cancelled || !data || typeof data.id !== "string") {
+          if (!cancelled) setNotFound(true);
+          return;
+        }
+        const p: Project = {
+          id: data.id,
+          name: typeof data.name === "string" ? data.name : "Untitled app",
+          bundleId: typeof data.bundleId === "string" ? data.bundleId : "",
+          createdAt: typeof data.createdAt === "number" ? data.createdAt : Date.now(),
+          updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : Date.now(),
+        };
+        addProjectToCache(p);
+        setProject(p);
+      })
+      .catch(() => {
+        if (!cancelled) setNotFound(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (notFound) {

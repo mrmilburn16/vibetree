@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { getProjects, saveProjects, deleteProject, type Project } from "@/lib/projects";
+import { getFirebaseAuthAsync } from "@/lib/firebaseClient";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
 import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
 import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
@@ -74,6 +75,7 @@ function timeAgo(ts: number): string {
 }
 
 export default function DashboardPage() {
+  console.log("[dashboard:trace] 1) Component render/mount");
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -112,10 +114,12 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    console.log("[dashboard:trace] 2) Mount effect running, window=", typeof window);
     if (typeof window === "undefined") return;
     setProjects(getProjects());
+    console.log("[dashboard:trace] 4) Calling setMounted(true)");
     setMounted(true);
-  }, [router]);
+  }, []);
 
   const fetchProjectsFromApi = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -123,19 +127,32 @@ export default function DashboardPage() {
     setProjectsFetchError(null);
     let user: { uid?: string } | null = null;
     try {
+      console.log("[dashboard:trace] 3a) Fetching GET /api/auth/session…");
       const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
       const sessionData = await sessionRes.json().catch(() => ({}));
+      console.log("[dashboard:trace] 3b) GET /api/auth/session response:", sessionRes.status, sessionRes.ok, "body:", sessionData);
       user = sessionData?.user ?? null;
+      if (!user && sessionRes.ok) {
+        // Cookie present (middleware let us through) but session empty — token invalid or expired; clear and redirect to avoid loop
+        console.log("[dashboard] session empty, clearing cookie and redirecting to sign-in");
+        await fetch("/api/auth/signout", { method: "POST", credentials: "include" });
+        window.location.href = "/sign-in";
+        return;
+      }
     } catch {
       // ignore
     }
     console.log("[dashboard] fetching projects for user:", user?.uid);
     try {
+      console.log("[dashboard:trace] 3c) Fetching GET /api/projects…");
       const res = await fetch("/api/projects", { credentials: "include" });
+      console.log("[dashboard:trace] 3d) GET /api/projects response:", res.status, res.ok);
       if (res.status === 401) {
         setProjectsFetchError("session_expired");
         setProjects([]);
-        console.log("[dashboard] projects: 401, session expired");
+        console.log("[dashboard] projects: 401, session expired — clearing cookie and redirecting to sign-in");
+        await fetch("/api/auth/signout", { method: "POST", credentials: "include" });
+        window.location.href = "/sign-in";
         return;
       }
       if (!res.ok) throw res;
@@ -354,6 +371,7 @@ export default function DashboardPage() {
   }
 
   if (!mounted) {
+    console.log("[dashboard:trace] 5) Rendering loading spinner (mounted=false)");
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--background-primary)]">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--button-primary-bg)] border-t-transparent" />
@@ -361,6 +379,7 @@ export default function DashboardPage() {
     );
   }
 
+  console.log("[dashboard:trace] 6) Rendering main dashboard (mounted=true)");
   return (
     <div className="relative min-h-screen bg-[var(--background-primary)]">
       {/* Gradient glow */}
@@ -404,9 +423,22 @@ export default function DashboardPage() {
             <Link href="/settings">
               <Button variant="ghost" size="sm">Settings</Button>
             </Link>
-            <Link href="/sign-in">
-              <Button variant="ghost" size="sm">Sign out</Button>
-            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              type="button"
+              onClick={async () => {
+                try {
+                  await fetch("/api/auth/signout", { method: "POST", credentials: "include" });
+                  const auth = await getFirebaseAuthAsync();
+                  if (auth) await auth.signOut();
+                } finally {
+                  window.location.href = "/";
+                }
+              }}
+            >
+              Sign out
+            </Button>
           </div>
         </div>
       </header>
@@ -576,15 +608,12 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Session expired — do not replace project list with localStorage */}
+        {/* Session expired — clear cookie and redirect so middleware does not loop */}
         {projectsFetchError === "session_expired" && (
           <div className="mb-4 rounded-xl border border-[var(--semantic-warning)]/50 bg-[var(--semantic-warning)]/10 px-4 py-3 text-center">
             <p className="text-sm text-[var(--text-primary)]">
-              Session expired, please sign in.
+              Session expired. Redirecting to sign in…
             </p>
-            <Link href="/sign-in" className="mt-2 inline-block text-sm font-medium text-[var(--link-default)] hover:underline">
-              Sign in
-            </Link>
           </div>
         )}
 

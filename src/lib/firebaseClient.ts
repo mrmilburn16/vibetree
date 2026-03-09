@@ -1,8 +1,9 @@
 "use client";
 
-import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
-
+/**
+ * Firebase is loaded only on the client via dynamic import so that importing
+ * this module from dashboard/layout never runs firebase/app in Node (which can crash SSR).
+ */
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -12,18 +13,37 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-let app: FirebaseApp | undefined;
-let auth: Auth | undefined;
+let authInstance: import("firebase/auth").Auth | null = null;
+let initPromise: Promise<import("firebase/auth").Auth | null> | null = null;
 
-export function getFirebaseAuth(): Auth | null {
+export function getFirebaseAuth(): import("firebase/auth").Auth | null {
   if (typeof window === "undefined") return null;
-  if (auth) return auth;
+  if (authInstance) return authInstance;
   if (!firebaseConfig.apiKey || !firebaseConfig.projectId) return null;
-  if (!getApps().length) {
-    app = initializeApp(firebaseConfig);
-  } else {
-    app = getApps()[0] as FirebaseApp;
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        const { initializeApp, getApps } = await import("firebase/app");
+        const { getAuth } = await import("firebase/auth");
+        const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+        authInstance = getAuth(app as import("firebase/app").FirebaseApp);
+        return authInstance;
+      } catch (e) {
+        console.warn("[firebaseClient] init failed:", e);
+        return null;
+      }
+    })();
   }
-  auth = getAuth(app);
-  return auth;
+  return null;
+}
+
+/**
+ * Call this when you need Auth and can await (e.g. sign-out). Use getFirebaseAuth() for sync check.
+ */
+export async function getFirebaseAuthAsync(): Promise<import("firebase/auth").Auth | null> {
+  if (typeof window === "undefined") return null;
+  const sync = getFirebaseAuth();
+  if (sync) return sync;
+  if (initPromise) return initPromise;
+  return null;
 }

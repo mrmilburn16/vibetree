@@ -34,7 +34,7 @@ describe("fixSwift: ColorColorColor and ColorColor fix", () => {
     expect(result[0].content).not.toMatch(/\bColorColorColor\b/);
     expect(result[0].content).toContain("Color.primary");
     expect(result[0].content).toContain("Color(.systemBackground)");
-    expect(result[0].content).toContain("Color.accentColor");
+    expect(result[0].content).toContain("Color(\"AccentColor\")");
   });
 
   it("fixSwiftCommonIssues fixes lowercase colorcolorcolor and colorcolor", () => {

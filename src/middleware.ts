@@ -25,14 +25,22 @@ const SESSION_COOKIE_NAME = "vibetree-session";
 
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  const hasSession = request.cookies.has(SESSION_COOKIE_NAME);
 
-  // If user has a session and hits sign-in, send them to dashboard (avoids loop)
-  if (path === "/sign-in" && hasSession) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+  // Inspect cookies: Edge may receive them differently than Node (e.g. Cookie header vs request.cookies)
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
+  let hasSession = request.cookies.has(SESSION_COOKIE_NAME);
+  const allCookieNames = request.cookies.getAll().map((c) => c.name);
+
+  // Fallback: Edge sometimes parses cookies differently; if Cookie header has the session but request.cookies doesn't, treat as authenticated
+  const cookieHeaderHasSession = cookieHeader.includes(`${SESSION_COOKIE_NAME}=`);
+  if (cookieHeaderHasSession && !hasSession) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[middleware] Cookie header has vibetree-session but request.cookies.has() is false — using header as fallback (Edge cookie quirk)");
+    }
+    hasSession = true;
   }
 
-  // Require session for dashboard, editor, and credits
   if (
     path === "/dashboard" ||
     path.startsWith("/dashboard/") ||
@@ -40,10 +48,31 @@ export function middleware(request: NextRequest) {
     path.startsWith("/editor/") ||
     path === "/credits"
   ) {
+    if (process.env.NODE_ENV === "development") {
+      const sessionValue = sessionCookie?.value;
+      const valuePreview = sessionValue
+        ? `${sessionValue.length} chars, starts ${sessionValue.slice(0, 12)}...`
+        : "missing";
+      console.log("[middleware] protected route", {
+        path,
+        hasSession: !!hasSession,
+        condition: `hasSession=${hasSession} → ${hasSession ? "allow" : "redirect"}`,
+        cookieNames: allCookieNames,
+        sessionCookie: sessionCookie ? { name: sessionCookie.name, valuePreview } : null,
+        cookieHeaderPresent: cookieHeader.length > 0,
+        cookieHeaderLength: cookieHeader.length,
+      });
+    }
     if (!hasSession) {
       return NextResponse.redirect(new URL("/sign-in", request.url));
     }
   }
+
+  // Do NOT redirect /sign-in → /dashboard here. Cookie presence does not mean the token is valid
+  // (e.g. expired or invalid token still sends the cookie). Redirecting causes a loop: sign-in
+  // (cookie exists) → dashboard → server rejects token → client redirects to sign-in → repeat.
+  // The sign-in page itself checks GET /api/auth/session and redirects to dashboard only when
+  // the session is actually valid.
 
   // Admin IP guard
   if (path.startsWith("/admin") || path.startsWith("/api/admin")) {

@@ -306,7 +306,10 @@ export function EditorLayout({
         const status = typeof job?.status === "string" ? job.status : null;
         const nextJobId = typeof job?.nextJobId === "string" ? job.nextJobId : null;
         onProgress?.(formatValidateProgress(job ?? {}));
-        if (status === "succeeded") {
+        // Never treat as success when the build log contains ** BUILD FAILED ** (xcodebuild failure).
+        const buildLogText = Array.isArray(job?.logs) ? job.logs.join("\n") : "";
+        const logShowsBuildFailed = buildLogText.includes("** BUILD FAILED **");
+        if (status === "succeeded" && !logShowsBuildFailed) {
           // Fire-and-forget: kick off background device build so it is ready when user clicks Install on iPhone
           (() => {
             fetch(`/api/projects/${projectId}/build-install`, {
@@ -338,6 +341,23 @@ export function EditorLayout({
             return { status: "succeeded", fixedFiles: job.request.files, attempts: attempt, fileNames: fNames };
           }
           return { status: "succeeded", attempts: attempt, fileNames: fNames };
+        }
+        if (status === "succeeded" && logShowsBuildFailed) {
+          const attempt = job?.request?.attempt ?? 1;
+          const errors = Array.isArray(job?.compilerErrors) ? job.compilerErrors : [];
+          const errorHistory = Array.isArray(job?.errorHistory) ? job.errorHistory : undefined;
+          const fNames = Array.isArray(job?.request?.files)
+            ? job.request.files.map((f: { path: string }) => f.path)
+            : [];
+          return {
+            status: "failed",
+            error: "Build log contains BUILD FAILED.",
+            attempts: attempt,
+            compilerErrors: errors,
+            ...(errorHistory?.length ? { errorHistory } : {}),
+            fileNames: fNames,
+            sourceFiles: Array.isArray(job?.request?.files) ? job.request.files : undefined,
+          };
         }
         if (status === "failed") {
           if (nextJobId) {
@@ -393,11 +413,13 @@ export function EditorLayout({
         const job = data?.job;
         if (!job || cancelled) return;
         const status = typeof job.status === "string" ? job.status : null;
-        if (status === "succeeded") {
+        const logText = Array.isArray(job?.logs) ? job.logs.join("\n") : "";
+        const logShowsBuildFailed = logText.includes("** BUILD FAILED **");
+        if (status === "succeeded" && !logShowsBuildFailed) {
           setBackgroundInstallStatus("ready");
           return;
         }
-        if (status === "failed") {
+        if (status === "failed" || (status === "succeeded" && logShowsBuildFailed)) {
           setBackgroundInstallStatus("failed");
           return;
         }

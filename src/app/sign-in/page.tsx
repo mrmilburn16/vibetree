@@ -3,9 +3,8 @@
 import { useState, useEffect, Fragment, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
 import { Button, Input, Card } from "@/components/ui";
-import { getFirebaseAuth } from "@/lib/firebaseClient";
+import { getFirebaseAuthAsync } from "@/lib/firebaseClient";
 
 type BackgroundVariant = 1 | 2 | 3;
 
@@ -56,6 +55,23 @@ export default function SignInPage() {
   const [backgroundVariant] = useState<BackgroundVariant>(2);
   const redirectingRef = useRef(false);
 
+  // Redirect to dashboard only when the session is actually valid (verified by API), not just cookie presence
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : {}))
+      .then((data: { user?: { uid?: string } }) => {
+        if (cancelled) return;
+        if (data?.user?.uid) {
+          window.location.replace("/dashboard");
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -67,13 +83,14 @@ export default function SignInPage() {
         setLoading(false);
         return;
       }
-      const auth = getFirebaseAuth();
+      const auth = await getFirebaseAuthAsync();
       if (!auth) {
         setError("Sign-in is not configured. Set Firebase env vars.");
         setLoading(false);
         return;
       }
       console.log("[sign-in] Firebase sign-in…");
+      const { signInWithEmailAndPassword } = await import("firebase/auth");
       const userCred = await signInWithEmailAndPassword(auth, email, password);
       console.log("[sign-in] Firebase sign-in OK, getting ID token…");
       const idToken = await userCred.user.getIdToken();
@@ -104,10 +121,10 @@ export default function SignInPage() {
       }
       redirectingRef.current = true;
       console.log("[sign-in] Session OK, redirecting to /dashboard");
-      // Short delay so the browser commits the Set-Cookie before the next request
+      // Allow time for the browser to commit Set-Cookie from the response before we navigate
       setTimeout(() => {
-        window.location.assign("/dashboard");
-      }, 100);
+        window.location.replace("/dashboard");
+      }, 350);
       return;
     } catch (err: unknown) {
       console.error("[sign-in] Error:", err);
