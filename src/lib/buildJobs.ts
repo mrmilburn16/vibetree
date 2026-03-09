@@ -37,6 +37,8 @@ export type BuildJobRecord = {
   ipaPath?: string;
   /** Updated on claim and every log append; used for stale-runner detection. */
   lastActivityAt?: number;
+  /** Set when user cancels; prevents auto-fix from being triggered when runner POSTs failure. */
+  cancelled?: boolean;
 };
 
 const MAX_LOG_LINES = 1500;
@@ -140,22 +142,32 @@ export function setBuildJobAutoFixInProgress(id: string, inProgress: boolean): v
   jobs.set(id, rec);
 }
 
-/** Mark job as failed (cancelled). Returns true if job was queued, running, or stuck in auto-fix and is now cancelled. */
+/** Mark job as failed (cancelled). Returns true if job was queued, running, or stuck in auto-fix and is now cancelled. Cancels any retry chain (nextJobId) so no further attempts are queued or started. */
 export function cancelBuildJob(id: string): boolean {
   const rec = jobs.get(id);
   if (!rec) return false;
   if (rec.status === "failed" && rec.autoFixInProgress) {
     rec.autoFixInProgress = false;
+    rec.cancelled = true;
     rec.error = rec.error || "Auto-fix cancelled by user";
     jobs.set(id, rec);
+    if (rec.nextJobId) cancelBuildJob(rec.nextJobId);
     return true;
   }
   if (rec.status !== "queued" && rec.status !== "running") return false;
+  const wasQueued = rec.status === "queued";
   rec.status = "failed";
   rec.finishedAt = Date.now();
   rec.error = "Cancelled by user";
+  rec.cancelled = true;
   rec.runnerId = undefined;
   jobs.set(id, rec);
+  const nextId = rec.nextJobId;
+  if (nextId) cancelBuildJob(nextId);
+  if (wasQueued) {
+    const idx = queue.indexOf(id);
+    if (idx >= 0) queue.splice(idx, 1);
+  }
   return true;
 }
 

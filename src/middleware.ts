@@ -25,6 +25,12 @@ const SESSION_COOKIE_NAME = "vibetree-session";
 
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const hasSession = request.cookies.has(SESSION_COOKIE_NAME);
+
+  // If user has a session and hits sign-in, send them to dashboard (avoids loop)
+  if (path === "/sign-in" && hasSession) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
 
   // Require session for dashboard, editor, and credits
   if (
@@ -34,7 +40,7 @@ export function middleware(request: NextRequest) {
     path.startsWith("/editor/") ||
     path === "/credits"
   ) {
-    if (!request.cookies.has(SESSION_COOKIE_NAME)) {
+    if (!hasSession) {
       return NextResponse.redirect(new URL("/sign-in", request.url));
     }
   }
@@ -66,6 +72,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/sign-in",
     "/dashboard",
     "/dashboard/:path*",
     "/editor",

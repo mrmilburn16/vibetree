@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, Fragment, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -54,11 +54,13 @@ export default function SignInPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [backgroundVariant] = useState<BackgroundVariant>(2);
+  const redirectingRef = useRef(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
+    redirectingRef.current = false;
     try {
       if (password.length < 1) {
         setError("Please enter your password.");
@@ -71,32 +73,58 @@ export default function SignInPage() {
         setLoading(false);
         return;
       }
+      console.log("[sign-in] Firebase sign-in…");
       const userCred = await signInWithEmailAndPassword(auth, email, password);
+      console.log("[sign-in] Firebase sign-in OK, getting ID token…");
       const idToken = await userCred.user.getIdToken();
+      if (!idToken || idToken.length < 10) {
+        setError("Could not get session token.");
+        setLoading(false);
+        return;
+      }
+      console.log("[sign-in] POST /api/auth/session (credentials: include)…");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15_000);
       const res = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
         credentials: "include",
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+      console.log("[sign-in] Session response:", res.status, res.ok);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError((data as { error?: string }).error ?? "Sign-in failed.");
+        const msg = (data as { error?: string }).error ?? "Sign-in failed.";
+        console.warn("[sign-in] Session failed:", msg);
+        setError(msg);
         setLoading(false);
         return;
       }
-      // Full page redirect so the session cookie is sent on the next request (avoids middleware rejecting /dashboard)
-      window.location.href = "/dashboard";
+      redirectingRef.current = true;
+      console.log("[sign-in] Session OK, redirecting to /dashboard");
+      // Short delay so the browser commits the Set-Cookie before the next request
+      setTimeout(() => {
+        window.location.assign("/dashboard");
+      }, 100);
       return;
     } catch (err: unknown) {
-      const message = err && typeof err === "object" && "code" in err
-        ? (err as { code?: string }).code === "auth/invalid-credential" || (err as { code?: string }).code === "auth/wrong-password"
-          ? "Invalid email or password."
-          : (err as { message?: string }).message ?? "Something went wrong. Please try again."
-        : "Something went wrong. Please try again.";
+      console.error("[sign-in] Error:", err);
+      const isAbort = err instanceof Error && err.name === "AbortError";
+      const message = isAbort
+        ? "Request timed out. Please try again."
+        : err && typeof err === "object" && "code" in err
+          ? (err as { code?: string }).code === "auth/invalid-credential" || (err as { code?: string }).code === "auth/wrong-password"
+            ? "Invalid email or password."
+            : (err as { message?: string }).message ?? "Something went wrong. Please try again."
+          : "Something went wrong. Please try again.";
       setError(message);
-    } finally {
       setLoading(false);
+    } finally {
+      if (!redirectingRef.current) {
+        setLoading(false);
+      }
     }
   }
 

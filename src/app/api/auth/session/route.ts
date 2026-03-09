@@ -26,8 +26,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "idToken is required" }, { status: 400 });
   }
 
+  let auth;
   try {
-    const auth = getAdminAuth();
+    auth = getAdminAuth();
+  } catch (e) {
+    console.warn("[auth/session] Firebase Admin not configured:", e instanceof Error ? e.message : String(e));
+    return NextResponse.json({ error: "Auth not configured" }, { status: 503 });
+  }
+
+  try {
     const decoded = await auth.verifyIdToken(idToken);
     const response = NextResponse.json({
       user: { uid: decoded.uid, email: decoded.email ?? null },
@@ -39,8 +46,10 @@ export async function POST(request: Request) {
       maxAge: SESSION_MAX_AGE,
       path: "/",
     });
+    console.log("[auth/session] Session cookie set for uid:", decoded.uid);
     return response;
-  } catch {
+  } catch (e) {
+    console.warn("[auth/session] Invalid token:", e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });
   }
 }

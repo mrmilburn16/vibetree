@@ -156,6 +156,8 @@ Rules:
    - "Cannot find type 'X' in scope": add missing import (SwiftUI, Foundation, UIKit, AppIntents, WidgetKit, Combine) or ensure the type is defined. Check if there's a typo.
    - "unknown attribute 'Published'": Add "import Combine" at the top of the file. @Published is defined in Combine, not SwiftUI.
    - "Cannot find type 'XIntent' in scope" in a file under WidgetExtension/: the widget extension is a separate target and cannot see types from the main app. You MUST define the Intent type inside WidgetExtension/. Add a new file WidgetExtension/<Name>Intent.swift (e.g. WidgetExtension/VoiceNoteIntent.swift) that defines the App Intent struct conforming to WidgetConfigurationIntent or AppIntent, with import AppIntents. If the same Intent exists in the main app, copy its definition into WidgetExtension/ so the widget target can see it.
+   - "Cannot find type 'XAttributes' in scope" (or similar ActivityAttributes type) in a file in the main app (e.g. ViewModels/, Views/): the ActivityAttributes struct must be in a file that is part of the main app target, not only in WidgetExtension/. Add or move the struct to "LiveActivity/<Name>Attributes.swift" (or another file outside WidgetExtension/). The exporter compiles LiveActivity/ for both the app and the widget; WidgetExtension/ is widget-only, so the app cannot see types defined there.
+   - ".containerBackground(for: .dynamicIsland)" or "dynamicIsland" / ContainerBackgroundPlacement: .dynamicIsland does not exist. Remove any .containerBackground(for: .dynamicIsland) modifier. Dynamic Island UI must use only the ActivityConfiguration dynamicIsland: parameter with the DynamicIsland result builder (DynamicIslandExpandedRegion, compactLeading, compactTrailing, minimal).
    - "Extra trailing closure passed in call" or "contextual closure type" (trailing closure misuse): Remove the trailing closure and use explicit parameter labels. BarMark/LineMark/AreaMark/PointMark do NOT take trailing closures; use modifiers like .foregroundStyle(...), .annotation { }, etc. after the initializer.
    - "Value of type 'X' has no member 'Y'" / "has no member": (1) If Y is accentColor, use Color.accentColor (Theme, ShapeStyle, HapticPattern, BeatPattern have no accentColor). (2) If X is NSAttributedString.Key, use .foregroundColor not .foregroundStyle. (3) Otherwise use the correct API for that type (check SwiftUI/UIKit docs) or fix a typo; add missing import if the type is from another module.
    - "type 'Theme' has no member 'accentColor'" or "type 'HapticPattern' has no member 'accentColor'" or "type 'BeatPattern' has no member 'accentColor'" or "type 'ShapeStyle' has no member 'accentColor'": Use Color.accentColor instead (e.g. .foregroundStyle(Color.accentColor), .tint(Color.accentColor)). Do not use a custom type's .accentColor.
@@ -214,8 +216,8 @@ export async function POST(
   const failedJob = getBuildJob(failedJobId);
   if (!failedJob) return Response.json({ error: "Job not found" }, { status: 404 });
   if (failedJob.status !== "failed") return Response.json({ error: "Job is not in failed state" }, { status: 400 });
-  if (failedJob.autoFixInProgress === false) {
-    return Response.json({ cancelled: true, reason: "Auto-fix was cancelled by user" });
+  if (failedJob.cancelled || failedJob.autoFixInProgress === false) {
+    return Response.json({ cancelled: true, reason: "Build was cancelled by user" });
   }
 
   /** Re-check job; cancel sets autoFixInProgress = false so we can abort before LLM or before creating retry. */

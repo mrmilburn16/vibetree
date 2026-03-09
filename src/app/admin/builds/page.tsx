@@ -1106,14 +1106,14 @@ function StatsPanel({
       )}
 
       {stats.commonErrors.length > 0 && (
-        <section className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
+        <section className="min-w-0 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
             Most common errors
           </h3>
           <p className="mb-2 text-xs text-[var(--text-tertiary)]">
             Click an error to filter builds; use the badge to set status.
           </p>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5 overflow-hidden">
             {stats.commonErrors.slice(0, 10).map((e, i) => {
               const status = errorStatuses[e.error]?.status ?? "Open";
               const isSelected = selectedErrorFilter === e.error;
@@ -1121,9 +1121,9 @@ function StatsPanel({
               return (
                 <div
                   key={i}
-                  className={`flex items-start justify-between gap-2 text-xs ${isSelected ? "rounded-md bg-[var(--badge-error)]/15 ring-1 ring-[var(--badge-error)]/40" : ""}`}
+                  className={`grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 rounded-md px-2 py-1.5 text-xs ${isSelected ? "bg-[var(--badge-error)]/15 ring-1 ring-[var(--badge-error)]/40" : ""}`}
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 overflow-hidden">
                     {knownLabel && (
                       <span className="mb-0.5 inline-block rounded bg-[var(--background-tertiary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)]">
                         {knownLabel}
@@ -1132,14 +1132,17 @@ function StatsPanel({
                     <button
                       type="button"
                       onClick={() => onSelectErrorFilter(isSelected ? null : e.error)}
-                      className="block w-full cursor-pointer break-all text-left font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline"
-                      title={isSelected ? "Clear filter" : "Filter builds by this error"}
+                      className="block w-full cursor-pointer truncate text-left font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline"
+                      title={e.error}
                     >
                       {e.error}
                     </button>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
-                    <span className="tabular-nums text-[var(--text-tertiary)]">
+                  <div
+                    className="flex min-w-[12rem] shrink-0 items-center gap-2 pl-2"
+                    onClick={(ev) => ev.stopPropagation()}
+                  >
+                    <span className="shrink-0 tabular-nums text-[var(--text-tertiary)]">
                       {e.count}×
                     </span>
                     <DropdownSelect
@@ -1154,7 +1157,7 @@ function StatsPanel({
                         onSetErrorStatus(e.error, v as ErrorPatternStatusValue);
                       }}
                       aria-label="Status for error"
-                      className="min-w-0 w-24 text-[10px]"
+                      className="min-w-0 shrink-0 text-[10px]"
                     />
                   </div>
                 </div>
@@ -1345,32 +1348,57 @@ export default function BuildsPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ builds: resultsList }),
+          credentials: "include",
         });
         if (reconcileRes.ok) {
           const { statuses } = await reconcileRes.json().catch(() => ({ statuses: {} }));
           setErrorStatuses(statuses);
         } else {
-          const errorsParam = encodeURIComponent(JSON.stringify(statsData.commonErrors.map((c: { error: string }) => c.error)));
-          const statusRes = await fetch(`/api/admin/error-pattern-status?errors=${errorsParam}`);
+          const errorsToFetch = statsData.commonErrors.slice(0, 20).map((c: { error: string }) => c.error);
+          const statusRes = await fetch("/api/admin/error-pattern-status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ errors: errorsToFetch }),
+            credentials: "include",
+          });
           if (statusRes.ok) {
             const { statuses } = await statusRes.json().catch(() => ({ statuses: {} }));
             setErrorStatuses(statuses);
           }
         }
-      } catch {
-        const errorsParam = encodeURIComponent(JSON.stringify(statsData.commonErrors.map((c: { error: string }) => c.error)));
-        const statusRes = await fetch(`/api/admin/error-pattern-status?errors=${errorsParam}`);
+      } catch (err) {
+        console.warn("[admin/builds] Error-pattern reconcile failed:", err);
+        const errorsToFetch = statsData.commonErrors.slice(0, 20).map((c: { error: string }) => c.error);
+        try {
+          const statusRes = await fetch("/api/admin/error-pattern-status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ errors: errorsToFetch }),
+            credentials: "include",
+          });
+          if (statusRes.ok) {
+            const { statuses } = await statusRes.json().catch(() => ({ statuses: {} }));
+            setErrorStatuses(statuses);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    } else if (statsData?.commonErrors?.length) {
+      const errorsToFetch = statsData.commonErrors.slice(0, 20).map((c: { error: string }) => c.error);
+      try {
+        const statusRes = await fetch("/api/admin/error-pattern-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ errors: errorsToFetch }),
+          credentials: "include",
+        });
         if (statusRes.ok) {
           const { statuses } = await statusRes.json().catch(() => ({ statuses: {} }));
           setErrorStatuses(statuses);
         }
-      }
-    } else if (statsData?.commonErrors?.length) {
-      const errorsParam = encodeURIComponent(JSON.stringify(statsData.commonErrors.map((c: { error: string }) => c.error)));
-      const statusRes = await fetch(`/api/admin/error-pattern-status?errors=${errorsParam}`);
-      if (statusRes.ok) {
-        const { statuses } = await statusRes.json().catch(() => ({ statuses: {} }));
-        setErrorStatuses(statuses);
+      } catch {
+        // ignore
       }
     }
 
@@ -2159,18 +2187,20 @@ export default function BuildsPage() {
             selectedErrorFilter={selectedErrorFilter}
             onSelectErrorFilter={setSelectedErrorFilter}
             onSetErrorStatus={async (error, status) => {
+              if (typeof error !== "string" || !error.trim()) return;
               try {
                 const res = await fetch("/api/admin/error-pattern-status", {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ error, status }),
+                  credentials: "include",
                 });
                 if (res.ok) {
                   const { status: doc } = await res.json();
                   setErrorStatuses((prev) => ({ ...prev, [error]: doc }));
                 }
-              } catch {
-                // ignore
+              } catch (err) {
+                console.warn("[admin/builds] Error-pattern status update failed:", err);
               }
             }}
           />
@@ -2255,10 +2285,11 @@ export default function BuildsPage() {
                     size="sm"
                     onClick={async () => {
                       for (const job of activeJobs) {
+                        if (!job?.id) continue;
                         try {
-                          await fetch(`/api/build-jobs/${job.id}/cancel`, { method: "POST" });
-                        } catch {
-                          /* ignore */
+                          await fetch(`/api/build-jobs/${job.id}/cancel`, { method: "POST", credentials: "include" });
+                        } catch (err) {
+                          console.warn("[admin/builds] Cancel job failed:", job.id, err);
                         }
                       }
                       load();
@@ -2276,14 +2307,15 @@ export default function BuildsPage() {
                   key={job.id}
                   job={job}
                   onCancel={async (jobId) => {
+                    if (!jobId || typeof jobId !== "string") return;
                     try {
-                      const res = await fetch(`/api/build-jobs/${jobId}/cancel`, { method: "POST" });
+                      const res = await fetch(`/api/build-jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST", credentials: "include" });
                       if (res.ok) {
                         load();
                         pollActiveJobs();
                       }
-                    } catch {
-                      /* ignore */
+                    } catch (err) {
+                      console.warn("[admin/builds] Cancel job failed:", jobId, err);
                     }
                   }}
                 />

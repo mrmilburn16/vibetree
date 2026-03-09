@@ -25,6 +25,18 @@ export async function GET(request: Request) {
   return NextResponse.json({ statuses });
 }
 
+/** POST: fetch statuses. Body: { errors?: string[] }. Use when the list is long to avoid URL length limits. */
+export async function POST(request: Request) {
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const body = await request.json().catch(() => ({}));
+  const errors = Array.isArray(body?.errors) ? (body.errors as string[]).filter((e): e is string => typeof e === "string") : undefined;
+  const statuses = await getErrorPatternStatuses(errors);
+  return NextResponse.json({ statuses });
+}
+
 /** PATCH: set status for one error. Body: { error: string (normalized), status: "Open" | "Fixed" | "Wontfix" | "Regression" } */
 export async function PATCH(request: Request) {
   const session = await getAdminSession();

@@ -143,6 +143,7 @@ export async function POST(
   if (
     freshJob &&
     freshJob.status === "failed" &&
+    !freshJob.cancelled &&
     freshJob.request.autoFix &&
     attempt < maxAttempts &&
     (hasErrors || hasLogs)
