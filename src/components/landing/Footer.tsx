@@ -40,6 +40,12 @@ export function Footer() {
             >
               Status
             </Link>
+            <Link
+              href="/pricing/apis"
+              className="text-sm text-[var(--link-default)] hover:text-[var(--link-hover)]"
+            >
+              API pricing
+            </Link>
           </div>
           <SocialIcons />
         </div>
