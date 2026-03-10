@@ -6,10 +6,13 @@ import { Modal, Button, QRCode, Input } from "@/components/ui";
 
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
 const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
-const XCODE_TEAM_ID_STORAGE_PREFIX = "vibetree-xcode-team-id:";
 const XCODE_BUNDLE_ID_OVERRIDE_PREFIX = "vibetree-xcode-bundle-id:";
 const XCODE_PREFERRED_DEVICE_PREFIX = "vibetree-xcode-preferred-device:";
 const SESSION_EXPIRED_MESSAGE = "Session expired — please refresh the page and try again.";
+const TEAM_ID_REGEX = /^[A-Z0-9]{10}$/;
+function isValidTeamId(value: string): boolean {
+  return TEAM_ID_REGEX.test(value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ""));
+}
 
 type PreflightResult = {
   runner: { ok: boolean; runnerId?: string };
@@ -116,6 +119,7 @@ export function RunOnDeviceModal({
   const [launchJobId, setLaunchJobId] = useState<string | null>(null);
   const [launchMessage, setLaunchMessage] = useState<string | null>(null);
   const [showTeamIdInput, setShowTeamIdInput] = useState(false);
+  const [teamIdValidationError, setTeamIdValidationError] = useState<string | null>(null);
 
   const projectType =
     projectTypeProp ??
@@ -129,43 +133,34 @@ export function RunOnDeviceModal({
   const { checks, allPassed, loading: preflightLoading, recheck } =
     usePreflightChecks(projectId, teamId, isOpen && projectType === "pro", buildStatus);
 
-  // Load saved settings from localStorage on open
+  // Load team ID from Firestore (user doc); preferred device and bundle override from localStorage
   useEffect(() => {
     if (!isOpen || !projectId) return;
     if (typeof window !== "undefined") {
-      try {
-        let t =
-          localStorage.getItem(
-            `${XCODE_TEAM_ID_STORAGE_PREFIX}${projectId}`
-          ) ?? "";
-        if (!t) {
-          const universal = localStorage.getItem("vibetree-universal-defaults");
-          if (universal) {
-            try {
-              const parsed = JSON.parse(universal);
-              if (typeof parsed.teamId === "string") t = parsed.teamId;
-            } catch {}
+      (async () => {
+        try {
+          const res = await fetch("/api/user/development-team");
+          if (res.ok) {
+            const data = (await res.json()) as { developmentTeamId?: string };
+            const t = typeof data.developmentTeamId === "string" ? data.developmentTeamId.trim() : "";
+            setTeamId(t);
           }
+        } catch {
+          // keep empty on error
         }
-        let d =
-          localStorage.getItem(
-            `${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`
-          ) ?? "";
+      })();
+      try {
+        let d = localStorage.getItem(`${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`) ?? "";
         if (!d) {
           const universal = localStorage.getItem("vibetree-universal-defaults");
           if (universal) {
             try {
               const parsed = JSON.parse(universal);
-              if (typeof parsed.preferredRunDevice === "string")
-                d = parsed.preferredRunDevice;
+              if (typeof parsed.preferredRunDevice === "string") d = parsed.preferredRunDevice;
             } catch {}
           }
         }
-        const b =
-          localStorage.getItem(
-            `${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`
-          ) ?? "";
-        setTeamId(t);
+        const b = localStorage.getItem(`${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`) ?? "";
         setPreferredRunDevice(d);
         setBundleIdOverride(b);
       } catch {}
@@ -410,6 +405,24 @@ export function RunOnDeviceModal({
 
       const finalBundleId = bundleIdOverride.trim() || bundleId;
       const finalTeamId = teamId.trim();
+      setTeamIdValidationError(null);
+      if (projectType === "pro" && (!finalTeamId || !isValidTeamId(finalTeamId))) {
+        setTeamIdValidationError("Team ID must be exactly 10 letters or numbers. Find it in Apple Developer → Account → Membership details.");
+        setInstallStatus("failed");
+        setInstallLoading(false);
+        return;
+      }
+      if (finalTeamId && isValidTeamId(finalTeamId)) {
+        try {
+          await fetch("/api/user/development-team", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ developmentTeamId: finalTeamId.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") }),
+          });
+        } catch {
+          // non-blocking
+        }
+      }
 
       if (files.length > 0) {
         try {
@@ -428,7 +441,7 @@ export function RunOnDeviceModal({
           files: files.length > 0 ? files : undefined,
           projectName,
           bundleId: finalBundleId,
-          developmentTeam: finalTeamId,
+          developmentTeam: finalTeamId || undefined,
           autoFix: buildStatus !== "live",
         }),
       });
@@ -744,36 +757,70 @@ export function RunOnDeviceModal({
               action={
                 checks && !checks.teamId.ok ? (
                   showTeamIdInput ? (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        id="preflight-team-id"
-                        value={teamId}
-                        onChange={(e) => {
-                          const v = e.target.value
-                            .toUpperCase()
-                            .replace(/[^A-Z0-9]/g, "");
-                          setTeamId(v);
-                          try {
-                            localStorage.setItem(
-                              `${XCODE_TEAM_ID_STORAGE_PREFIX}${projectId}`,
-                              v
-                            );
-                          } catch {}
-                        }}
-                        placeholder="ABCDE12345"
-                        className="w-32 font-mono text-xs"
-                        inputMode="text"
-                        autoCapitalize="characters"
-                        spellCheck={false}
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        onClick={recheck}
-                        className="cursor-pointer whitespace-nowrap rounded bg-[var(--primary-default)] px-2 py-1 text-xs font-medium text-white hover:bg-[var(--primary-hover)]"
-                      >
-                        Save
-                      </button>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="preflight-team-id"
+                          value={teamId}
+                          onChange={(e) => {
+                            const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                            setTeamId(v);
+                            setTeamIdValidationError(null);
+                          }}
+                          onBlur={async () => {
+                            const v = teamId.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+                            if (v.length === 10) {
+                              try {
+                                const res = await fetch("/api/user/development-team", {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ developmentTeamId: v }),
+                                });
+                                if (res.ok) recheck();
+                              } catch {
+                                // non-blocking
+                              }
+                            }
+                          }}
+                          placeholder="ABCDE12345"
+                          className="w-32 font-mono text-xs"
+                          inputMode="text"
+                          autoCapitalize="characters"
+                          spellCheck={false}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const v = teamId.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+                            if (v.length !== 10) {
+                              setTeamIdValidationError("Team ID must be exactly 10 letters or numbers.");
+                              return;
+                            }
+                            setTeamIdValidationError(null);
+                            try {
+                              const res = await fetch("/api/user/development-team", {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ developmentTeamId: v }),
+                              });
+                              if (res.ok) recheck();
+                              else {
+                                const data = await res.json().catch(() => ({}));
+                                setTeamIdValidationError((data?.error as string) || "Failed to save.");
+                              }
+                            } catch {
+                              setTeamIdValidationError("Failed to save.");
+                            }
+                          }}
+                          className="cursor-pointer whitespace-nowrap rounded bg-[var(--primary-default)] px-2 py-1 text-xs font-medium text-white hover:bg-[var(--primary-hover)]"
+                        >
+                          Save
+                        </button>
+                      </div>
+                      {teamIdValidationError && (
+                        <p className="text-xs text-red-500">{teamIdValidationError}</p>
+                      )}
                     </div>
                   ) : (
                     <button
@@ -800,6 +847,12 @@ export function RunOnDeviceModal({
               }
             />
           </div>
+
+          {teamIdValidationError && (
+            <p className="rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+              {teamIdValidationError}
+            </p>
+          )}
 
           {/* ── Install button ── */}
           <Button

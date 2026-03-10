@@ -1345,11 +1345,6 @@ function ResultRow({
                   setRunOnDeviceQueued(false);
                   setRunOnDeviceLoading(true);
                   try {
-                    let teamId = "";
-                    try {
-                      const ud = JSON.parse(localStorage.getItem("vibetree-universal-defaults") || "{}");
-                      teamId = (ud.teamId || "").trim();
-                    } catch {}
                     let files = result.projectFiles?.length ? result.projectFiles : undefined;
                     if (!files?.length) {
                       const filesRes = await fetch(`/api/projects/${result.projectId}/files`, { credentials: "include" });
@@ -1373,7 +1368,7 @@ function ResultRow({
                         files: files?.length ? files : undefined,
                         projectName: toPascalCase(result.idea.title),
                         bundleId: "com.vibetree.test",
-                        developmentTeam: teamId || undefined,
+                        developmentTeam: undefined, // Server resolves from user's Firestore developmentTeamId
                         autoFix: result.status !== "succeeded",
                         maxAttempts: typeof maxFixes === "number" ? maxFixes : 8,
                       }),
@@ -1416,11 +1411,6 @@ function ResultRow({
                   setXcodeError(null);
                   setXcodeLoading(true);
                   try {
-                    let teamId: string | undefined;
-                    try {
-                      const ud = JSON.parse(localStorage.getItem("vibetree-universal-defaults") || "{}");
-                      teamId = ud.teamId || undefined;
-                    } catch {}
                     let files = result.projectFiles?.length ? result.projectFiles : undefined;
                     if (!files?.length) {
                       const filesRes = await fetch(`/api/projects/${result.projectId}/files`, { credentials: "include" });
@@ -1440,7 +1430,7 @@ function ResultRow({
                         result.projectId!,
                         result.idea.title,
                         files,
-                        teamId,
+                        undefined, // Server resolves from user's Firestore developmentTeamId
                       );
                     } else {
                       const url = `/api/projects/${result.projectId}/export-xcode`;
@@ -2915,12 +2905,6 @@ export default function TestSuitePage() {
         updateResult(index, { status: "building", fileCount, generationMs, liveStatus: "Compiling in Xcode...", startedAt: Date.now() });
         pushLiveEvent(index, "Starting build…");
 
-        let developmentTeam: string | undefined;
-        try {
-          const ud = JSON.parse(localStorage.getItem("vibetree-universal-defaults") || "{}");
-          developmentTeam = ud.teamId || undefined;
-        } catch {}
-
         const buildStart = Date.now();
         const buildRes = await fetch(`/api/projects/${projectId}/validate-xcode`, {
           method: "POST",
@@ -2931,7 +2915,7 @@ export default function TestSuitePage() {
             bundleId: "com.vibetree.test",
             autoFix: maxFixesRef.current > 0,
             maxAttempts: maxFixesRef.current,
-            ...(developmentTeam ? { developmentTeam } : {}),
+            developmentTeam: undefined, // Server resolves from user's Firestore developmentTeamId
           }),
           credentials: "include",
         }).then((r) => r.json());

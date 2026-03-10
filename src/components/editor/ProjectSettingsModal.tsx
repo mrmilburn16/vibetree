@@ -16,7 +16,6 @@ import { updateProject, type Project } from "@/lib/projects";
 import type { SelectOption } from "@/components/ui";
 import { getBeforeAfterEnabled, setBeforeAfterEnabled as saveBeforeAfterPreference } from "./PreviewPane";
 
-const XCODE_TEAM_ID_PREFIX = "vibetree-xcode-team-id:";
 const XCODE_BUNDLE_ID_OVERRIDE_PREFIX = "vibetree-xcode-bundle-id:";
 const XCODE_PREFERRED_DEVICE_PREFIX = "vibetree-xcode-preferred-device:";
 const PROJECT_SETTINGS_PREFIX = "vibetree-project-settings:";
@@ -73,7 +72,7 @@ function loadUniversalDefaults(): UniversalDefaults {
     if (!raw) return { ...FACTORY_DEFAULTS };
     const parsed = JSON.parse(raw);
     return {
-      teamId: typeof parsed.teamId === "string" ? parsed.teamId : "",
+      teamId: "", // Team ID is loaded from Firestore via API, not localStorage
       preferredRunDevice: typeof parsed.preferredRunDevice === "string" ? parsed.preferredRunDevice : "",
       deploymentTarget: typeof parsed.deploymentTarget === "string" ? parsed.deploymentTarget : "17.0",
       orientation: typeof parsed.orientation === "string" ? parsed.orientation : "all",
@@ -87,7 +86,8 @@ function loadUniversalDefaults(): UniversalDefaults {
 function saveUniversalDefaults(defaults: UniversalDefaults) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(UNIVERSAL_DEFAULTS_KEY, JSON.stringify(defaults));
+    const toStore = { ...defaults, teamId: "" }; // Never persist team ID to localStorage
+    localStorage.setItem(UNIVERSAL_DEFAULTS_KEY, JSON.stringify(toStore));
   } catch {}
 }
 
@@ -116,11 +116,6 @@ function loadSettings(projectId: string, universalDefaults: UniversalDefaults): 
   };
   if (typeof window === "undefined") return settings;
   try {
-    const teamIdStored = localStorage.getItem(`${XCODE_TEAM_ID_PREFIX}${projectId}`);
-    if (teamIdStored !== null) {
-      settings.teamId = teamIdStored;
-      settings.overrides.teamId = true;
-    }
     const preferredDeviceStored = localStorage.getItem(`${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`);
     if (preferredDeviceStored !== null) {
       settings.preferredRunDevice = preferredDeviceStored;
@@ -151,7 +146,6 @@ function loadSettings(projectId: string, universalDefaults: UniversalDefaults): 
 function saveSettings(projectId: string, settings: ProjectSettings) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(`${XCODE_TEAM_ID_PREFIX}${projectId}`, settings.teamId);
     localStorage.setItem(`${XCODE_PREFERRED_DEVICE_PREFIX}${projectId}`, settings.preferredRunDevice);
     localStorage.setItem(`${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`, settings.bundleIdOverride);
     localStorage.setItem(
@@ -238,10 +232,11 @@ export function ProjectSettingsModal({
   const [exportLoading, setExportLoading] = useState(false);
 
   const [universalDefaults, setUniversalDefaults] = useState<UniversalDefaults>(() => loadUniversalDefaults());
-  const [settings, setSettings] = useState<ProjectSettings>(() => loadSettings(project.id, universalDefaults));
+  const [settings, setSettings] = useState<ProjectSettings>(() => loadSettings(project.id, loadUniversalDefaults()));
   const [runnerDevices, setRunnerDevices] = useState<RunnerDevicesResponse | null>(null);
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [beforeAfterEnabled, setBeforeAfterEnabled] = useState(false);
+  const [teamIdError, setTeamIdError] = useState("");
 
   useEffect(() => {
     if (isOpen) {
@@ -249,12 +244,30 @@ export function ProjectSettingsModal({
       setBundleId(project.bundleId);
       setNameError("");
       setBundleError("");
+      setTeamIdError("");
       setBeforeAfterEnabled(getBeforeAfterEnabled());
       const ud = loadUniversalDefaults();
       setUniversalDefaults(ud);
       setSettings(loadSettings(project.id, ud));
     }
   }, [isOpen, project.name, project.bundleId, project.id]);
+
+  // Load team ID from Firestore when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    fetch("/api/user/development-team", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { developmentTeamId?: string } | null) => {
+        if (cancelled || !data) return;
+        const t = typeof data.developmentTeamId === "string" ? data.developmentTeamId.trim() : "";
+        setSettings((prev) => ({ ...prev, teamId: t }));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -327,7 +340,12 @@ export function ProjectSettingsModal({
     });
   }
 
-  function handleSave(e?: React.FormEvent) {
+  const TEAM_ID_REGEX = /^[A-Z0-9]{10}$/;
+  function isValidTeamId(value: string): boolean {
+    return TEAM_ID_REGEX.test(value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ""));
+  }
+
+  async function handleSave(e?: React.FormEvent) {
     e?.preventDefault();
     let valid = true;
     if (!name.trim()) {
@@ -342,7 +360,32 @@ export function ProjectSettingsModal({
     } else {
       setBundleError("");
     }
+    if (settings.teamId.trim() && !isValidTeamId(settings.teamId)) {
+      setTeamIdError("Team ID must be exactly 10 letters or numbers (e.g. from Apple Developer → Membership details).");
+      valid = false;
+    } else {
+      setTeamIdError("");
+    }
     if (!valid) return;
+
+    if (settings.teamId.trim() && isValidTeamId(settings.teamId)) {
+      const normalized = settings.teamId.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+      try {
+        const res = await fetch("/api/user/development-team", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ developmentTeamId: normalized }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setTeamIdError((data?.error as string) || "Failed to save Team ID.");
+          return;
+        }
+      } catch {
+        setTeamIdError("Failed to save Team ID.");
+        return;
+      }
+    }
 
     updateProject(project.id, { name: name.trim(), bundleId: bundleId.trim() });
     onProjectUpdate({ name: name.trim(), bundleId: bundleId.trim() });
@@ -465,12 +508,16 @@ export function ProjectSettingsModal({
                 onChange={(e) => {
                   const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
                   handleUniversalOrOverride("teamId", v);
+                  setTeamIdError("");
                 }}
                 placeholder="ABCDE12345"
                 inputMode="text"
                 autoCapitalize="characters"
                 spellCheck={false}
               />
+              {teamIdError && (
+                <p className="mt-1 text-sm text-[var(--semantic-error)]">{teamIdError}</p>
+              )}
               <HelpTip>
                 Your 10-character Apple Developer Team ID. Set it once and it applies to all projects. Easiest: Apple Developer → Account → Membership details → copy <span className="font-mono">Team ID</span> (e.g. from developer.apple.com/account). Alternative: in Xcode, pick your team once, then search your <span className="font-mono">project.pbxproj</span> for <span className="font-mono">DEVELOPMENT_TEAM</span>.
               </HelpTip>

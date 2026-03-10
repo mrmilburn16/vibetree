@@ -33,16 +33,15 @@ type PreflightResult = {
   files: { ok: boolean; count?: number };
 };
 
-function getTeamIdForPreflight(): string {
-  if (typeof window === "undefined") return "";
+async function fetchTeamIdForPreflight(): Promise<string> {
   try {
-    const universal = localStorage.getItem("vibetree-universal-defaults");
-    if (universal) {
-      const parsed = JSON.parse(universal);
-      if (typeof parsed.teamId === "string") return parsed.teamId;
-    }
-  } catch {}
-  return "";
+    const res = await fetch("/api/user/development-team", { cache: "no-store" });
+    if (!res.ok) return "";
+    const data = (await res.json()) as { developmentTeamId?: string };
+    return typeof data.developmentTeamId === "string" ? data.developmentTeamId.trim() : "";
+  } catch {
+    return "";
+  }
 }
 
 const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
@@ -211,7 +210,7 @@ export default function DashboardPage() {
   const runPreflight = useCallback(async () => {
     setPreflightLoading(true);
     try {
-      const teamId = getTeamIdForPreflight();
+      const teamId = await fetchTeamIdForPreflight();
       const q = new URLSearchParams();
       if (teamId) q.set("teamId", teamId);
       const res = await fetch(`/api/macos/preflight?${q.toString()}`);

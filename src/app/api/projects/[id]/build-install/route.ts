@@ -5,6 +5,7 @@ import { createBuildJob } from "@/lib/buildJobs";
 import { isRunnerOnline } from "@/lib/runnerStore";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
 import { hasActiveSubscription } from "@/lib/subscriptionFirestore";
+import { getDevelopmentTeamId } from "@/lib/userDevelopmentTeamFirestore";
 
 function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
   return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
@@ -47,8 +48,17 @@ export async function POST(
     typeof body?.developmentTeam === "string"
       ? body.developmentTeam.trim()
       : "";
+  const userTeamId = await getDevelopmentTeamId(auth.user.uid);
   const developmentTeam =
-    providedTeam || process.env.DEFAULT_DEVELOPMENT_TEAM || "";
+    providedTeam || userTeamId || process.env.DEFAULT_DEVELOPMENT_TEAM || "";
+
+  // Temporary: verify team resolution order — remove after debugging
+  console.log("[build-install] team resolution:", {
+    "1_body.developmentTeam": providedTeam || "(empty)",
+    "2_Firestore_getDevelopmentTeamId(userId)": userTeamId ?? "(null)",
+    "3_process.env.DEFAULT_DEVELOPMENT_TEAM": process.env.DEFAULT_DEVELOPMENT_TEAM ?? "(undefined)",
+    "final_developmentTeam": developmentTeam || "(empty)",
+  });
 
   const clientFiles = Array.isArray(body?.files)
     ? (body.files as { path: string; content: string }[]).filter(

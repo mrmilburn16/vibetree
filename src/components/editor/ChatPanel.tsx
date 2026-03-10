@@ -58,18 +58,15 @@ type PreflightResult = {
   files: { ok: boolean; count?: number };
 };
 
-function getTeamIdForPreflight(projectId: string): string {
-  if (typeof window === "undefined") return "";
+async function fetchTeamIdForPreflight(): Promise<string> {
   try {
-    const perProject = localStorage.getItem(`vibetree-xcode-team-id:${projectId}`);
-    if (perProject) return perProject;
-    const universal = localStorage.getItem("vibetree-universal-defaults");
-    if (universal) {
-      const parsed = JSON.parse(universal);
-      if (typeof parsed.teamId === "string") return parsed.teamId;
-    }
-  } catch {}
-  return "";
+    const res = await fetch("/api/user/development-team", { cache: "no-store" });
+    if (!res.ok) return "";
+    const data = (await res.json()) as { developmentTeamId?: string };
+    return typeof data.developmentTeamId === "string" ? data.developmentTeamId.trim() : "";
+  } catch {
+    return "";
+  }
 }
 
 function StopBuildButton({
@@ -233,7 +230,7 @@ export function ChatPanel({
     if (!projectId) return;
     setPreflightLoading(true);
     try {
-      const teamId = getTeamIdForPreflight(projectId);
+      const teamId = await fetchTeamIdForPreflight();
       const q = new URLSearchParams({ projectId });
       if (teamId) q.set("teamId", teamId);
       const res = await fetch(`/api/macos/preflight?${q.toString()}`);

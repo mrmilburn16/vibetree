@@ -5,6 +5,7 @@ import { createBuildJob } from "@/lib/buildJobs";
 import { isRunnerOnline } from "@/lib/runnerStore";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
 import { hasActiveSubscription } from "@/lib/subscriptionFirestore";
+import { getDevelopmentTeamId } from "@/lib/userDevelopmentTeamFirestore";
 
 type SwiftFile = { path: string; content: string };
 
@@ -86,7 +87,9 @@ export async function POST(
   const providedBundleId = typeof body?.bundleId === "string" ? body.bundleId : "";
   const providedTeam = typeof body?.developmentTeam === "string" && body.developmentTeam.trim()
     ? body.developmentTeam.trim()
-    : process.env.DEFAULT_DEVELOPMENT_TEAM ?? "";
+    : "";
+  const userTeamId = await getDevelopmentTeamId(auth.user.uid);
+  const developmentTeam = providedTeam || userTeamId || (process.env.DEFAULT_DEVELOPMENT_TEAM ?? "");
   const filesRaw = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : undefined;
   let files: SwiftFile[] | undefined = filesRaw ? normalizeSwiftFiles(filesRaw) : undefined;
   if (!files?.length) {
@@ -125,7 +128,7 @@ export async function POST(
     projectName: project.name || providedName || "Untitled app",
     bundleId,
     ...(files?.length ? { files } : {}),
-    ...(providedTeam ? { developmentTeam: providedTeam } : {}),
+    ...(developmentTeam ? { developmentTeam } : {}),
     ...(userPrompt ? { userPrompt } : {}),
     autoFix: effectiveAutoFix,
     attempt: 1,

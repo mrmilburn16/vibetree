@@ -29,7 +29,6 @@ const CHAT_WIDTH_MAX = 560;
 const CHAT_WIDTH_DEFAULT = 420;
 
 const PROJECT_FILES_PREFIX = "vibetree-project-files:";
-const XCODE_TEAM_ID_PREFIX = "vibetree-xcode-team-id:";
 const XCODE_BUNDLE_ID_OVERRIDE_PREFIX = "vibetree-xcode-bundle-id:";
 const VALIDATE_POLL_MS = 2000;
 const VALIDATE_TIMEOUT_MS = 30 * 60 * 1000;
@@ -242,7 +241,6 @@ export function EditorLayout({
       let files: Array<{ path: string; content: string }> = [];
       let projectName = "Untitled app";
       let bundleId = "";
-      let teamId = "";
       let bundleIdOverride = "";
       try {
         const raw = localStorage.getItem(`${PROJECT_FILES_PREFIX}${projectId}`);
@@ -261,16 +259,6 @@ export function EditorLayout({
         const p = Array.isArray(projects) ? projects.find((x: { id?: string }) => x?.id === projectId) : null;
         if (p?.name) projectName = String(p.name);
         if (p?.bundleId) bundleId = String(p.bundleId);
-        teamId = localStorage.getItem(`${XCODE_TEAM_ID_PREFIX}${projectId}`) ?? "";
-        if (!teamId) {
-          const universal = localStorage.getItem("vibetree-universal-defaults");
-          if (universal) {
-            try {
-              const parsed = JSON.parse(universal);
-              if (typeof parsed.teamId === "string") teamId = parsed.teamId;
-            } catch {}
-          }
-        }
         bundleIdOverride = localStorage.getItem(`${XCODE_BUNDLE_ID_OVERRIDE_PREFIX}${projectId}`) ?? "";
       } catch {
         return { status: "failed", error: "Could not read project data" };
@@ -283,7 +271,7 @@ export function EditorLayout({
           ...(files.length > 0 ? { files } : {}),
           projectName,
           bundleId: finalBundleId,
-          developmentTeam: teamId.trim() || undefined,
+          developmentTeam: undefined, // Server resolves from user's Firestore developmentTeamId
         }),
       });
       if (!res.ok) {
@@ -319,7 +307,7 @@ export function EditorLayout({
                 ...(files.length > 0 ? { files } : {}),
                 projectName,
                 bundleId: finalBundleId,
-                developmentTeam: teamId.trim() || undefined,
+                developmentTeam: undefined, // Server resolves from user's Firestore developmentTeamId
                 autoFix: false,
               }),
             })

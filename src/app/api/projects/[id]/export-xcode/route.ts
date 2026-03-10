@@ -6,6 +6,7 @@ import { getProject, setProject, type ProjectRecord } from "@/lib/projectStore";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
 import { getProjectFromFirestore } from "@/lib/projectsFirestore";
+import { getDevelopmentTeamId } from "@/lib/userDevelopmentTeamFirestore";
 
 function requireRunnerAuth(request: Request): { ok: true } | { ok: false; response: Response } {
   const token = process.env.MAC_RUNNER_TOKEN;
@@ -451,6 +452,7 @@ export async function POST(
   if (!id) {
     return NextResponse.json({ error: "Project ID required" }, { status: 400 });
   }
+  let userId: string | null = null;
   const runnerAuth = requireRunnerAuth(request);
   if (runnerAuth.ok) {
     const project = await getProjectFromFirestore(id);
@@ -460,6 +462,7 @@ export async function POST(
     const auth = await requireProjectAuth(request, id);
     if (auth instanceof NextResponse) return auth;
     setProject(toRecord(auth.project));
+    userId = auth.user.uid;
   }
   const body = await request.json().catch(() => ({}));
   const files = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : [];
@@ -467,12 +470,13 @@ export async function POST(
   const providedBundleId = typeof body?.bundleId === "string" ? body.bundleId : "";
   const providedTeam = typeof body?.developmentTeam === "string" && body.developmentTeam.trim()
     ? body.developmentTeam.trim()
-    : process.env.DEFAULT_DEVELOPMENT_TEAM ?? "";
+    : "";
+  const userTeamId = userId ? await getDevelopmentTeamId(userId) : null;
+  const developmentTeam = providedTeam || userTeamId || (process.env.DEFAULT_DEVELOPMENT_TEAM ?? "");
   const project = getProject(id)!;
   const projectName = sanitizeXcodeName(providedName || project.name, "VibetreeApp");
   const candidateBundleId = (providedBundleId || project.bundleId || "com.vibetree.app").trim();
   const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";
-  const developmentTeam = providedTeam;
   const preferredRunDevice = (typeof body?.preferredRunDevice === "string" ? body.preferredRunDevice : "").trim();
   const timezoneOffsetMinutes =
     typeof body?.timezoneOffsetMinutes === "number" ? body.timezoneOffsetMinutes : undefined;
