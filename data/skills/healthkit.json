@@ -41,9 +41,9 @@
   "canonicalCode": {},
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 28,
-    "firstAttemptCompile": 15,
-    "compileRate": 54,
+    "totalBuilds": 35,
+    "firstAttemptCompile": 20,
+    "compileRate": 57,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -60,7 +60,8 @@
       "Multi-line string literal content must begin on a new line",
       "Multi-line string literal closing delimiter must begin on a new line",
       "multi-line string literal content must begin on a new line",
-      "multi-line string literal closing delimiter must begin on a new line"
+      "multi-line string literal closing delimiter must begin on a new line",
+      "extraneous argument label 'hex:' in call"
     ],
     "goldenExamples": []
   }

@@ -40,9 +40,9 @@
   "antiPatterns": [],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 22,
-    "firstAttemptCompile": 8,
-    "compileRate": 36,
+    "totalBuilds": 26,
+    "firstAttemptCompile": 11,
+    "compileRate": 42,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [

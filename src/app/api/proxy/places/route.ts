@@ -3,11 +3,16 @@
  * Proxies Apple MapKit Server API to search for nearby places.
  * Query params: lat, lng, radius (meters, default 5000), category (coffee | gym | pharmacy).
  * Rate limit: 100 requests per hour per IP. Returns 429 if exceeded.
+ * Response cached 1 hour by lat/lng/radius/category.
  */
 
 import { NextResponse } from "next/server";
 import * as jwt from "jsonwebtoken";
 import { getClientIp } from "@/lib/adminAuth";
+import { createProxyCache } from "@/lib/proxyCache";
+
+const PLACES_CACHE_TTL_SECONDS = 3600; // 1 hour
+const placesCache = createProxyCache({ ttlSeconds: PLACES_CACHE_TTL_SECONDS });
 
 const APPLE_MAPS_TOKEN_URL = "https://maps-api.apple.com/v1/token";
 const APPLE_MAPS_SEARCH_URL = "https://maps-api.apple.com/v1/search";
@@ -155,6 +160,16 @@ export async function GET(request: Request) {
     );
   }
 
+  const cacheKey = `places:${lat.toFixed(3)},${lng.toFixed(3)}:${radius}:${category}`;
+  const cached = placesCache.get(cacheKey);
+  if (cached != null) {
+    console.log("[proxy/places] cache HIT", { key: cacheKey });
+    recordRequest(ipKey);
+    return NextResponse.json(cached, {
+      headers: { "X-Cache": "HIT" },
+    });
+  }
+
   const searchQuery = CATEGORY_TO_QUERY[category];
 
   try {
@@ -198,8 +213,13 @@ export async function GET(request: Request) {
       .filter((p): p is NonNullable<typeof p> => p !== null)
       .sort((a, b) => a.distance - b.distance);
 
+    const responseBody = { results: places };
+    placesCache.set(cacheKey, responseBody);
+    console.log("[proxy/places] cache MISS → stored", { key: cacheKey });
     recordRequest(ipKey);
-    return NextResponse.json({ results: places });
+    return NextResponse.json(responseBody, {
+      headers: { "X-Cache": "MISS" },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Places service error";
     if (message.includes("not configured")) {

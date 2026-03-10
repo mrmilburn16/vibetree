@@ -3,9 +3,18 @@
  * Proxies plant identification to Plant.id API v3.
  * Body: { image: string } where image is base64-encoded.
  * Returns the full Plant.id identification response.
+ * Response cached 24h by image hash; max 50 entries.
  */
 
 import { NextResponse } from "next/server";
+import { createProxyCache, hashString } from "@/lib/proxyCache";
+
+const PLANT_CACHE_TTL_SECONDS = 86400; // 24 hours
+const PLANT_CACHE_MAX_ENTRIES = 50;
+const plantCache = createProxyCache({
+  ttlSeconds: PLANT_CACHE_TTL_SECONDS,
+  maxSize: PLANT_CACHE_MAX_ENTRIES,
+});
 
 const PLANTID_BASE = "https://plant.id";
 const PLANTID_DETAILS =
@@ -39,6 +48,15 @@ export async function POST(request: Request) {
   const dataUriMatch = /^data:[^;]+;base64,/i.exec(image);
   if (dataUriMatch) {
     image = image.slice(dataUriMatch[0].length);
+  }
+
+  const cacheKey = `plant:${hashString(image)}`;
+  const cached = plantCache.get(cacheKey);
+  if (cached != null) {
+    console.log("[proxy/plant-identify] cache HIT", { key: cacheKey });
+    return NextResponse.json(cached, {
+      headers: { "X-Cache": "HIT" },
+    });
   }
 
   const apiKey = process.env.PLANTID_API_KEY?.trim();
@@ -83,7 +101,11 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json(data);
+    plantCache.set(cacheKey, data);
+    console.log("[proxy/plant-identify] cache MISS → stored", { key: cacheKey });
+    return NextResponse.json(data, {
+      headers: { "X-Cache": "MISS" },
+    });
   } catch (e) {
     console.error("[proxy/plant-identify] fetch error:", e);
     return NextResponse.json(

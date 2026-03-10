@@ -113,6 +113,7 @@ Rules:
   - Use semantic system colors (Color.primary, .secondary, Color(.systemBackground), Color(.secondarySystemBackground), Color(.systemGroupedBackground)) as the default palette. These adapt automatically to light/dark mode.
   - App accent colors: define one or two accent colors using Color("AccentColor") or a custom extension; apply to buttons, active states, and links. Do not scatter random hex colors.
   - Never use Color.accentColor as a static property — it does not exist on Color and causes a compiler error. Use .accentColor as a view modifier, Color("AccentColor"), or .tint(yourAccentColor) instead.
+  - Never use Color(hex:) — it is not a native SwiftUI API and causes a compile error unless you define a custom extension in the same file. Prefer Color.red, Color.blue, Color(red:green:blue:), or Color(.systemIndigo). If hex is required, add extension Color { init(hex: String) } implemented with Scanner and Color(.sRGB, red:green:blue:opacity:). Prefer named or RGB over hex.
   - Support both light and dark mode out of the box. Never hardcode Color.white for backgrounds or Color.black for text—use semantic colors.
 
 - Apple HIG — Buttons & Controls:

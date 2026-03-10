@@ -8,6 +8,10 @@
 
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { createProxyCache } from "@/lib/proxyCache";
+
+const WEATHER_CACHE_TTL_SECONDS = 600; // 10 minutes
+const weatherCache = createProxyCache({ ttlSeconds: WEATHER_CACHE_TTL_SECONDS });
 
 const OPENWEATHER_WEATHER = "https://api.openweathermap.org/data/2.5/weather";
 const OPENWEATHER_FORECAST = "https://api.openweathermap.org/data/2.5/forecast";
@@ -108,6 +112,21 @@ export async function GET(request: Request) {
     );
   }
 
+  const cacheKey =
+    hasCity
+      ? `weather:${type}:${encodeURIComponent(city)}`
+      : `weather:${type}:${lat},${lon}`;
+  if (!debug) {
+    const cached = weatherCache.get(cacheKey);
+    if (cached != null) {
+      console.log("[proxy/weather] cache HIT", { key: cacheKey });
+      incrementCount(auth.rateLimitKey);
+      return NextResponse.json(cached, {
+        headers: { "X-Cache": "HIT" },
+      });
+    }
+  }
+
   const base =
     type === "forecast" ? OPENWEATHER_FORECAST : OPENWEATHER_WEATHER;
   // Imperial = Fahrenheit and mph so the app doesn't need to convert from Kelvin.
@@ -137,8 +156,14 @@ export async function GET(request: Request) {
       );
     }
 
+    if (!debug) {
+      weatherCache.set(cacheKey, data);
+      console.log("[proxy/weather] cache MISS → stored", { key: cacheKey });
+    }
     incrementCount(auth.rateLimitKey);
-    return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: { "X-Cache": "MISS" },
+    });
   } catch (e) {
     console.error("[proxy/weather] fetch error:", e);
     return NextResponse.json(

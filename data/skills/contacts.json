@@ -1,7 +1,9 @@
 {
   "id": "contacts",
   "name": "Contacts (CNContactStore)",
-  "frameworks": ["Contacts"],
+  "frameworks": [
+    "Contacts"
+  ],
   "version": 1,
   "detection": {
     "keywords": [
@@ -27,11 +29,13 @@
     "Accessing CNContactStore without requesting requestAccess(for: .contacts) first",
     "Missing // REQUIRES PLIST: NSContactsUsageDescription comment above first contact access"
   ],
-  "requiredPermissions": ["NSContactsUsageDescription"],
+  "requiredPermissions": [
+    "NSContactsUsageDescription"
+  ],
   "stats": {
-    "totalBuilds": 0,
-    "firstAttemptCompile": 0,
-    "compileRate": 0,
+    "totalBuilds": 2,
+    "firstAttemptCompile": 2,
+    "compileRate": 100,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],
