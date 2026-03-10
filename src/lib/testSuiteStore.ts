@@ -136,11 +136,18 @@ export async function createTestSuiteRun(
   return run;
 }
 
+/** Max runs to read when listing (keeps Firestore reads bounded on test suite page load). */
+const LIST_RUNS_LIMIT = 150;
+
 export async function getAllTestSuiteRuns(): Promise<TestSuiteRun[]> {
   const db = getDb();
   if (!db) return [];
   try {
-    const snap = await db.collection(COLLECTION).orderBy("timestamp", "desc").get();
+    const snap = await db
+      .collection(COLLECTION)
+      .orderBy("timestamp", "desc")
+      .limit(LIST_RUNS_LIMIT)
+      .get();
     return snap.docs.map((d) => fromFirestoreData(d.id, d.data()));
   } catch {
     return [];

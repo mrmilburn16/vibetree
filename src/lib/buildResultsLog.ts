@@ -318,7 +318,8 @@ export type GetBuildStatsOptions = {
   since?: string;
 };
 
-export async function getBuildStats(options?: GetBuildStatsOptions): Promise<{
+/** Stats shape returned by getBuildStats and computeStatsFromResults. */
+export type BuildStats = {
   total: number;
   compiled: number;
   failed: number;
@@ -330,11 +331,10 @@ export async function getBuildStats(options?: GetBuildStatsOptions): Promise<{
   commonErrors: Array<{ error: string; count: number }>;
   avgDesignScore: number | null;
   avgFunctionalScore: number | null;
-}> {
-  const results = await getAllBuildResults({
-    since: options?.since,
-    limit: 5000,
-  });
+};
+
+/** Compute stats from an in-memory list of results (no Firestore read). Use when you already have results. */
+export function computeStatsFromResults(results: BuildResult[]): BuildStats {
   const total = results.length;
   if (total === 0) {
     return {
@@ -395,4 +395,15 @@ export async function getBuildStats(options?: GetBuildStatsOptions): Promise<{
     avgDesignScore: designScores.length > 0 ? Math.round((designScores.reduce((a, b) => a + b, 0) / designScores.length) * 10) / 10 : null,
     avgFunctionalScore: funcScores.length > 0 ? Math.round((funcScores.reduce((a, b) => a + b, 0) / funcScores.length) * 10) / 10 : null,
   };
+}
+
+/** Max docs to read when getBuildStats is called standalone (stats-only request). Keeps Firestore reads bounded. */
+const GET_BUILD_STATS_STANDALONE_LIMIT = 500;
+
+export async function getBuildStats(options?: GetBuildStatsOptions): Promise<BuildStats> {
+  const results = await getAllBuildResults({
+    since: options?.since,
+    limit: GET_BUILD_STATS_STANDALONE_LIMIT,
+  });
+  return computeStatsFromResults(results);
 }

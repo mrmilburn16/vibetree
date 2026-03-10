@@ -34,8 +34,8 @@
     "NSBluetoothAlwaysUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 15,
-    "firstAttemptCompile": 5,
+    "totalBuilds": 18,
+    "firstAttemptCompile": 6,
     "compileRate": 33,
     "functionalSuccesses": 0,
     "functionalRate": 0,
@@ -45,7 +45,8 @@
       "value of type 'Booking' has no member 'carColorColor'",
       "missing argument for parameter 'height' in call",
       "'nil' cannot be used in context expecting type 'Int'",
-      "type 'Calendar.Component' has no member 'week'"
+      "type 'Calendar.Component' has no member 'week'",
+      "instance method 'background(_:in:fillStyle:)' requires that 'Group<_ConditionalContent<Color, Color>>' conform to 'ShapeStyle'"
     ],
     "goldenExamples": []
   }

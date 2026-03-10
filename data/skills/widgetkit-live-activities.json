@@ -52,9 +52,9 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 6,
-    "firstAttemptCompile": 0,
-    "compileRate": 0,
+    "totalBuilds": 15,
+    "firstAttemptCompile": 5,
+    "compileRate": 33,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -63,7 +63,10 @@
       "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Decodable'",
       "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Encodable'",
       "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Hashable'",
-      "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Equatable'"
+      "type 'DeliveryAttributes.ContentState' does not conform to protocol 'Equatable'",
+      "type 'HKWorkoutActivityType' has no case 'strengthTraining', but it does have a case named 'FunctionalStrengthTraining'; if 'strengthTraining' worked before, a recent change to the underlying C enum may have affected how prefixes are stripped from its case names",
+      "generic parameter 'Expanded' could not be inferred",
+      "extraneous argument label 'hex:' in call"
     ],
     "goldenExamples": []
   }

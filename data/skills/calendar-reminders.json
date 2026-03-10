@@ -36,16 +36,18 @@
     "NSRemindersUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 11,
-    "firstAttemptCompile": 6,
-    "compileRate": 55,
+    "totalBuilds": 17,
+    "firstAttemptCompile": 10,
+    "compileRate": 59,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
       "cannot find 'UIGraphicsEndPDFPage' in scope",
       "type 'NSAttributedString.Key' has no member 'foregroundStyle'",
       "'nil' cannot be used in context expecting type 'Int'",
-      "type 'Calendar.Component' has no member 'week'"
+      "type 'Calendar.Component' has no member 'week'",
+      "Expected declaration",
+      "expected declaration"
     ],
     "goldenExamples": []
   }

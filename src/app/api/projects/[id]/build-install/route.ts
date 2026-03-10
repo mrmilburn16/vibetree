@@ -102,14 +102,19 @@ export async function POST(
     );
   }
 
+  const autoFix = body?.autoFix !== false;
+  const maxAttemptsRaw = typeof body?.maxAttempts === "number" ? body.maxAttempts : 8;
+  const maxAttempts = Math.max(0, Math.min(8, Math.floor(maxAttemptsRaw)));
+  const effectiveAutoFix = autoFix && maxAttempts > 0;
+
   const job = createBuildJob({
     projectId,
     projectName: project.name || providedName || "Untitled app",
     bundleId,
     developmentTeam,
-    autoFix: body?.autoFix !== false,
+    autoFix: effectiveAutoFix,
     attempt: 1,
-    maxAttempts: 8,
+    maxAttempts,
     outputType: "device",
     files,
   });

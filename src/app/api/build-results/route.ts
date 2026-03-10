@@ -1,4 +1,4 @@
-import { logBuildResult, getAllBuildResults, getBuildStats } from "@/lib/buildResultsLog";
+import { logBuildResult, getAllBuildResults, getBuildStats, computeStatsFromResults } from "@/lib/buildResultsLog";
 
 /** Parse date range: today, 7d, 30d, or ISO string for since. */
 function parseSince(range: string | null): string | undefined {
@@ -23,12 +23,24 @@ function parseSince(range: string | null): string | undefined {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const since = parseSince(url.searchParams.get("since") ?? null);
+  const wantStats = url.searchParams.get("stats") === "true";
+  const limitParam = url.searchParams.get("limit");
+  const parsed = limitParam != null ? parseInt(limitParam, 10) : 100;
+  const safeLimit = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 500) : 100;
 
-  if (url.searchParams.get("stats") === "true") {
+  // Single-query path: client asks for list + stats (e.g. ?limit=200&stats=true). One Firestore query, then compute stats from same docs.
+  if (wantStats && safeLimit >= 1) {
+    const results = await getAllBuildResults({ since, limit: safeLimit });
+    const stats = computeStatsFromResults(results);
+    return Response.json({ results, total: results.length, stats });
+  }
+
+  // Stats-only (no limit or legacy call): one query with capped limit
+  if (wantStats) {
     return Response.json(await getBuildStats({ since }));
   }
-  const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
-  const results = await getAllBuildResults({ since, limit });
+
+  const results = await getAllBuildResults({ since, limit: safeLimit });
   return Response.json({ results, total: results.length });
 }
 

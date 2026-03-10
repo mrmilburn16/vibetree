@@ -32,10 +32,12 @@ import {
   CheckSquare,
   ClipboardPaste,
   X,
+  Upload,
 } from "lucide-react";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 import { stripOldImages, type VisionMessage } from "@/lib/visionTestUtils";
+import { refreshSessionCookie } from "@/lib/sessionRefresh";
 
 /* ────────────────────────── Types ────────────────────────── */
 
@@ -116,6 +118,13 @@ type RunConfig = {
   model: string;
   projectType: "pro";
 };
+
+function parsePrompts(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
 
 function isScreenshotMostlyBlank(base64: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -453,6 +462,7 @@ function groupErrorsByPattern(results: TestResult[]): GroupedError[] {
     const appName = r.idea?.title ?? "Unknown app";
     for (const rawMessage of r.compilerErrors) {
       const cat = classifyError(rawMessage);
+      if (!byCategory[cat]) byCategory[cat] = [];
       byCategory[cat].push({ appName, rawMessage });
     }
   }
@@ -1004,6 +1014,7 @@ async function downloadXcodeZip(
       bundleId: "com.vibetree.test",
       ...(developmentTeam ? { developmentTeam } : {}),
     }),
+    credentials: "include",
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -1078,6 +1089,128 @@ function PasteLogsModal({
   );
 }
 
+function ImportPromptsModal({
+  tabLabel,
+  pasteText,
+  onPasteChange,
+  mode,
+  onModeChange,
+  promptCount,
+  showReplaceConfirm,
+  existingCount,
+  onClose,
+  onImport,
+  onConfirmReplace,
+  onCancelReplaceConfirm,
+}: {
+  tabLabel: string;
+  pasteText: string;
+  onPasteChange: (value: string) => void;
+  mode: "add" | "replace";
+  onModeChange: (value: "add" | "replace") => void;
+  promptCount: number;
+  showReplaceConfirm: boolean;
+  existingCount: number;
+  onClose: () => void;
+  onImport: () => void;
+  onConfirmReplace: () => void;
+  onCancelReplaceConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="import-prompts-title">
+      <div className="absolute inset-0 bg-black/60" onClick={showReplaceConfirm ? onCancelReplaceConfirm : onClose} aria-hidden />
+      <div className="relative z-10 flex max-h-[90vh] w-full max-w-2xl flex-col rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-primary)] shadow-xl">
+        <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-3">
+          <h2 id="import-prompts-title" className="text-sm font-semibold text-[var(--text-primary)]">
+            {showReplaceConfirm ? "Replace all prompts?" : `Import Prompts to ${tabLabel}`}
+          </h2>
+          <button
+            type="button"
+            onClick={showReplaceConfirm ? onCancelReplaceConfirm : onClose}
+            className="rounded p-1 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+        <div className="flex flex-1 flex-col overflow-hidden px-4 py-3">
+          {showReplaceConfirm ? (
+            <p className="py-4 text-sm text-[var(--text-secondary)]">
+              This will replace all {existingCount} existing prompts in {tabLabel}. Continue?
+            </p>
+          ) : (
+            <>
+              <textarea
+                value={pasteText}
+                onChange={(e) => onPasteChange(e.target.value)}
+                placeholder={"Paste prompts here — one per line\n\nTip: Copy a column from Google Sheets and paste it here"}
+                className="min-h-[400px] flex-1 resize-y rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--button-primary-bg)] focus:outline-none focus:ring-1 focus:ring-[var(--button-primary-bg)]"
+                rows={16}
+              />
+              <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+                {promptCount} prompt{promptCount !== 1 ? "s" : ""} detected
+              </p>
+              <div className="mt-4 flex flex-wrap items-center gap-4">
+                <span className="text-xs text-[var(--text-secondary)]">Mode:</span>
+                <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-tertiary)]/50 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => onModeChange("add")}
+                    className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${mode === "add" ? "bg-[#10B981] text-white" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+                    aria-pressed={mode === "add"}
+                  >
+                    Add to existing
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onModeChange("replace")}
+                    className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${mode === "replace" ? "bg-[#10B981] text-white" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+                    aria-pressed={mode === "replace"}
+                    title="Replace all prompts in this tab"
+                  >
+                    Replace all
+                  </button>
+                </div>
+                {mode === "replace" && existingCount > 0 && (
+                  <span className="text-xs text-[var(--semantic-warning)]">Destructive — replaces current list</span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-[var(--border-default)] px-4 py-3">
+          {showReplaceConfirm ? (
+            <>
+              <Button variant="ghost" onClick={onCancelReplaceConfirm}>
+                Cancel
+              </Button>
+              <Button
+                onClick={onConfirmReplace}
+                className="bg-[#10B981] hover:bg-[#34D399] text-white border-0"
+              >
+                Continue
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={onImport}
+                disabled={promptCount < 1}
+                className="bg-[#10B981] hover:bg-[#34D399] text-white border-0 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                Import
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ResultRow({
   result,
   index,
@@ -1093,6 +1226,7 @@ function ResultRow({
   visionTestRunning,
   visionTestStep,
   visionTestCostUsd,
+  maxFixes,
 }: {
   result: TestResult;
   index: number;
@@ -1108,6 +1242,7 @@ function ResultRow({
   visionTestRunning?: boolean;
   visionTestStep?: number;
   visionTestCostUsd?: number;
+  maxFixes?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [xcodeLoading, setXcodeLoading] = useState(false);
@@ -1217,7 +1352,7 @@ function ResultRow({
                     } catch {}
                     let files = result.projectFiles?.length ? result.projectFiles : undefined;
                     if (!files?.length) {
-                      const filesRes = await fetch(`/api/projects/${result.projectId}/files`);
+                      const filesRes = await fetch(`/api/projects/${result.projectId}/files`, { credentials: "include" });
                       if (filesRes.ok) {
                         const filesData = (await filesRes.json()) as { files?: Array<{ path: string; content: string }> };
                         if (filesData.files?.length) files = filesData.files;
@@ -1228,6 +1363,7 @@ function ResultRow({
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ files }),
+                        credentials: "include",
                       }).catch((err) => Sentry.captureException(err));
                     }
                     const res = await fetch(`/api/projects/${result.projectId}/build-install`, {
@@ -1239,7 +1375,9 @@ function ResultRow({
                         bundleId: "com.vibetree.test",
                         developmentTeam: teamId || undefined,
                         autoFix: result.status !== "succeeded",
+                        maxAttempts: typeof maxFixes === "number" ? maxFixes : 8,
                       }),
+                      credentials: "include",
                     });
                     const data = await res.json().catch(() => ({}));
                     if (!res.ok) {
@@ -1285,7 +1423,7 @@ function ResultRow({
                     } catch {}
                     let files = result.projectFiles?.length ? result.projectFiles : undefined;
                     if (!files?.length) {
-                      const filesRes = await fetch(`/api/projects/${result.projectId}/files`);
+                      const filesRes = await fetch(`/api/projects/${result.projectId}/files`, { credentials: "include" });
                       if (filesRes.ok) {
                         const filesData = (await filesRes.json()) as { files?: Array<{ path: string; content: string }> };
                         if (filesData.files?.length) files = filesData.files;
@@ -1296,6 +1434,7 @@ function ResultRow({
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ files }),
+                        credentials: "include",
                       }).catch((err) => Sentry.captureException(err));
                       await downloadXcodeZip(
                         result.projectId!,
@@ -1305,7 +1444,7 @@ function ResultRow({
                       );
                     } else {
                       const url = `/api/projects/${result.projectId}/export-xcode`;
-                      const res = await fetch(url);
+                      const res = await fetch(url, { credentials: "include" });
                       if (!res.ok) {
                         const err = await res.json().catch(() => ({ error: res.statusText }));
                         throw new Error((err as { error?: string }).error ?? "Export failed");
@@ -2107,6 +2246,10 @@ function RunComparison({ runs }: { runs: SavedRun[] }) {
 
 const TEST_SUITE_STORAGE_KEY = "vibetree-test-suite-state";
 const CONCURRENCY_STORAGE_KEY = "vibetree-test-suite-concurrency";
+const MAX_FIXES_STORAGE_KEY = "vibetree-test-suite-max-fixes";
+const ACTIVE_MILESTONE_STORAGE_KEY = "vibetree-test-suite-active-milestone";
+
+const MAX_FIXES_OPTIONS: readonly (0 | 1 | 3 | 8)[] = [0, 1, 3, 8];
 
 function makeInitialResults(ideas: AppIdea[]): TestResult[] {
   return ideas.map((idea) => ({
@@ -2235,7 +2378,14 @@ export default function TestSuitePage() {
   const hydratedRef = useRef(false);
   const lastScrolledIdx = useRef(-1);
 
-  const [activeMilestone, setActiveMilestone] = useState("m1-baseline");
+  const [activeMilestone, setActiveMilestone] = useState(() => {
+    if (typeof window === "undefined") return "m1-baseline";
+    try {
+      const s = localStorage.getItem(ACTIVE_MILESTONE_STORAGE_KEY);
+      if (s && s.trim()) return s.trim();
+    } catch {}
+    return "m1-baseline";
+  });
   const [milestoneTarget, setMilestoneTarget] = useState(70);
   const [milestoneLoading, setMilestoneLoading] = useState(false);
   const [milestoneTabs, setMilestoneTabs] = useState<Array<{ id: string; label: string; count: number; target: number; description: string }>>([]);
@@ -2243,6 +2393,10 @@ export default function TestSuitePage() {
   const [runStartTime, setRunStartTime] = useState<number | null>(null);
   const [runElapsed, setRunElapsed] = useState(0);
   const [pasteLogsModalIndex, setPasteLogsModalIndex] = useState<number | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importPasteText, setImportPasteText] = useState("");
+  const [importMode, setImportMode] = useState<"add" | "replace">("add");
+  const [importShowReplaceConfirm, setImportShowReplaceConfirm] = useState(false);
   const [visionTestRunningIndex, setVisionTestRunningIndex] = useState<number | null>(null);
   const [visionTestStep, setVisionTestStep] = useState(0);
   const [visionTestCostUsd, setVisionTestCostUsd] = useState(0);
@@ -2262,6 +2416,17 @@ export default function TestSuitePage() {
     try { return localStorage.getItem(CONCURRENCY_STORAGE_KEY) === "2" ? 2 : 1; } catch { return 1; }
   });
   const concurrencyRef = useRef(concurrency);
+  const [maxFixes, setMaxFixes] = useState<0 | 1 | 3 | 8>(() => {
+    if (typeof window === "undefined") return 1;
+    try {
+      const s = localStorage.getItem(MAX_FIXES_STORAGE_KEY);
+      const n = parseInt(s ?? "", 10);
+      if (MAX_FIXES_OPTIONS.includes(n as 0 | 1 | 3 | 8)) return n as 0 | 1 | 3 | 8;
+    } catch {}
+    return 1;
+  });
+  const maxFixesRef = useRef(maxFixes);
+  maxFixesRef.current = maxFixes;
   useEffect(() => {
     autoVisionEnabledRef.current = autoVisionEnabled;
   }, [autoVisionEnabled]);
@@ -2270,6 +2435,11 @@ export default function TestSuitePage() {
     setConcurrency(n);
     concurrencyRef.current = n;
     try { localStorage.setItem(CONCURRENCY_STORAGE_KEY, String(n)); } catch {}
+  }
+  function setMaxFixesAndSave(n: 0 | 1 | 3 | 8) {
+    setMaxFixes(n);
+    maxFixesRef.current = n;
+    try { localStorage.setItem(MAX_FIXES_STORAGE_KEY, String(n)); } catch {}
   }
 
   const msKey = useCallback((ms: string) => `${TEST_SUITE_STORAGE_KEY}-${ms}`, []);
@@ -2329,6 +2499,20 @@ export default function TestSuitePage() {
       msKey(activeMilestone),
     );
   }, [model, results, currentRunId, completedCount, running, activeMilestone, msKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ACTIVE_MILESTONE_STORAGE_KEY, activeMilestone);
+    } catch {}
+  }, [activeMilestone]);
+
+  useEffect(() => {
+    if (importModalOpen) {
+      setImportModalOpen(false);
+      setImportShowReplaceConfirm(false);
+      setImportPasteText("");
+    }
+  }, [activeMilestone]);
 
   useEffect(() => {
     const poll = () => {
@@ -2426,7 +2610,7 @@ export default function TestSuitePage() {
     if (!hydratedRef.current || !results.length) return;
     results.forEach((r, i) => {
       if (r.status !== "succeeded" || !r.projectId || (r.projectFiles?.length ?? 0) > 0) return;
-      fetch(`/api/projects/${r.projectId}/files`)
+      fetch(`/api/projects/${r.projectId}/files`, { credentials: "include" })
         .then((res) => (res.ok ? res.json() : null))
         .then((data: { files?: Array<{ path: string; content: string }> } | null) => {
           if (data?.files?.length) {
@@ -2570,34 +2754,30 @@ export default function TestSuitePage() {
 
       setMilestoneLoading(true);
       try {
+        const saved = loadPersistedState(msKey(newMilestone));
         const res = await fetch(`/api/test-suite/milestones?id=${newMilestone}`);
         const data = await res.json();
         const config = data.milestone;
 
         if (config?.ideas?.length) {
           setMilestoneTarget(config.target ?? 70);
+        }
 
+        if (saved && saved.results.length > 0) {
+          setIdeas(saved.results.map((r) => r.idea));
+          setResults(saved.results);
+          setCurrentRunId(saved.currentRunId);
+          setCompletedCount(saved.results.filter((r) => !r.excluded && r.status !== "pending").length);
+          setModel(saved.model);
+          setMilestoneTabs((prev) =>
+            prev.map((t) => (t.id === newMilestone ? { ...t, count: saved.results.length } : t)),
+          );
+        } else if (config?.ideas?.length) {
           const newIdeas = config.ideas as AppIdea[];
           setIdeas(newIdeas);
-
-          const saved = loadPersistedState(msKey(newMilestone));
-          if (saved && saved.results.length > 0) {
-            const mergedResults: TestResult[] = newIdeas.map((idea, idx) => {
-              const match = saved.results.find(
-                (r) => r.idea.title === idea.title && (r.idea.prompt === idea.prompt || !r.idea.prompt),
-              );
-              if (match) return { ...match, idea };
-              return makeInitialResults([idea])[0]!;
-            });
-            setResults(mergedResults);
-            setCurrentRunId(saved.currentRunId);
-            setCompletedCount(mergedResults.filter((r) => !r.excluded && r.status !== "pending").length);
-            setModel(saved.model);
-          } else {
-            setResults(makeInitialResults(newIdeas));
-            setCurrentRunId(null);
-            setCompletedCount(0);
-          }
+          setResults(makeInitialResults(newIdeas));
+          setCurrentRunId(null);
+          setCompletedCount(0);
         }
       } catch {
         /* ignore fetch error */
@@ -2612,7 +2792,12 @@ export default function TestSuitePage() {
 
   const runSingleTest = useCallback(
     async (index: number, config: RunConfig, getAbort: () => boolean): Promise<TestResult> => {
-      const idea = ideas[index] ?? DEFAULT_IDEAS[index];
+      const idea = results[index]?.idea ?? ideas[index] ?? DEFAULT_IDEAS[index];
+      if (!idea?.prompt) {
+        const err = "No prompt for this test — cannot run.";
+        updateResult(index, { status: "error", errorMessage: err, compiled: false });
+        return { idea: results[index]?.idea ?? ideas[index] ?? DEFAULT_IDEAS[0]!, status: "error", attempts: 0, compilerErrors: [], durationMs: 0, fileCount: 0, errorMessage: err };
+      }
       const t0 = Date.now();
 
       try {
@@ -2625,11 +2810,16 @@ export default function TestSuitePage() {
         const projectRes = await fetch("/api/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: `[Test] ${idea.title}` }),
+          body: JSON.stringify({ name: `[Test] ${(idea.title || "Untitled").slice(0, 80)}` }),
+          credentials: "include",
         });
-        const projectData = await projectRes.json();
-        const projectId = (projectData.project?.id ?? projectData.id) as string;
-        if (!projectId) throw new Error("No project id from API");
+        const projectData = await projectRes.json().catch(() => ({}));
+        const projectId = (projectData.project?.id ?? projectData.id) as string | undefined;
+        if (!projectId) {
+          const errMsg = typeof projectData?.error === "string" ? projectData.error : "No project id from API";
+          const statusHint = !projectRes.ok ? ` (${projectRes.status})` : "";
+          throw new Error(`${errMsg}${statusHint}`);
+        }
         updateResult(index, { projectId });
 
         const GEN_TIMEOUT_MS = 6 * 60 * 1000;
@@ -2650,6 +2840,7 @@ export default function TestSuitePage() {
             model: config.model,
           }),
           signal: genController.signal,
+          credentials: "include",
         });
 
         if (!streamRes.ok) throw new Error(`Stream failed: ${streamRes.status}`);
@@ -2707,7 +2898,7 @@ export default function TestSuitePage() {
         if (Array.isArray(filesFromDone) && filesFromDone.length > 0) projectFiles = filesFromDone;
         if (!projectFiles?.length) {
           try {
-            const filesRes = await fetch(`/api/projects/${projectId}/files`);
+            const filesRes = await fetch(`/api/projects/${projectId}/files`, { credentials: "include" });
             if (filesRes.ok) {
               const data = (await filesRes.json()) as { files?: Array<{ path: string; content: string }> };
               if (Array.isArray(data.files) && data.files.length > 0) projectFiles = data.files;
@@ -2738,9 +2929,11 @@ export default function TestSuitePage() {
             files: projectFiles,
             projectName: toPascalCase(idea.title),
             bundleId: "com.vibetree.test",
-            autoFix: true,
+            autoFix: maxFixesRef.current > 0,
+            maxAttempts: maxFixesRef.current,
             ...(developmentTeam ? { developmentTeam } : {}),
           }),
+          credentials: "include",
         }).then((r) => r.json());
 
         if (buildRes?.error === "mac_runner_offline") {
@@ -2833,6 +3026,7 @@ export default function TestSuitePage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ files: builtFiles }),
+            credentials: "include",
           }).catch((err) => Sentry.captureException(err));
         }
 
@@ -2898,11 +3092,12 @@ export default function TestSuitePage() {
         };
       }
     },
-    [ideas, pushLiveEvent, updateResult, activeMilestone],
+    [ideas, results, pushLiveEvent, updateResult, activeMilestone],
   );
 
   const runAllTests = useCallback(async () => {
     abortRef.current = false;
+    await refreshSessionCookie();
     setRunning(true);
     setRunStartTime(Date.now());
     setRunElapsed(0);
@@ -3118,6 +3313,59 @@ export default function TestSuitePage() {
     setTimeout(() => setExportedCount(null), 3000);
   }, [results]);
 
+  const applyImport = useCallback(() => {
+    const lines = parsePrompts(importPasteText);
+    if (lines.length === 0) return;
+    const newIdeas: AppIdea[] = lines.map((prompt, i) => {
+      const title = prompt.length > 50 ? `${prompt.slice(0, 50)}…` : prompt || `Imported ${i + 1}`;
+      return {
+        title: prompt.trim() ? title : `Imported ${i + 1}`,
+        prompt: prompt.trim(),
+        category: "Imported",
+        tier: "medium",
+      };
+    });
+    if (importMode === "replace") {
+      setIdeas(newIdeas);
+      setResults(makeInitialResults(newIdeas));
+      setMilestoneTabs((prev) =>
+        prev.map((t) => (t.id === activeMilestone ? { ...t, count: newIdeas.length } : t))
+      );
+    } else {
+      const seen = new Set(ideas.map((i) => `${i.title}::${i.prompt}`));
+      const toAdd = newIdeas.filter((i) => !seen.has(`${i.title}::${i.prompt}`));
+      const newCount = ideas.length + toAdd.length;
+      setIdeas((prev) => {
+        const s = new Set(prev.map((i) => `${i.title}::${i.prompt}`));
+        const add = newIdeas.filter((i) => !s.has(`${i.title}::${i.prompt}`));
+        return [...prev, ...add];
+      });
+      setResults((prev) => {
+        const s = new Set(prev.map((r) => `${r.idea.title}::${r.idea.prompt}`));
+        const add = newIdeas
+          .filter((i) => !s.has(`${i.title}::${i.prompt}`))
+          .map((idea) => makeInitialResults([idea])[0]!);
+        return [...prev, ...add];
+      });
+      setMilestoneTabs((prev) =>
+        prev.map((t) => (t.id === activeMilestone ? { ...t, count: newCount } : t))
+      );
+    }
+    setImportModalOpen(false);
+    setImportShowReplaceConfirm(false);
+    setImportPasteText("");
+  }, [importPasteText, importMode, activeMilestone, ideas.length, ideas]);
+
+  const handleImportClick = useCallback(() => {
+    const lines = parsePrompts(importPasteText);
+    if (lines.length < 1) return;
+    if (importMode === "replace" && ideas.length > 0) {
+      setImportShowReplaceConfirm(true);
+    } else {
+      applyImport();
+    }
+  }, [importPasteText, importMode, ideas.length, applyImport]);
+
   const rerunSingle = useCallback(
     async (index: number) => {
       setRunning(true);
@@ -3283,38 +3531,74 @@ export default function TestSuitePage() {
     });
   }, []);
 
-  const loadRun = useCallback((runId: string) => {
-    const run = pastRuns.find((r) => r.id === runId);
-    if (!run || !Array.isArray(run.results) || run.results.length === 0) return;
+  const loadRun = useCallback(
+    (runId: string) => {
+      setRunning(false);
 
-    setCurrentRunId(run.id);
-    setRunning(false);
+      // "Select a past run..." (empty value) → restore current/latest state from localStorage
+      if (!runId || runId.trim() === "") {
+        setCurrentRunId(null);
+        const key = msKey(activeMilestone);
+        const saved = loadPersistedState(key);
+        if (saved && saved.results.length > 0) {
+          setIdeas(saved.results.map((r) => r.idea));
+          setResults(saved.results);
+          setCompletedCount(saved.completedCount);
+          setMilestoneTabs((prev) =>
+            prev.map((t) => (t.id === activeMilestone ? { ...t, count: saved.results.length } : t)),
+          );
+        }
+        return;
+      }
 
-    setResults((prev) =>
-      prev.map((row) => {
-        const match = run.results.find((r) => r.title === row.idea.title);
-        if (!match) return { ...row, status: "pending" as const, compiled: undefined, attempts: 0, compilerErrors: [], durationMs: 0, errorMessage: undefined, buildResultId: undefined };
-        const compiled = Boolean(match.compiled);
-        const errors = Array.isArray(match.errors) ? match.errors : [];
-        const matchWithChecks = match as typeof match & { integrationChecks?: { plistComments: boolean; summaryWarnings: boolean; requestAuth: boolean; errorHandling: boolean } };
-        return {
-          ...row,
-          status: compiled ? ("succeeded" as const) : ("failed" as const),
-          compiled,
-          attempts: typeof match.attempts === "number" ? match.attempts : row.attempts,
-          durationMs: typeof match.durationMs === "number" ? match.durationMs : row.durationMs,
-          fileCount: typeof (match as unknown as { fileCount?: number }).fileCount === "number" ? (match as unknown as { fileCount: number }).fileCount : row.fileCount,
-          compilerErrors: errors,
-          projectId: typeof match.projectId === "string" ? match.projectId : row.projectId,
-          buildResultId: typeof match.buildResultId === "string" ? match.buildResultId : row.buildResultId,
-          errorMessage: compiled ? undefined : row.errorMessage,
-          ...(matchWithChecks.integrationChecks ? { integrationChecks: matchWithChecks.integrationChecks } : {}),
-          runtimeLogs: typeof (match as { runtimeLogs?: string }).runtimeLogs === "string" ? (match as { runtimeLogs: string }).runtimeLogs : undefined,
-          visionTestReport: (match as { visionTestReport?: TestResult["visionTestReport"] }).visionTestReport,
+      const run = pastRuns.find((r) => r.id === runId);
+      if (!run || !Array.isArray(run.results) || run.results.length === 0) return;
+
+      setCurrentRunId(run.id);
+
+      // Replace results and ideas with this run's data so the view shows the historical run
+      const newResults: TestResult[] = run.results.map((r) => {
+        const currentRow = results.find((row) => row.idea.title === r.title);
+        const idea: AppIdea = currentRow?.idea ?? {
+          title: r.title,
+          category: r.category,
+          prompt: r.title,
+          tier: "medium",
         };
-      }),
-    );
-  }, [pastRuns]);
+        const compiled = Boolean(r.compiled);
+        const errors = Array.isArray(r.errors) ? r.errors : [];
+        const matchWithExtras = r as typeof r & {
+          integrationChecks?: { plistComments: boolean; summaryWarnings: boolean; requestAuth: boolean; errorHandling: boolean };
+          runtimeLogs?: string;
+          visionTestReport?: TestResult["visionTestReport"];
+        };
+        return {
+          idea,
+          status: (compiled ? "succeeded" : "failed") as TestResultStatus,
+          compiled,
+          attempts: typeof r.attempts === "number" ? r.attempts : 0,
+          durationMs: typeof r.durationMs === "number" ? r.durationMs : 0,
+          compilerErrors: errors,
+          fileCount: typeof r.fileCount === "number" ? r.fileCount : 0,
+          projectId: r.projectId,
+          buildResultId: r.buildResultId,
+          errorMessage: compiled ? undefined : "Build failed",
+          selected: true,
+          integrationChecks: matchWithExtras.integrationChecks,
+          runtimeLogs: matchWithExtras.runtimeLogs,
+          visionTestReport: matchWithExtras.visionTestReport,
+        } as TestResult;
+      });
+
+      setIdeas(newResults.map((x) => x.idea));
+      setResults(newResults);
+      setCompletedCount(run.summary.total);
+      setMilestoneTabs((prev) =>
+        prev.map((t) => (t.id === activeMilestone ? { ...t, count: newResults.length } : t)),
+      );
+    },
+    [pastRuns, results, activeMilestone, msKey],
+  );
 
   const handlePasteLogsAnalyze = useCallback(
     (content: string) => {
@@ -3368,7 +3652,7 @@ Please:
 
       let appetizeRes: Response;
       try {
-        appetizeRes = await fetch(`/api/projects/${projectId}/appetize`, { cache: "no-store" });
+        appetizeRes = await fetch(`/api/projects/${projectId}/appetize`, { cache: "no-store", credentials: "include" });
       } catch (e) {
         console.error("[vision-test] Failed to fetch appetize key", e);
         return;
@@ -3626,6 +3910,7 @@ Please:
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ messages: stripOldImages(messages), tapMode: visionTestTapMode }),
               signal: visionTestAbortControllerRef.current?.signal,
+              credentials: "include",
             });
           } catch (e) {
             const err = e as { name?: string; message?: string };
@@ -3769,6 +4054,7 @@ Please:
               body: JSON.stringify({
                 steps: steps.map((s) => ({ observation: s.observation, issues_found: s.issues_found })),
               }),
+              credentials: "include",
             });
             if (sumRes.ok) {
               const sumData = (await sumRes.json()) as { summary?: string };
@@ -3825,6 +4111,7 @@ Please:
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(report),
+          credentials: "include",
         }).catch((err) => console.warn("[vision-test] Failed to POST report", err));
 
         updateResult(index, { visionTestReport: report, notes: finalNotes });
@@ -3855,7 +4142,7 @@ Please:
       const start = Date.now();
       let publicKey: string | null = null;
       while (Date.now() - start < pollMaxMs) {
-        const res = await fetch(`/api/projects/${item.projectId}/appetize`, { cache: "no-store" });
+        const res = await fetch(`/api/projects/${item.projectId}/appetize`, { cache: "no-store", credentials: "include" });
         const data = await res.json().catch(() => ({}));
         if (data?.publicKey) {
           publicKey = data.publicKey;
@@ -4002,6 +4289,27 @@ Please:
                 </button>
               ))}
             </div>
+            <div className="inline-flex items-center gap-1.5" title="Maximum autofix attempts per build">
+              <span className="text-xs text-[var(--text-tertiary)] shrink-0">Max fixes:</span>
+              <div className="inline-flex rounded-full border border-[var(--border-default)] bg-[var(--background-tertiary)] p-0.5" role="group" aria-label="Max autofix attempts">
+                {MAX_FIXES_OPTIONS.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setMaxFixesAndSave(n)}
+                    disabled={running}
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                      maxFixes === n
+                        ? "bg-[#10B981] text-white"
+                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    aria-pressed={maxFixes === n}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
             {!running ? (
               <>
                 <Button onClick={runAllTests} className="gap-2" disabled={pendingIndices.length === 0 || runnerOnline === false} title={runnerOnline === false ? "Build server is offline" : pendingIndices.length === 0 ? "No pending apps to run" : "Run only pending, non-excluded apps"}>
@@ -4094,6 +4402,20 @@ Please:
                 >
                   <Shuffle className="h-4 w-4" aria-hidden />
                   Add 10 ideas
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setImportPasteText("");
+                    setImportMode("add");
+                    setImportShowReplaceConfirm(false);
+                    setImportModalOpen(true);
+                  }}
+                  className="gap-2"
+                  title="Bulk import prompts from a spreadsheet (paste one per line)"
+                >
+                  <Upload className="h-4 w-4" aria-hidden />
+                  Import Prompts
                 </Button>
                 <Button
                   variant="ghost"
@@ -4198,15 +4520,20 @@ Please:
                   })),
                 ];
                 return (
-                  <div className="flex items-center gap-1.5">
-                    <History className="h-4 w-4 text-[var(--text-tertiary)]" aria-hidden />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <History className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" aria-hidden />
                     <DropdownSelect
                       options={runOptions}
                       value={currentRunId ?? ""}
-                      onChange={(v) => { if (v) loadRun(v); }}
+                      onChange={(v) => loadRun(v ?? "")}
                       className="min-w-[260px]"
                       aria-label={`Load a past run (${milestoneRuns.length} run${milestoneRuns.length !== 1 ? "s" : ""} in history)`}
                     />
+                    {currentRunId && (
+                      <span className="text-xs text-[var(--text-tertiary)] italic" aria-live="polite">
+                        Viewing past run
+                      </span>
+                    )}
                   </div>
                 );
               }
@@ -4325,6 +4652,7 @@ Please:
                 visionTestRunning={visionTestRunningIndex === i}
                 visionTestStep={visionTestRunningIndex === i ? visionTestStep : 0}
                 visionTestCostUsd={visionTestRunningIndex === i ? visionTestCostUsd : undefined}
+                maxFixes={maxFixes}
               />
             ))}
           </div>
@@ -4342,6 +4670,27 @@ Please:
           initialLogs={results[pasteLogsModalIndex].runtimeLogs ?? ""}
           onClose={() => setPasteLogsModalIndex(null)}
           onAnalyzeFix={handlePasteLogsAnalyze}
+        />
+      )}
+
+      {importModalOpen && (
+        <ImportPromptsModal
+          tabLabel={milestoneTabs.find((t) => t.id === activeMilestone)?.label ?? activeMilestone}
+          pasteText={importPasteText}
+          onPasteChange={setImportPasteText}
+          mode={importMode}
+          onModeChange={setImportMode}
+          promptCount={parsePrompts(importPasteText).length}
+          showReplaceConfirm={importShowReplaceConfirm}
+          existingCount={ideas.length}
+          onClose={() => {
+            setImportModalOpen(false);
+            setImportShowReplaceConfirm(false);
+            setImportPasteText("");
+          }}
+          onImport={handleImportClick}
+          onConfirmReplace={applyImport}
+          onCancelReplaceConfirm={() => setImportShowReplaceConfirm(false)}
         />
       )}
 

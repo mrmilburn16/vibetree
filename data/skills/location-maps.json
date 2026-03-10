@@ -40,9 +40,9 @@
   "antiPatterns": [],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 10,
-    "firstAttemptCompile": 2,
-    "compileRate": 20,
+    "totalBuilds": 22,
+    "firstAttemptCompile": 8,
+    "compileRate": 36,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -55,7 +55,19 @@
       "value of type 'Booking' has no member 'carColorColor'",
       "missing argument for parameter 'height' in call",
       "'nil' cannot be used in context expecting type 'Int'",
-      "type 'Calendar.Component' has no member 'week'"
+      "type 'Calendar.Component' has no member 'week'",
+      "cannot find type 'ZoneEntity' in scope",
+      "cannot find type 'HistoryEntity' in scope",
+      "Unterminated string literal",
+      "unterminated string literal",
+      "missing argument label 'role:' in call",
+      "cannot convert value of type 'String' to expected argument type 'ButtonRole'",
+      "initializer 'init(value:label:)' requires that 'SavedHike' conform to 'Hashable'",
+      "instance method 'navigationDestination(for:destination:)' requires that 'SavedHike' conform to 'Hashable'",
+      "'UserLocation' cannot be constructed because it has no accessible initializers",
+      "referencing instance method 'onChange(of:initial:_:)' on 'Optional' requires that 'GitHubUser' conform to 'Equatable'",
+      "Expected declaration",
+      "expected declaration"
     ],
     "goldenExamples": []
   }

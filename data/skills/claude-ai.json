@@ -50,9 +50,9 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 13,
-    "firstAttemptCompile": 6,
-    "compileRate": 46,
+    "totalBuilds": 37,
+    "firstAttemptCompile": 20,
+    "compileRate": 54,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -61,7 +61,24 @@
       "consecutive statements on a line must be separated by ';'",
       "expected expression",
       "result values in '? :' expression have mismatching types 'Color' and 'LinearGradient'",
-      "instance member 'accentColor' cannot be used on type 'Color'; did you mean to use a value of this type instead?"
+      "instance member 'accentColor' cannot be used on type 'Color'; did you mean to use a value of this type instead?",
+      "'Transaction' is ambiguous for type lookup in this context",
+      "instance method 'background(_:in:fillStyle:)' requires that 'Group<_ConditionalContent<Color, Color>>' conform to 'ShapeStyle'",
+      "cannot convert value of type '(String?) -> ()' to expected argument type '@MainActor () -> Void'",
+      "Unterminated string literal",
+      "unterminated string literal",
+      "Multi-line string literal content must begin on a new line",
+      "Multi-line string literal closing delimiter must begin on a new line",
+      "multi-line string literal content must begin on a new line",
+      "multi-line string literal closing delimiter must begin on a new line",
+      "missing argument label 'role:' in call",
+      "cannot convert value of type 'String' to expected argument type 'ButtonRole'",
+      "initializer 'init(value:label:)' requires that 'SavedHike' conform to 'Hashable'",
+      "instance method 'navigationDestination(for:destination:)' requires that 'SavedHike' conform to 'Hashable'",
+      "Expected declaration",
+      "expected declaration",
+      "generic parameter 'Expanded' could not be inferred",
+      "extraneous argument label 'hex:' in call"
     ],
     "goldenExamples": []
   }

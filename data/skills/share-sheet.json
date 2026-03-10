@@ -43,9 +43,9 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 44,
-    "firstAttemptCompile": 22,
-    "compileRate": 50,
+    "totalBuilds": 53,
+    "firstAttemptCompile": 29,
+    "compileRate": 55,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -57,7 +57,8 @@
       "for-in loop requires 'AsyncStream<[RecognizedItem]>' to conform to 'Sequence'",
       "cannot find 'UIGraphicsEndPDFPage' in scope",
       "'nil' cannot be used in context expecting type 'Int'",
-      "type 'Calendar.Component' has no member 'week'"
+      "type 'Calendar.Component' has no member 'week'",
+      "the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions"
     ],
     "goldenExamples": []
   }

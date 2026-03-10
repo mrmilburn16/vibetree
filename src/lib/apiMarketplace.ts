@@ -39,16 +39,6 @@ let registry: ApiMarketplaceEntry[] = [
     enabled: true,
   },
   {
-    id: "finnhub",
-    proxySlug: "finnhub",
-    name: "Finnhub",
-    category: "Stock Data",
-    costPerCallUsd: 0,
-    userPricePerCallUsd: 0,
-    markupPercent: 0,
-    enabled: true,
-  },
-  {
     id: "plant-id",
     proxySlug: "plant-identify",
     name: "Plant.id",
@@ -79,16 +69,6 @@ let registry: ApiMarketplaceEntry[] = [
     markupPercent: null,
     enabled: true,
     note: "Note only; no per-call cost",
-  },
-  {
-    id: "google-maps",
-    proxySlug: "google-maps",
-    name: "Google Maps",
-    category: "Maps & Location",
-    costPerCallUsd: 0.005,
-    userPricePerCallUsd: 0.01,
-    markupPercent: markupPercent(0.005, 0.01),
-    enabled: true,
   },
 ];
 

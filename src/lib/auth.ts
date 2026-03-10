@@ -2,8 +2,8 @@ import { cookies } from "next/headers";
 import { getAdminAuth } from "@/lib/firebaseAdmin";
 
 export const SESSION_COOKIE_NAME = "vibetree-session";
-/** Max age for session cookie (1 hour). Firebase ID tokens expire in 1 hour; client can refresh. */
-export const SESSION_MAX_AGE = 60 * 60;
+/** Max age for session cookie (7 days). Firebase ID tokens expire in 1 hour; client refreshes token and re-sets cookie on activity. */
+export const SESSION_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
 
 export interface SessionUser {
   uid: string;

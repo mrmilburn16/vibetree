@@ -102,6 +102,9 @@ export async function POST(
   const bundleId = isValidBundleId(candidateBundleId) ? candidateBundleId : "com.vibetree.app";
 
   const autoFix = body?.autoFix !== false;
+  const maxAttemptsRaw = typeof body?.maxAttempts === "number" ? body.maxAttempts : 8;
+  const maxAttempts = Math.max(0, Math.min(8, Math.floor(maxAttemptsRaw)));
+  const effectiveAutoFix = autoFix && maxAttempts > 0;
 
   if (files?.length) {
     setProjectFiles(projectId, files);
@@ -124,9 +127,9 @@ export async function POST(
     ...(files?.length ? { files } : {}),
     ...(providedTeam ? { developmentTeam: providedTeam } : {}),
     ...(userPrompt ? { userPrompt } : {}),
-    autoFix,
+    autoFix: effectiveAutoFix,
     attempt: 1,
-    maxAttempts: 8,
+    maxAttempts,
   });
 
   return Response.json({ job });

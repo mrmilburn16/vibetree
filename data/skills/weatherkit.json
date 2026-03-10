@@ -48,12 +48,14 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 17,
-    "firstAttemptCompile": 13,
-    "compileRate": 76,
+    "totalBuilds": 23,
+    "firstAttemptCompile": 17,
+    "compileRate": 74,
     "functionalSuccesses": 0,
     "functionalRate": 0,
-    "commonErrors": [],
+    "commonErrors": [
+      "cannot convert value of type '(String?) -> ()' to expected argument type '@MainActor () -> Void'"
+    ],
     "goldenExamples": []
   }
 }

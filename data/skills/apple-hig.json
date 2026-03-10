@@ -55,9 +55,9 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 81,
-    "firstAttemptCompile": 40,
-    "compileRate": 49,
+    "totalBuilds": 96,
+    "firstAttemptCompile": 49,
+    "compileRate": 51,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -69,7 +69,17 @@
       "value of type 'Booking' has no member 'carColorColor'",
       "missing argument for parameter 'height' in call",
       "'nil' cannot be used in context expecting type 'Int'",
-      "type 'Calendar.Component' has no member 'week'"
+      "type 'Calendar.Component' has no member 'week'",
+      "cannot convert value of type '(String?) -> ()' to expected argument type '@MainActor () -> Void'",
+      "Unterminated string literal",
+      "unterminated string literal",
+      "type 'HKWorkoutActivityType' has no case 'strengthTraining', but it does have a case named 'FunctionalStrengthTraining'; if 'strengthTraining' worked before, a recent change to the underlying C enum may have affected how prefixes are stripped from its case names",
+      "missing argument label 'role:' in call",
+      "cannot convert value of type 'String' to expected argument type 'ButtonRole'",
+      "initializer 'init(value:label:)' requires that 'SavedHike' conform to 'Hashable'",
+      "instance method 'navigationDestination(for:destination:)' requires that 'SavedHike' conform to 'Hashable'",
+      "Expected declaration",
+      "expected declaration"
     ],
     "goldenExamples": []
   }

@@ -56,9 +56,9 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 41,
-    "firstAttemptCompile": 21,
-    "compileRate": 51,
+    "totalBuilds": 56,
+    "firstAttemptCompile": 30,
+    "compileRate": 54,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -67,7 +67,17 @@
       "value of type 'Booking' has no member 'carColorColor'",
       "missing argument for parameter 'height' in call",
       "'nil' cannot be used in context expecting type 'Int'",
-      "type 'Calendar.Component' has no member 'week'"
+      "type 'Calendar.Component' has no member 'week'",
+      "cannot find type 'ZoneEntity' in scope",
+      "cannot find type 'HistoryEntity' in scope",
+      "Multi-line string literal content must begin on a new line",
+      "Multi-line string literal closing delimiter must begin on a new line",
+      "multi-line string literal content must begin on a new line",
+      "multi-line string literal closing delimiter must begin on a new line",
+      "switch must be exhaustive",
+      "cannot find 'leagueColor' in scope",
+      "cannot find 'selectedLeagueColor' in scope",
+      "'UserLocation' cannot be constructed because it has no accessible initializers"
     ],
     "goldenExamples": []
   },

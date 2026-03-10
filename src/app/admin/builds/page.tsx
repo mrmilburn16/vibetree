@@ -1325,14 +1325,13 @@ export default function BuildsPage() {
 
   const load = useCallback(async () => {
     const sinceQ = since ? `&since=${encodeURIComponent(since)}` : "";
-    const [resultsRes, statsRes] = await Promise.all([
-      fetch(`/api/build-results?limit=200${sinceQ}`, { credentials: "omit" }),
-      fetch(`/api/build-results?stats=true${sinceQ}`, { credentials: "omit" }),
-    ]);
-    const resultsData = await resultsRes.json().catch(() => ({ results: [] }));
-    const statsData = await statsRes.json().catch(() => null);
-    const resultsList = (resultsData.results ?? []) as BuildResult[];
+    // Single request: list + stats from one Firestore query (saves ~5K reads per load vs separate list + stats)
+    const res = await fetch(`/api/build-results?limit=200&stats=true${sinceQ}`, { credentials: "omit" });
+    const data = await res.json().catch(() => ({ results: [], stats: null }));
+    const resultsList = (data.results ?? []) as BuildResult[];
+    const statsData = data.stats ?? null;
     setResults(resultsList);
+    setStats(statsData);
     setVisionTestReports(() => {
       const map: Record<string, VisionTestReport> = {};
       for (const r of resultsList) {
@@ -1343,7 +1342,6 @@ export default function BuildsPage() {
       }
       return map;
     });
-    setStats(statsData);
 
     if (resultsList.length > 0 && statsData?.commonErrors?.length) {
       try {
@@ -1415,13 +1413,10 @@ export default function BuildsPage() {
   const pollBuildResults = useCallback(async () => {
     const sinceQ = since ? `&since=${encodeURIComponent(since)}` : "";
     try {
-      const [resultsRes, statsRes] = await Promise.all([
-        fetch(`/api/build-results?limit=200${sinceQ}`, { cache: "no-store", credentials: "omit" }),
-        fetch(`/api/build-results?stats=true${sinceQ}`, { cache: "no-store", credentials: "omit" }),
-      ]);
-      const resultsData = await resultsRes.json().catch(() => ({ results: [] }));
-      const statsData = await statsRes.json().catch(() => null);
-      const incoming = (resultsData.results ?? []) as BuildResult[];
+      const res = await fetch(`/api/build-results?limit=200&stats=true${sinceQ}`, { cache: "no-store", credentials: "omit" });
+      const data = await res.json().catch(() => ({ results: [], stats: null }));
+      const incoming = (data.results ?? []) as BuildResult[];
+      const statsData = data.stats ?? null;
       setResults((prev) => {
         const prevIds = new Set(prev.map((r) => r.id));
         const updatedById = new Map(prev.map((r) => [r.id, r]));
@@ -1457,7 +1452,7 @@ export default function BuildsPage() {
     let intervalId: ReturnType<typeof setInterval> | null = null;
     const startPolling = () => {
       pollBuildResults();
-      intervalId = setInterval(pollBuildResults, 10000);
+      intervalId = setInterval(pollBuildResults, 30000); // 30s to reduce Firestore reads (was 10s)
     };
     const stopPolling = () => {
       if (intervalId) {
@@ -1492,7 +1487,7 @@ export default function BuildsPage() {
     let intervalId: ReturnType<typeof setInterval> | null = null;
     const startPolling = () => {
       pollActiveJobs();
-      intervalId = setInterval(pollActiveJobs, 10000);
+      intervalId = setInterval(pollActiveJobs, 30000); // 30s (in-memory; reduces server load)
     };
     const stopPolling = () => {
       if (intervalId) {

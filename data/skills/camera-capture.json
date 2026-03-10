@@ -53,13 +53,24 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 40,
-    "firstAttemptCompile": 23,
+    "totalBuilds": 46,
+    "firstAttemptCompile": 26,
     "compileRate": 57,
     "functionalSuccesses": 1,
-    "functionalRate": 3,
+    "functionalRate": 2,
     "commonErrors": [
-      "type 'Theme' has no member 'accentColor'"
+      "type 'Theme' has no member 'accentColor'",
+      "Unterminated string literal",
+      "Expected ')' in expression list",
+      "unterminated string literal",
+      "expected ')' in expression list",
+      "Multi-line string literal content must begin on a new line",
+      "Multi-line string literal closing delimiter must begin on a new line",
+      "multi-line string literal content must begin on a new line",
+      "multi-line string literal closing delimiter must begin on a new line",
+      "main actor-isolated property 'lastAnalysisTime' can not be referenced from a nonisolated context",
+      "main actor-isolated property 'lastAnalysisTime' can not be mutated from a nonisolated context",
+      "main actor-isolated property 'faceLandmarksRequest' can not be referenced from a nonisolated context"
     ],
     "goldenExamples": [
       {

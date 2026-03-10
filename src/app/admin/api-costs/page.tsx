@@ -90,11 +90,8 @@ export default function AdminApiCostsPage() {
               API Marketplace
             </h1>
             <p className="text-sm text-[var(--text-secondary)]">
-              Proxy costs, user pricing, and enabled state. Generated apps call{" "}
-              <code className="rounded bg-[var(--background-tertiary)] px-1 py-0.5 font-mono text-xs">
-                /api/proxy/[service]
-              </code>
-              .
+              Proxy costs, user pricing, and enabled state. Generated apps call
+              dedicated proxy routes (e.g. /api/proxy/weather, /api/proxy/places).
             </p>
           </div>
         </div>
@@ -181,8 +178,7 @@ export default function AdminApiCostsPage() {
         )}
 
         <p className="mt-4 text-xs text-[var(--text-tertiary)]">
-          Proxy scaffold: requests to <code className="rounded bg-[var(--background-tertiary)] px-1 py-0.5">/api/proxy/[service]</code> resolve
-          against this registry. Real API keys are not wired yet; the route returns a placeholder until implemented.
+          Each API in the registry corresponds to a dedicated proxy route when implemented. Toggle controls whether the API is shown on the public pricing page.
         </p>
       </div>
     </div>
