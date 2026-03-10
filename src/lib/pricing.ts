@@ -116,6 +116,12 @@ export const PLANS: Plan[] = [
 
 export const DEFAULT_PLAN_ID = "free";
 
+/** Monthly credit allowance for a plan (used for subscription grant and renewal reset). */
+export function getMonthlyCreditsForPlanId(planId: string): number {
+  const plan = PLANS.find((p) => p.id === planId);
+  return plan ? plan.promptsPerMonth : 0;
+}
+
 /** Legacy: credit usage (for reference; plans are now prompt-based). */
 export const CREDIT_USAGE = {
   MESSAGE_STANDARD: 1,

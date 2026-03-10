@@ -126,8 +126,8 @@ export interface CreditPack {
 }
 
 export const CREDIT_PACKS: CreditPack[] = [
-  { id: "50", credits: 50, priceUsd: 5, label: "50 credits" },
-  { id: "100", credits: 100, priceUsd: 10, label: "100 credits" },
-  { id: "250", credits: 250, priceUsd: 25, label: "250 credits" },
-  { id: "500", credits: 500, priceUsd: 50, label: "500 credits" },
+  { id: "50", credits: 50, priceUsd: 50, label: "50 credits" },
+  { id: "100", credits: 100, priceUsd: 100, label: "100 credits" },
+  { id: "250", credits: 250, priceUsd: 250, label: "250 credits" },
+  { id: "500", credits: 500, priceUsd: 500, label: "500 credits" },
 ];

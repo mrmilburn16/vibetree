@@ -14,6 +14,8 @@ import { detectSkills, buildSkillPromptBlock } from "@/lib/skills/registry";
 import { logLLMAnalytics } from "@/lib/llm/analyticsLog";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
 import { hasActiveSubscription } from "@/lib/subscriptionFirestore";
+import { getCreditBalance, deductCredits } from "@/lib/userCreditsFirestore";
+import { isProxyOwner } from "@/lib/proxyOwnerBypass";
 
 const MAX_MESSAGE_LENGTH = 4000;
 /** Max retries when Anthropic returns 529 overloaded_error (same as auto-fix route). */
@@ -121,6 +123,18 @@ export async function POST(
       );
     }
   }
+
+  const userId = auth.user.uid;
+  if (!isProxyOwner(userId)) {
+    const balance = await getCreditBalance(userId);
+    if (balance < 1) {
+      return Response.json(
+        { error: "insufficient_credits" },
+        { status: 402 }
+      );
+    }
+  }
+
   console.log("[message/stream] start", { projectId, projectType, model: body.model, msgLen: message.length });
   const { message: enrichedMessage, skillIds } = enrichWithSkills(projectType, message);
   const skillMatches = projectType === "pro" ? detectSkills(message) : [];
@@ -341,6 +355,13 @@ export async function POST(
             projectType,
           });
         } catch { /* analytics is best-effort */ }
+
+        if (!isProxyOwner(userId)) {
+          const deductResult = await deductCredits(userId, 1);
+          if (!deductResult.ok) {
+            console.warn("[message/stream] deductCredits after success failed", { userId, error: deductResult.error });
+          }
+        }
       } catch (err) {
         const errorMessage = sanitizeStreamError(err);
         console.error("[message/stream] error", err instanceof Error ? err.message : String(err), err);

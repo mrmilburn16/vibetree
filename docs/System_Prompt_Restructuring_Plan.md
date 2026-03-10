@@ -164,13 +164,15 @@ Each of these becomes a JSON skill file that your skills system injects ONLY whe
 ```
 Widgets and Live Activities: WidgetKit timeline providers, widget views, and Live Activity configurations require specific entry types conforming to TimelineEntry. The widget @main attribute must be on the WidgetBundle (not the app's @main). Place all widget code in the "WidgetExtension/" folder. Do NOT duplicate @main across the app and the widget extension. When using AppIntentConfiguration or AppIntentTimelineProvider, the App Intent type MUST be defined in a file inside WidgetExtension/ — the widget extension is a separate target and cannot see types from the main app.
 
-Live Activities / ActivityKit shared types rule: ActivityAttributes structs and ALL types they reference (enums, nested structs, ContentState) MUST be defined in the WidgetExtension target, not the main app target. The main app imports from the WidgetExtension, not the other way around. Specifically: (1) Define the ActivityAttributes struct in WidgetExtension/. (2) Define ALL enums and types used inside ActivityAttributes.ContentState in the same WidgetExtension/ file. (3) The ContentState struct must conform to Codable and Hashable — all its property types must also conform. (4) Never define ActivityAttributes or its associated types in the main app Swift files.
+Live Activities / ActivityKit shared types rule: ActivityAttributes MUST be defined in the main app target, not in the WidgetExtension. The WidgetExtension only references the type (e.g. in ActivityConfiguration(for: YourAttributes.self)); it does not define it. The main app never imports from the WidgetExtension. Specifically: (1) Define the ActivityAttributes struct (and ContentState, and any enums it uses) in the main app — use "LiveActivity/<Name>Attributes.swift" or "Models/<Name>Attributes.swift". (2) The widget extension gets access because the build system compiles LiveActivity/ (or shared files) for both targets; the extension only references the type. (3) ContentState must conform to Codable and Hashable; all its property types must conform. (4) Never define ActivityAttributes in WidgetExtension/ — the main app needs the type for Activity.request and activity.update; defining it only in the extension causes "cannot find type 'YourAttributes' in scope" in the app.
 
 If the user asks for Live Activities, you MUST generate a WidgetKit extension implementation under "WidgetExtension/" so the exporter can auto-create the extension target. Include at least:
 - "WidgetExtension/WidgetBundle.swift" with an @main WidgetBundle
 - "WidgetExtension/LiveActivityWidget.swift" with ActivityConfiguration and Dynamic Island regions
-- ActivityAttributes and all referenced types MUST be in WidgetExtension/ files only.
+- ActivityAttributes and ContentState in main app only (LiveActivity/ or Models/); WidgetExtension/ only contains the widget UI that references the type.
 ```
+
+**Note (corrected):** The original draft of this section incorrectly stated that ActivityAttributes should be defined in the WidgetExtension target and that the main app imports from the widget. The correct rule — and what the system prompt and skills already enforce — is: ActivityAttributes must be defined in the main app target (LiveActivity/ or Models/); the WidgetExtension only references them; the main app never imports from the widget.
 
 ### Skill 2: `musickit.json`
 

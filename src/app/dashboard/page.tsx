@@ -91,6 +91,7 @@ export default function DashboardPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [pushTestLoading, setPushTestLoading] = useState(false);
   const [pushTestMessage, setPushTestMessage] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const sendTestPush = useCallback(async () => {
@@ -420,6 +421,34 @@ export default function DashboardPage() {
               </span>
             )}
             <CreditsWidget />
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={portalLoading}
+              onClick={async () => {
+                setPortalLoading(true);
+                try {
+                  const res = await fetch("/api/stripe/create-portal-session", {
+                    method: "POST",
+                    credentials: "include",
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && typeof data.url === "string") {
+                    window.location.href = data.url;
+                    return;
+                  }
+                  if (res.status === 400) {
+                    router.push("/pricing");
+                    return;
+                  }
+                  setCreateError(typeof data.error === "string" ? data.error : "Could not open billing portal.");
+                } finally {
+                  setPortalLoading(false);
+                }
+              }}
+            >
+              {portalLoading ? "Opening…" : "Manage subscription"}
+            </Button>
             <Link href="/settings">
               <Button variant="ghost" size="sm">Settings</Button>
             </Link>

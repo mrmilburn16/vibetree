@@ -165,7 +165,7 @@ export function ChatPanel({
     }
     return true;
   });
-  const { hasCreditsForMessage, deduct } = useCredits();
+  const { hasCreditsForMessage, deduct, refresh: refreshCredits } = useCredits();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -213,7 +213,7 @@ export function ChatPanel({
     onError,
     projectName,
     onProjectRenamed,
-    onMessageSuccess: featureFlags.useRealLLM ? () => deduct(1) : undefined,
+    onMessageSuccess: featureFlags.useRealLLM ? () => refreshCredits() : undefined,
     onAppBuilt,
     onProBuildComplete,
   });

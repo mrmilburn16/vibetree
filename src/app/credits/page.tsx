@@ -1,22 +1,52 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCredits } from "@/contexts/CreditsContext";
 import { Button, Input } from "@/components/ui";
-import { CREDIT_PACKS, PRICE_PER_CREDIT_USD } from "@/lib/credits";
+import { CREDIT_PACKS } from "@/lib/credits";
 
-export default function CreditsPage() {
+function CreditsPageContent() {
   const router = useRouter();
-  const { balance, add, setBalance } = useCredits();
-  const [purchased, setPurchased] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const { balance, setBalance, refresh } = useCredits();
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [testBalance, setTestBalance] = useState("");
 
+  useEffect(() => {
+    if (searchParams.get("purchase") === "success") {
+      refresh();
+      router.replace("/credits", { scroll: false });
+    }
+  }, [searchParams, refresh, router]);
 
-  function handlePurchase(packId: string, credits: number) {
-    add(credits);
-    setPurchased(packId);
+  async function handlePurchase(packId: string) {
+    setCheckoutLoading(packId);
+    try {
+      const res = await fetch("/api/stripe/create-credits-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ packId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        const returnUrl = encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "/credits");
+        router.push(`/sign-in?returnUrl=${returnUrl}`);
+        return;
+      }
+      if (!res.ok) {
+        console.error("[credits] create-credits-checkout failed", res.status, data);
+        return;
+      }
+      if (typeof data.url === "string") {
+        window.location.href = data.url;
+        return;
+      }
+    } finally {
+      setCheckoutLoading(null);
+    }
   }
 
   return (
@@ -40,21 +70,12 @@ export default function CreditsPage() {
           Buy credits
         </h1>
         <p className="mt-2 text-[var(--text-secondary)]">
-          <strong className="text-[var(--text-primary)]">1 credit = ${PRICE_PER_CREDIT_USD.toFixed(2)}</strong>.
-          Each message uses 1 credit. Purchased credits don&apos;t expire.
+          <strong className="text-[var(--text-primary)]">1 credit = $1.00</strong>.
+          Each message uses 1 credit.
         </p>
         <p className="mt-1 text-[var(--text-secondary)]">
-          Same price per credit, no matter how many you buy.
+          Purchased credits never expire and stack on top of your plan credits.
         </p>
-
-        {purchased && (
-          <div
-            className="mt-6 rounded-[var(--radius-lg)] border border-[var(--semantic-success)]/40 bg-[var(--semantic-success)]/10 px-4 py-3 text-sm text-[var(--semantic-success)]"
-            role="alert"
-          >
-            Credits added. Your balance has been updated. (This is a demo — no payment was taken.)
-          </div>
-        )}
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2">
           {CREDIT_PACKS.map((pack) => (
@@ -62,15 +83,15 @@ export default function CreditsPage() {
               key={pack.id}
               className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-6 transition-colors hover:border-[var(--button-primary-bg)]/40"
             >
-              <p className="text-2xl font-bold text-[var(--text-primary)]">{pack.label}</p>
-              <p className="mt-1 text-3xl font-bold text-[var(--link-default)]">${pack.priceUsd}</p>
+              <p className="text-2xl font-bold text-[var(--text-primary)]">{pack.label} / ${pack.priceUsd}</p>
               <div className="mt-6 flex-1" />
               <Button
                 variant="primary"
                 className="w-full"
-                onClick={() => handlePurchase(pack.id, pack.credits)}
+                disabled={checkoutLoading !== null}
+                onClick={() => handlePurchase(pack.id)}
               >
-                Get {pack.label}
+                {checkoutLoading === pack.id ? "Redirecting…" : `Get ${pack.label}`}
               </Button>
             </div>
           ))}
@@ -112,5 +133,13 @@ export default function CreditsPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+export default function CreditsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[var(--background-primary)]" />}>
+      <CreditsPageContent />
+    </Suspense>
   );
 }

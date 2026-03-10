@@ -453,6 +453,8 @@ export function buildPbxproj(
   const widgetSourcesPhaseId = usesWidgetTarget ? xcodeId() : "";
   const widgetFrameworksPhaseId = usesWidgetTarget ? xcodeId() : "";
   const widgetResourcesPhaseId = usesWidgetTarget ? xcodeId() : "";
+  const containerItemProxyId = usesWidgetTarget ? xcodeId() : "";
+  const targetDependencyId = usesWidgetTarget ? xcodeId() : "";
 
   const debugConfigProjectId = xcodeId();
   const releaseConfigProjectId = xcodeId();
@@ -619,6 +621,17 @@ export function buildPbxproj(
 /* Begin PBXBuildFile section */
 ${buildFileLines.join("\n")}${frameworkBuildLines ? "\n" + frameworkBuildLines : ""}
 /* End PBXBuildFile section */
+${usesWidgetTarget ? `
+/* Begin PBXContainerItemProxy section */
+\t\t${containerItemProxyId} /* PBXContainerItemProxy */ = {
+\t\t\tisa = PBXContainerItemProxy;
+\t\t\tcontainerPortal = ${projectObjectId} /* Project object */;
+\t\t\tproxyType = 1;
+\t\t\tremoteGlobalIDString = ${widgetTargetId} /* ${widgetName} */;
+\t\t\tremoteInfo = ${JSON.stringify(widgetName)};
+\t\t};
+/* End PBXContainerItemProxy section */
+` : ""}
 
 /* Begin PBXFileReference section */
 ${fileRefLines}
@@ -672,7 +685,7 @@ ${groupChildren}
 \t\t\tbuildRules = (
 \t\t\t);
 \t\t\tdependencies = (
-\t\t\t);
+${usesWidgetTarget ? `\t\t\t\t${targetDependencyId} /* PBXTargetDependency */,\n` : ""}\t\t\t);
 \t\t\tname = ${JSON.stringify(projectName)};
 \t\t\tproductName = ${JSON.stringify(projectName)};
 \t\t\tproductReference = ${projectProductsAppId} /* ${projectName}.app */;
@@ -729,6 +742,15 @@ ${appSourcesPhaseFiles}
 \t\t};
 ${widgetSourcesBlock}
 /* End PBXSourcesBuildPhase section */
+${usesWidgetTarget ? `
+/* Begin PBXTargetDependency section */
+\t\t${targetDependencyId} /* PBXTargetDependency */ = {
+\t\t\tisa = PBXTargetDependency;
+\t\t\ttarget = ${widgetTargetId} /* ${widgetName} */;
+\t\t\ttargetProxy = ${containerItemProxyId} /* PBXContainerItemProxy */;
+\t\t};
+/* End PBXTargetDependency section */
+` : ""}
 
 /* Begin XCBuildConfiguration section */
 \t\t${debugConfigProjectId} /* Debug */ = {

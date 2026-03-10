@@ -4,7 +4,15 @@ import { getStripe } from "@/lib/stripe";
 import {
   setSubscriptionFromCheckout,
   setSubscriptionDeletedBySubscriptionId,
+  getUserIdByStripeCustomerId,
+  getUserIdBySubscriptionId,
+  getSubscription,
+  updateSubscriptionStatus,
+  updateSubscriptionFromStripeSubscription,
 } from "@/lib/subscriptionFirestore";
+import type { SubscriptionStatus } from "@/lib/subscriptionFirestore";
+import { getMonthlyCreditsForPlanId } from "@/lib/pricing";
+import { setCreditBalance, addCredits } from "@/lib/userCreditsFirestore";
 
 /** Stripe webhooks require the raw body for signature verification. Do not parse JSON before this. */
 export async function POST(request: Request) {
@@ -49,6 +57,24 @@ export async function POST(request: Request) {
           console.warn("[webhooks/stripe] checkout.session.completed missing userId");
           break;
         }
+        if (session.mode === "payment") {
+          const creditsRaw = session.metadata?.credits;
+          const credits = typeof creditsRaw === "string" ? parseInt(creditsRaw, 10) : Number(creditsRaw);
+          if (!Number.isFinite(credits) || credits <= 0) {
+            console.warn("[webhooks/stripe] checkout.session.completed payment mode missing or invalid metadata.credits", creditsRaw);
+            break;
+          }
+          const result = await addCredits(userId, credits);
+          if (result.ok) {
+            console.log("[webhooks/stripe] credits purchased", { userId, credits, balanceAfter: result.balanceAfter });
+          } else {
+            console.warn("[webhooks/stripe] credits purchase addCredits failed", { userId, credits, error: result.error });
+          }
+          break;
+        }
+        if (session.mode !== "subscription") {
+          break;
+        }
         const subscriptionId = session.subscription as string | null;
         const customerId = session.customer as string | null;
         const planId = (session.metadata?.planId as string) || null;
@@ -63,19 +89,24 @@ export async function POST(request: Request) {
           console.warn("[webhooks/stripe] unknown planId", planId);
           break;
         }
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId) as Stripe.Subscription & { current_period_end?: number };
         const status = subscription.status as "active" | "trialing" | "past_due" | "unpaid";
-        const currentPeriodEnd =
+        const periodEndSeconds =
+          subscription.current_period_end ??
           subscription.items?.data?.[0]?.current_period_end ??
-          (subscription as unknown as { current_period_end?: number }).current_period_end ??
           0;
+        const currentPeriodEndMs = periodEndSeconds * 1000;
         await setSubscriptionFromCheckout(userId, {
           stripeCustomerId: customerId,
           stripeSubscriptionId: subscriptionId,
           planId,
           status,
-          currentPeriodEnd,
+          currentPeriodEnd: currentPeriodEndMs,
         });
+        const initialCredits = getMonthlyCreditsForPlanId(planId);
+        if (initialCredits > 0) {
+          await setCreditBalance(userId, initialCredits);
+        }
         console.log("[webhooks/stripe] subscription active", { userId, planId });
         break;
       }
@@ -90,6 +121,86 @@ export async function POST(request: Request) {
             "[webhooks/stripe] customer.subscription.deleted no user found for subscription",
             subscriptionId
           );
+        }
+        break;
+      }
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId =
+          typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+        if (!customerId) {
+          console.warn("[webhooks/stripe] invoice.payment_failed missing customer");
+          break;
+        }
+        const userId = await getUserIdByStripeCustomerId(customerId);
+        if (!userId) {
+          console.warn("[webhooks/stripe] invoice.payment_failed no user for customer", customerId);
+          break;
+        }
+        await updateSubscriptionStatus(userId, "past_due");
+        console.log("[webhooks/stripe] subscription set past_due", { userId });
+        break;
+      }
+      case "customer.subscription.updated": {
+        const sub = event.data.object as Stripe.Subscription;
+        const subscriptionId = sub.id;
+        const userId = await getUserIdBySubscriptionId(subscriptionId);
+        if (!userId) {
+          console.warn(
+            "[webhooks/stripe] customer.subscription.updated no user for subscription",
+            subscriptionId
+          );
+          break;
+        }
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId) as Stripe.Subscription & { current_period_end?: number };
+        const status = (subscription.status ?? "active") as SubscriptionStatus;
+        const periodEndSeconds =
+          subscription.current_period_end ?? subscription.items?.data?.[0]?.current_period_end ?? 0;
+        const currentPeriodEndMs = periodEndSeconds * 1000;
+        const planIdRaw = subscription.metadata?.planId as string | undefined;
+        const validPlanId =
+          planIdRaw === "starter" || planIdRaw === "builder" || planIdRaw === "pro"
+            ? planIdRaw
+            : undefined;
+        await updateSubscriptionFromStripeSubscription(userId, {
+          status,
+          currentPeriodEnd: currentPeriodEndMs,
+          planId: validPlanId,
+        });
+        console.log("[webhooks/stripe] subscription updated", {
+          userId,
+          status,
+          planId: validPlanId ?? "(unchanged)",
+        });
+        break;
+      }
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId =
+          typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+        if (!customerId) {
+          console.warn("[webhooks/stripe] invoice.paid missing customer");
+          break;
+        }
+        const userId = await getUserIdByStripeCustomerId(customerId);
+        if (!userId) {
+          console.warn("[webhooks/stripe] invoice.paid no user for customer", customerId);
+          break;
+        }
+        const sub = await getSubscription(userId);
+        if (sub?.status === "past_due") {
+          await updateSubscriptionStatus(userId, "active");
+          console.log("[webhooks/stripe] subscription restored to active after retry", { userId });
+        }
+        if (invoice.billing_reason === "subscription_cycle") {
+          const planId = sub?.planId ?? null;
+          if (planId && (planId === "starter" || planId === "builder" || planId === "pro")) {
+            const allowance = getMonthlyCreditsForPlanId(planId);
+            if (allowance > 0) {
+              await setCreditBalance(userId, allowance);
+              console.log("[webhooks/stripe] credits reset on renewal", { userId, planId, allowance });
+            }
+          }
         }
         break;
       }

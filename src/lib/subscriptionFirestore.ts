@@ -78,7 +78,11 @@ export async function hasActiveSubscription(userId: string): Promise<boolean> {
   if (!sub) return false;
   if (sub.planId === "free" || !sub.planId) return false;
   if (sub.status !== "active" && sub.status !== "trialing") return false;
-  if (sub.currentPeriodEnd && sub.currentPeriodEnd < Date.now() / 1000) return false;
+  if (sub.currentPeriodEnd != null) {
+    const now = Date.now();
+    const endMs = sub.currentPeriodEnd >= 1e12 ? sub.currentPeriodEnd : sub.currentPeriodEnd * 1000;
+    if (endMs < now) return false;
+  }
   return true;
 }
 
@@ -132,6 +136,60 @@ export async function getUserIdBySubscriptionId(subscriptionId: string): Promise
   } catch {
     return null;
   }
+}
+
+/** Look up Firebase user ID by Stripe customer ID (users collection has stripeCustomerId). */
+export async function getUserIdByStripeCustomerId(customerId: string): Promise<string | null> {
+  const db = getDb();
+  if (!db) return null;
+  try {
+    const snap = await db
+      .collection(COLLECTION)
+      .where("stripeCustomerId", "==", customerId)
+      .limit(1)
+      .get();
+    if (snap.empty) return null;
+    return snap.docs[0].id;
+  } catch {
+    return null;
+  }
+}
+
+/** Update only subscription status on the user doc (e.g. past_due or active after retry). */
+export async function updateSubscriptionStatus(
+  userId: string,
+  subscriptionStatus: SubscriptionStatus
+): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  const now = Date.now();
+  await db.collection(COLLECTION).doc(userId).set(
+    { subscriptionStatus, subscriptionUpdatedAt: now },
+    { merge: true }
+  );
+}
+
+/** Update user subscription fields from Stripe subscription (renewals, plan changes, etc.). planId is optional; when omitted, existing planId is not overwritten. */
+export async function updateSubscriptionFromStripeSubscription(
+  userId: string,
+  data: {
+    status: SubscriptionStatus;
+    currentPeriodEnd: number;
+    planId?: StripePlanId | null;
+  }
+): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  const now = Date.now();
+  const update: Record<string, unknown> = {
+    subscriptionStatus: data.status,
+    currentPeriodEnd: data.currentPeriodEnd,
+    subscriptionUpdatedAt: now,
+  };
+  if (data.planId !== undefined && data.planId !== null) {
+    update.planId = data.planId;
+  }
+  await db.collection(COLLECTION).doc(userId).set(update, { merge: true });
 }
 
 export async function setSubscriptionDeleted(userId: string): Promise<void> {

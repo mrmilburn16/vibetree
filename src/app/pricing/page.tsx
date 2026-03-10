@@ -192,6 +192,7 @@ export default function PricingPage() {
   const router = useRouter();
   const [simulatorExplanationOpen, setSimulatorExplanationOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const handleSelectPlan = async (planId: string) => {
     if (planId === "free") {
@@ -199,6 +200,7 @@ export default function PricingPage() {
       return;
     }
     if (!isPaidPlanId(planId)) return;
+    setCheckoutError(null);
     setCheckoutLoading(true);
     try {
       const res = await fetch("/api/stripe/create-checkout", {
@@ -216,6 +218,7 @@ export default function PricingPage() {
         return;
       }
       if (!res.ok) {
+        setCheckoutError("Something went wrong — please try again.");
         console.error("[pricing] create-checkout failed", res.status, data);
         return;
       }
@@ -223,6 +226,7 @@ export default function PricingPage() {
         window.location.href = data.url;
         return;
       }
+      setCheckoutError("Something went wrong — please try again.");
     } finally {
       setCheckoutLoading(false);
     }
@@ -292,6 +296,18 @@ export default function PricingPage() {
         {/* Plans */}
         <section className="px-4 py-12 sm:px-6 sm:py-20">
           <div className="mx-auto max-w-6xl">
+            {checkoutError && (
+              <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-red-500/50 bg-red-500/10 px-4 py-3">
+                <p className="text-sm text-[var(--text-primary)]">{checkoutError}</p>
+                <button
+                  type="button"
+                  onClick={() => setCheckoutError(null)}
+                  className="shrink-0 text-sm font-medium text-[var(--link-default)] hover:underline"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {PLANS.map((plan) => (
                 <PlanCard

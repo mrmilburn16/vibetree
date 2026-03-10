@@ -76,6 +76,15 @@ export async function deductCredits(
   }
 }
 
+/** Set credit balance to a specific value (e.g. plan allowance on checkout or renewal). */
+export async function setCreditBalance(userId: string, balance: number): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  if (!Number.isFinite(balance) || balance < 0) return;
+  const ref = db.collection(COLLECTION).doc(userId);
+  await ref.set({ balance, updatedAt: Date.now() }, { merge: true });
+}
+
 /** Add credits (e.g. after purchase). */
 export async function addCredits(
   userId: string,
