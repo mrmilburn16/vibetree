@@ -396,6 +396,89 @@ textarea:-webkit-autofill:active {
   scroll-snap-stop: normal;
 }
 
+/* Waitlist: free scrolling only — no scroll-snap (uses its own container, not .landing-scroll-container) */
+.waitlist-scroll-container {
+  scroll-behavior: smooth;
+  scroll-snap-type: none;
+}
+.waitlist-scroll-container .landing-section {
+  scroll-snap-align: none;
+  scroll-snap-stop: normal;
+}
+
+/* Waitlist glass mode only (2nd version): dark glass pattern – green-tinted, shuttle.zip inspired */
+.waitlist-nav-glass {
+  background: rgba(22, 32, 30, 0.85) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.waitlist-theme-glass .waitlist-countdown-badge {
+  background: rgba(22, 32, 30, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 100px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.waitlist-theme-glass .waitlist-form-card {
+  background: rgba(22, 32, 30, 0.85) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.waitlist-theme-glass .waitlist-step-card {
+  background: rgba(22, 32, 30, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s;
+}
+.waitlist-theme-glass .waitlist-step-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.waitlist-theme-glass .waitlist-feature-card {
+  background: rgba(22, 32, 30, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s;
+}
+.waitlist-theme-glass .waitlist-feature-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.waitlist-theme-glass .waitlist-prompt-box {
+  background: rgba(22, 32, 30, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.waitlist-theme-glass .waitlist-phone-frame {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.waitlist-theme-glass .waitlist-action-card {
+  background: rgba(22, 32, 30, 0.85) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s;
+}
+.waitlist-theme-glass .waitlist-action-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
 /* Landing: staggered word reveal in hero */
 @keyframes word-reveal {
   from {

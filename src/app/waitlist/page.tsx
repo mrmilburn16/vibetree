@@ -1,15 +1,20 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Nav } from "@/components/landing/Nav";
+import Link from "next/link";
 import { Footer } from "@/components/landing/Footer";
 import { Button, Card, Input } from "@/components/ui";
-import { Check, Copy, ExternalLink, Trophy, Clock, Users, ChevronDown, Crown, Medal, Star, Gift, Zap } from "lucide-react";
+import { Check, Copy, ExternalLink, Trophy, Clock, Users, ChevronDown, Crown, Medal, Star, Gift, Zap, MessageCircle, Smartphone, Wrench, Eye, Cloud, Store, Flame, Sun, CloudSun, Sunset, Paperclip, Send } from "lucide-react";
+import { JetBrains_Mono } from "next/font/google";
+
+const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-jetbrains-mono" });
+
+const LAUNCH_DATE = new Date("2026-04-15T00:00:00Z");
 
 const STORAGE_TOKEN = "vibetree-waitlist-token";
 
 const TWEET_TEXT =
-  "I just joined the waitlist for Vibetree — build real iOS apps in your browser with AI. No Xcode required. 🚀";
+  "I just joined the waitlist for Vibetree — build real iOS apps in your browser with AI. No Xcode required.";
 const FOLLOW_URL = "https://twitter.com/vibetree";
 const POST_URL = "https://twitter.com/vibetree";
 const THREADS_URL = "https://threads.net/@vibetree";
@@ -52,6 +57,71 @@ function getCookie(name: string): string | null {
 function getReferralParam(): string | null {
   if (typeof window === "undefined") return null;
   return new URLSearchParams(window.location.search).get("ref");
+}
+
+// ── Launch countdown (April 15, 2026) ────────────────────────────────────────
+function useLaunchCountdown() {
+  const [diff, setDiff] = useState<number | null>(null);
+  useEffect(() => {
+    function tick() {
+      const now = Date.now();
+      const d = LAUNCH_DATE.getTime() - now;
+      setDiff(d <= 0 ? 0 : d);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (diff === null) return { live: false, days: 0, hours: 0, mins: 0, secs: 0 };
+  if (diff <= 0) return { live: true, days: 0, hours: 0, mins: 0, secs: 0 };
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const secs = Math.floor((diff % (1000 * 60)) / 1000);
+  return { live: false, days, hours, mins, secs };
+}
+
+// ── Minimal nav (logo + Join Waitlist) ───────────────────────────────────────
+function WaitlistMinimalNav({
+  glassMode,
+  onToggleGlass,
+  showGlassToggle,
+}: {
+  glassMode: boolean;
+  onToggleGlass: () => void;
+  showGlassToggle: boolean;
+}) {
+  function scrollToJoin() {
+    document.getElementById("join")?.scrollIntoView({ behavior: "smooth" });
+  }
+  return (
+    <header
+      className={`sticky top-0 z-40 border-b transition-shadow ${
+        glassMode ? "waitlist-nav-glass" : "border-[var(--border-default)] bg-[var(--background-primary)]/85 backdrop-blur-md"
+      }`}
+    >
+      <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+        <Link href="/" className="text-xl font-semibold text-[var(--text-primary)] transition-opacity hover:opacity-90 shrink-0">
+          Vibetree
+        </Link>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {showGlassToggle && (
+            <button
+              type="button"
+              onClick={onToggleGlass}
+              className="rounded-full border border-[var(--border-default)] bg-[var(--background-secondary)]/80 px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
+              aria-pressed={glassMode}
+            >
+              {glassMode ? "Glass" : "Default"}
+            </button>
+          )}
+          <Button variant="primary" className="shrink-0" onClick={scrollToJoin}>
+            Join Waitlist
+          </Button>
+        </div>
+      </nav>
+    </header>
+  );
 }
 
 // ── Countdown timer for action verification ──────────────────────────────────
@@ -117,12 +187,12 @@ function TaskCard({
   }
 
   return (
-    <Card className={`p-4 sm:p-5 transition-opacity ${done ? "opacity-70" : ""}`}>
+    <Card className={`waitlist-action-card p-4 sm:p-5 transition-opacity ${done ? "opacity-70" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-medium text-[var(--text-primary)]">{title}</h3>
-            <span className="rounded-full bg-[var(--button-primary-bg)]/20 px-2 py-0.5 text-xs font-semibold text-[var(--link-default)]">
+            <span className="rounded-full bg-[var(--link-default)]/20 px-2 py-0.5 text-xs font-semibold text-[var(--link-default)]">
               +{points} pts
             </span>
           </div>
@@ -130,7 +200,7 @@ function TaskCard({
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {done ? (
-            <span className="flex items-center gap-1.5 text-sm text-[var(--semantic-success)]">
+            <span className="flex items-center gap-1.5 text-sm text-[var(--link-default)]">
               <Check className="h-4 w-4" /> Done
             </span>
           ) : (
@@ -202,12 +272,12 @@ function Leaderboard({
                   key={entry.rank}
                   className={`border-b border-[var(--border-default)] last:border-0 ${
                     userRank && entry.rank === userRank.rank
-                      ? "bg-[var(--button-primary-bg)]/10"
+                      ? "bg-[var(--link-default)]/10"
                       : ""
                   }`}
                 >
                   <td className="px-4 py-2.5 font-semibold tabular-nums text-[var(--text-tertiary)]">
-                    {entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : entry.rank}
+                    {entry.rank <= 3 ? <Medal className="inline-block h-4 w-4 text-[var(--link-default)]" aria-hidden /> : entry.rank}
                   </td>
                   <td className="px-4 py-2.5 text-[var(--text-primary)]">{entry.displayName}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-[var(--link-default)] font-semibold">
@@ -222,7 +292,7 @@ function Leaderboard({
                       · · ·
                     </td>
                   </tr>
-                  <tr className="bg-[var(--button-primary-bg)]/10">
+                  <tr className="bg-[var(--link-default)]/10">
                     <td className="px-4 py-2.5 font-semibold tabular-nums text-[var(--text-tertiary)]">
                       {userRank.rank}
                     </td>
@@ -241,6 +311,359 @@ function Leaderboard({
   );
 }
 
+// ── Scroll reveal hook ──────────────────────────────────────────────────────
+function useReveal(threshold = 0.15) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry?.isIntersecting) setVisible(true); },
+      { threshold }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [threshold]);
+  return { ref, visible };
+}
+
+// ── Showcase JS scroll-snap (no CSS scroll-snap-type) ────────────────────────
+// Debounces scroll end, then snaps to the nearest showcase panel.
+// Only snaps if the user has scrolled ≥25% into the next/prev panel.
+function useShowcaseSnap() {
+  useEffect(() => {
+    const scrollEl = document.querySelector(".waitlist-scroll-container") as HTMLElement | null;
+    if (!scrollEl) return;
+    const el = scrollEl; // non-null alias for use inside closures
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let isSnapping = false;
+
+    function getPanels(): HTMLElement[] {
+      return Array.from(document.querySelectorAll("[data-showcase-panel]")) as HTMLElement[];
+    }
+
+    function snapToNearest() {
+      if (isSnapping) return;
+      const panels = getPanels();
+      if (!panels.length) return;
+
+      const scrollTop = el.scrollTop;
+      const vh = el.clientHeight;
+
+      const firstPanelTop = panels[0]!.offsetTop;
+      const lastPanel = panels[panels.length - 1]!;
+      const lastPanelBottom = lastPanel.offsetTop + lastPanel.offsetHeight;
+
+      // Only act within the showcase area (±50% viewport buffer around edges)
+      if (scrollTop < firstPanelTop - vh * 0.5 || scrollTop > lastPanelBottom) return;
+
+      let target: HTMLElement | null = null;
+
+      for (let i = 0; i < panels.length; i++) {
+        const panelTop = panels[i]!.offsetTop;
+        const nextPanelTop = i < panels.length - 1 ? panels[i + 1]!.offsetTop : Infinity;
+
+        if (scrollTop >= panelTop && scrollTop < nextPanelTop) {
+          const progress = (scrollTop - panelTop) / vh;
+          // < 25% past this panel's top → snap back to this panel
+          // ≥ 25% past this panel's top → snap forward to next panel
+          if (progress < 0.25) {
+            target = panels[i]!;
+          } else {
+            target = panels[i + 1] ?? panels[i]!;
+          }
+          break;
+        }
+      }
+
+      // Fallback: if we're past all panels, stay at last
+      if (!target) target = panels[panels.length - 1]!;
+
+      const targetTop = target.offsetTop;
+      if (Math.abs(scrollTop - targetTop) < 8) return; // already aligned
+
+      isSnapping = true;
+      el.scrollTo({ top: targetTop, behavior: "smooth" });
+      // Release lock after animation (~700ms)
+      setTimeout(() => { isSnapping = false; }, 700);
+    }
+
+    function onScroll() {
+      if (isSnapping) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(snapToNearest, 150);
+    }
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+}
+
+// ── App showcase panels (4 apps, alternating layout, fade-in) ───────────────
+const SHOWCASE_APPS = [
+  {
+    id: "habit",
+    number: "01",
+    title: "Plant Identifier",
+    description: "Take a photo, identify any plant instantly — with care tips, watering schedules, and a personal collection. Generated from a single prompt.",
+    prompt: "\"Create a plant identifier app. I take a photo using the camera, send it to a vision API proxy, and display the identified plant name, care tips, and watering schedule. Save identified plants to a collection.\"",
+    videoSrc: "/videos/habit-tracker-demo.mp4",
+  },
+  {
+    id: "hiit",
+    number: "02",
+    title: "HIIT Timer",
+    description: "A high-intensity interval timer with animated countdown rings, customizable work/rest periods, exercise names, and haptic feedback on transitions.",
+    prompt: "\"A HIIT workout timer with customizable rounds, rest periods, and exercise labels. Dark theme with a neon green accent\"",
+    videoSrc: undefined as string | undefined, // e.g. "/videos/hiit-timer-demo.mp4"
+  },
+  {
+    id: "budget",
+    number: "03",
+    title: "Budget Tracker",
+    description: "A personal finance dashboard with monthly spending charts, category breakdowns, and a clean data-rich interface — all from one sentence.",
+    prompt: "\"A budget tracker with monthly spending charts, category breakdowns, and a dark purple dashboard theme\"",
+    videoSrc: undefined as string | undefined, // e.g. "/videos/budget-tracker-demo.mp4"
+  },
+  {
+    id: "weather",
+    number: "04",
+    title: "Weather App",
+    description: "A beautiful weather app with current conditions, hourly forecast, and atmospheric details — with a gradient sky that shifts based on time of day.",
+    prompt: "\"A weather app with hourly forecasts, current conditions, and a gradient background that changes with the weather\"",
+    videoSrc: undefined as string | undefined, // e.g. "/videos/weather-demo.mp4"
+  },
+];
+
+// Static prompt input bar (glass pill, no animation)
+function StaticPromptBar({ promptText }: { promptText: string }) {
+  return (
+    <div
+      className="mt-4 flex items-center gap-2 rounded-2xl border px-4 py-3"
+      style={{
+        borderRadius: 16,
+        background: "rgba(22,32,30,0.65)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        borderColor: "rgba(255,255,255,0.07)",
+      }}
+    >
+      <Paperclip className="h-4 w-4 shrink-0 text-[var(--text-tertiary)] opacity-30" aria-hidden />
+      <div className={`min-h-[24px] flex-1 font-normal text-[var(--text-primary)] ${jetbrainsMono.className}`} style={{ fontSize: 14 }}>
+        {promptText}
+      </div>
+      <div
+        className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg"
+        style={{ background: "var(--link-default)" }}
+      >
+        <Send className="h-4 w-4 text-[var(--button-primary-text)]" aria-hidden />
+      </div>
+    </div>
+  );
+}
+
+function WaitlistShowcase() {
+  useShowcaseSnap();
+  return (
+    <>
+      <section className="px-4 pt-24 pb-16 sm:px-6 text-center">
+        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--link-default)] mb-4">Built with VibeTree</p>
+        <h2 className="text-heading-section">One prompt. One app. Every time.</h2>
+      </section>
+      {SHOWCASE_APPS.map((app, index) => (
+        <AppShowcasePanel key={app.id} app={app} index={index} />
+      ))}
+    </>
+  );
+}
+
+function AppShowcasePanel({ app, index }: { app: (typeof SHOWCASE_APPS)[0]; index: number }) {
+  const { ref, visible } = useReveal(0.1);
+  const even = index % 2 === 1;
+  return (
+    <section
+      ref={ref}
+      data-showcase-panel
+      className={`min-h-[100dvh] flex items-center justify-center px-4 py-12 sm:px-6 lg:px-20 transition-all duration-700 ${
+        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
+      }`}
+    >
+      <div className={`mx-auto grid w-full max-w-5xl grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-20 items-center ${even ? "lg:direction-rtl" : ""}`}>
+        <div className={even ? "lg:order-2" : ""}>
+          <h2 className="text-heading-section mb-5">{app.title}</h2>
+          <p className="text-[var(--text-secondary)] text-base leading-relaxed max-w-[440px]">{app.description}</p>
+          <StaticPromptBar promptText={app.prompt.replace(/^["']|["']$/g, "")} />
+        </div>
+        <div className={`flex justify-center ${even ? "lg:order-1" : ""}`}>
+          <PhoneMockup app={app} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PhoneMockup({ app }: { app: (typeof SHOWCASE_APPS)[0] }) {
+  const videoSrc = app.videoSrc;
+  return (
+    <div className="waitlist-phone-frame relative w-[280px] sm:w-[300px]" style={{ border: "none", outline: "none", boxShadow: "none" }}>
+      <div className="aspect-[9/19.5] w-full overflow-hidden bg-[#0A0A0B] relative" style={{ border: "none", outline: "none", boxShadow: "none", borderRadius: 0 }}>
+        {videoSrc ? (
+          <video
+            src={videoSrc}
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="h-full w-full object-cover"
+            style={{ border: "none", outline: "none", boxShadow: "none", display: "block", background: "#0A0A0B" }}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-[var(--background-primary)]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--border-default)]/80">
+              <svg className="h-6 w-6 text-[var(--text-tertiary)]" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── How it works (3 steps) ───────────────────────────────────────────────────
+function WaitlistHowItWorks() {
+  const { ref, visible } = useReveal(0.1);
+  const steps = [
+    { num: "01", Icon: MessageCircle, title: "Describe your app", desc: "Write a plain-text prompt describing what you want. Features, design, behavior — just tell VibeTree what to build." },
+    { num: "02", Icon: Zap, title: "We build it natively", desc: "Real SwiftUI code — not a wrapper or a web view. Compiled in the cloud, preview it instantly in your browser." },
+    { num: "03", Icon: Smartphone, title: "Install on your phone", desc: "Install directly to your iPhone via USB, or submit to the App Store. You own every line of code." },
+  ];
+  return (
+    <section
+      ref={ref}
+      className={`px-4 py-24 sm:px-6 sm:py-32 transition-all duration-700 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}
+    >
+      <div className="mx-auto max-w-4xl">
+        <p className="text-center text-xs font-semibold uppercase tracking-widest text-[var(--link-default)] mb-4">How it works</p>
+        <h2 className="text-heading-section text-center mb-16">Prompt to phone in minutes</h2>
+        <div className="grid gap-6 sm:grid-cols-3">
+          {steps.map((s) => (
+            <Card key={s.num} className="waitlist-step-card p-8 sm:p-9 border-[var(--border-default)] hover:border-[var(--link-default)]/30 transition-all hover:-translate-y-1 hover:shadow-xl">
+              <div className="text-4xl font-bold text-[var(--link-default)]/20 mb-5">{s.num}</div>
+              <div className="mb-4 flex items-center justify-start">
+                <s.Icon className="h-8 w-8 text-[var(--link-default)]" aria-hidden />
+              </div>
+              <h3 className="text-lg font-bold text-[var(--text-primary)] mb-2">{s.title}</h3>
+              <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{s.desc}</p>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Why VibeTree differentiators ─────────────────────────────────────────────
+function WaitlistWhy() {
+  const { ref, visible } = useReveal(0.1);
+  const cards = [
+    { Icon: Wrench, title: "Pure SwiftUI output", desc: "Every app compiles natively with Xcode. No React Native, no Expo, no web views. Performance and quality your users can feel.", tag: "Core differentiator" },
+    { Icon: Eye, title: "Readable & editable", desc: "Clean, commented code that follows Apple's conventions. Modify in Xcode or iterate with more prompts — it's your code." },
+    { Icon: Cloud, title: "Cloud builds", desc: "No Mac required. We compile in the cloud so you can build iOS apps from any device, anywhere." },
+    { Icon: Store, title: "App Store ready", desc: "Proper architecture, asset catalogs, and entitlements out of the box. One-tap App Store submission coming at launch." },
+  ];
+  return (
+    <section
+      ref={ref}
+      className={`px-4 py-20 sm:px-6 sm:py-28 transition-all duration-700 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}
+    >
+      <div className="mx-auto max-w-4xl">
+        <p className="text-center text-xs font-semibold uppercase tracking-widest text-[var(--link-default)] mb-4">Why VibeTree</p>
+        <h2 className="text-heading-section text-center mb-12">Real native apps, not web views in a wrapper</h2>
+        <div className="grid gap-5 sm:grid-cols-2">
+          {cards.map((c) => (
+            <Card key={c.title} className="waitlist-feature-card p-8 border-[var(--border-default)] hover:border-[var(--link-default)]/25 hover:bg-[var(--background-tertiary)] transition-all">
+              <div className="mb-3 flex items-center justify-start">
+                <c.Icon className="h-7 w-7 text-[var(--link-default)]" aria-hidden />
+              </div>
+              <h3 className="text-base font-bold text-[var(--text-primary)] mb-2">{c.title}</h3>
+              <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{c.desc}</p>
+              {c.tag && (
+                <span className="inline-block mt-3 px-3 py-1 rounded-full text-[11px] font-semibold bg-[var(--link-default)]/10 text-[var(--link-default)] border border-[var(--border-default)]">
+                  {c.tag}
+                </span>
+              )}
+            </Card>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Bottom CTA (repeat waitlist form) ───────────────────────────────────────
+function WaitlistBottomCta({
+  glassMode,
+  email,
+  name,
+  error,
+  loading,
+  onEmailChange,
+  onNameChange,
+  onSubmit,
+  setError,
+}: {
+  glassMode: boolean;
+  email: string;
+  name: string;
+  error: string;
+  loading: boolean;
+  onEmailChange: (v: string) => void;
+  onNameChange: (v: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  setError: (v: string) => void;
+}) {
+  const formContent = (
+    <form onSubmit={onSubmit} className="flex flex-col sm:flex-row gap-2.5 justify-center items-center max-w-xl mx-auto">
+      <Input
+        type="email"
+        placeholder="you@example.com"
+        value={email}
+        onChange={(e) => { onEmailChange(e.target.value); setError(""); }}
+        className="w-full sm:max-w-[320px]"
+        autoComplete="email"
+      />
+      <Button type="submit" variant="primary" disabled={loading}>
+        {loading ? "Joining…" : "Join the waitlist →"}
+      </Button>
+    </form>
+  );
+  return (
+    <section className="px-4 py-24 sm:px-6 sm:py-32 text-center relative">
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(99,102,241,0.06)_0%,transparent_70%)] pointer-events-none" />
+      <div className="relative">
+        <h2 className="text-heading-section mb-4">Build your first app in minutes</h2>
+        <p className="text-[var(--text-secondary)] text-base mb-9">Join the waitlist. Top referrers get early access + free Pro.</p>
+        {glassMode ? (
+          <div className="waitlist-form-card mx-auto max-w-xl rounded-2xl p-6">
+            {formContent}
+          </div>
+        ) : (
+          formContent
+        )}
+        <p className="text-xs text-[var(--text-tertiary)] mt-2">Optional: add your name after joining to move up the list.</p>
+        {error && <p className="mt-2 text-sm text-[var(--semantic-error)]">{error}</p>}
+      </div>
+    </section>
+  );
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function WaitlistPage() {
   const [email, setEmail] = useState("");
@@ -250,12 +673,28 @@ export default function WaitlistPage() {
   const [error, setError] = useState("");
   const [mounted, setMounted] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [glassMode, setGlassMode] = useState(false);
 
   const [status, setStatus] = useState<WaitlistStatus | null>(null);
   const [top10, setTop10] = useState<LeaderboardEntry[]>([]);
   const [userRank, setUserRank] = useState<LeaderboardEntry | null>(null);
   const [hasReturnedToTab, setHasReturnedToTab] = useState(false);
   const wasHiddenRef = useRef(false);
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Start at top when page loads or when switching to post-signup view (avoids scroll restoration putting you mid-page)
+  useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [joined]);
+
+  // Disable browser scroll restoration so we always start at top when visiting /waitlist
+  useEffect(() => {
+    const prev = history.scrollRestoration;
+    history.scrollRestoration = "manual";
+    return () => {
+      history.scrollRestoration = prev;
+    };
+  }, []);
 
   // Show "I did it" only after user has left the tab and come back (e.g. opened Share link)
   useEffect(() => {
@@ -422,39 +861,158 @@ export default function WaitlistPage() {
   // Variant B: leaderboard above the fold, referral first in task list
   const abVariant = mounted ? (getCookie("ab_variant") ?? "a") : "a";
 
-  return (
-    <div className="flex h-screen flex-col bg-[var(--background-primary)]">
-      <Nav />
-      <main className="landing-scroll-container flex-1 min-h-0 overflow-y-auto overflow-x-hidden snap-y snap-mandatory">
-        {/* Page 1: hero + join fit in one viewport; scroll snaps to this or to actions below */}
-        <div className="flex min-h-[calc(100dvh-4rem)] flex-col snap-start">
-          {/* Hero — compact so sign-up card sits higher */}
-          <section className="landing-section relative flex flex-shrink-0 flex-col justify-center overflow-hidden px-4 pt-[calc(4rem-3vh)] pb-4 sm:px-6 sm:pt-[calc(5rem-3vh)] sm:pb-6">
-            <div
-              className="absolute inset-0 opacity-30"
-              style={{
-                background: "radial-gradient(ellipse 80% 50% at 50% -20%, var(--button-primary-bg), transparent)",
-              }}
-            />
-            <div className="relative mx-auto max-w-2xl text-center">
-              <h1 className="text-heading-hero mb-4 animate-fade-in">Get earlier access</h1>
-              <p
-                className="text-body-muted animate-fade-in text-lg"
-                style={{ animationDelay: "100ms" }}
-              >
-                Join the waitlist and move up by sharing, inviting friends, and following along. The more you do, the
-                sooner you get in.
-              </p>
-            </div>
-          </section>
+  const countdown = useLaunchCountdown();
 
-          {/* Join form / confirmation */}
-          <section id="join" className="landing-section -mt-[3vh] flex flex-1 flex-col justify-center px-4 pt-2 pb-4 sm:px-6 sm:pt-4 sm:pb-6">
-            <div className="mx-auto w-full max-w-xl">
-            {joined && status ? (
+  return (
+    <div className={`flex h-screen flex-col bg-[var(--background-primary)] ${jetbrainsMono.variable} ${glassMode ? "waitlist-theme-glass" : ""}`}>
+      <WaitlistMinimalNav
+        glassMode={glassMode}
+        onToggleGlass={() => setGlassMode((g) => !g)}
+        showGlassToggle={!joined}
+      />
+      <main ref={mainRef} className="waitlist-scroll-container flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        {/* Pre-signup: hero + form + scroll hint, then showcase, how it works, why, bottom CTA */}
+        {!joined ? (
+          <>
+            {/* Hero: countdown, headline, subheading, form, scroll hint */}
+            <section className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-4 pt-16 pb-12 sm:px-6 sm:pt-20">
+              <div
+                className="absolute inset-0 opacity-30 pointer-events-none"
+                style={{
+                  background: "radial-gradient(ellipse 80% 50% at 50% -20%, var(--link-default), transparent)",
+                }}
+              />
+              <div className="relative mx-auto max-w-2xl text-center">
+                {/* Countdown pill */}
+                <div className="waitlist-countdown-badge mb-9 inline-flex items-center gap-4 rounded-full border border-[var(--border-default)] bg-[var(--link-default)]/10 px-6 py-2.5">
+                  {countdown.live ? (
+                    <span className="text-sm font-semibold text-[var(--link-default)]">We&apos;re live!</span>
+                  ) : (
+                    <>
+                      <span className="text-xs font-semibold uppercase tracking-wider text-[var(--link-default)] whitespace-nowrap">
+                        Launching in
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex flex-col items-center min-w-[2.5rem]">
+                          <span className={`text-lg font-medium tabular-nums text-[var(--text-primary)] ${jetbrainsMono.className}`}>
+                            {String(countdown.days).padStart(2, "0")}
+                          </span>
+                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] mt-0.5">days</span>
+                        </div>
+                        <span className={`text-base text-[var(--text-tertiary)] self-start ${jetbrainsMono.className}`}>:</span>
+                        <div className="flex flex-col items-center min-w-[2.5rem]">
+                          <span className={`text-lg font-medium tabular-nums text-[var(--text-primary)] ${jetbrainsMono.className}`}>
+                            {String(countdown.hours).padStart(2, "0")}
+                          </span>
+                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] mt-0.5">hrs</span>
+                        </div>
+                        <span className={`text-base text-[var(--text-tertiary)] self-start ${jetbrainsMono.className}`}>:</span>
+                        <div className="flex flex-col items-center min-w-[2.5rem]">
+                          <span className={`text-lg font-medium tabular-nums text-[var(--text-primary)] ${jetbrainsMono.className}`}>
+                            {String(countdown.mins).padStart(2, "0")}
+                          </span>
+                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] mt-0.5">min</span>
+                        </div>
+                        <span className={`text-base text-[var(--text-tertiary)] self-start ${jetbrainsMono.className}`}>:</span>
+                        <div className="flex flex-col items-center min-w-[2.5rem]">
+                          <span className={`text-lg font-medium tabular-nums text-[var(--text-primary)] ${jetbrainsMono.className}`}>
+                            {String(countdown.secs).padStart(2, "0")}
+                          </span>
+                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] mt-0.5">sec</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <h1 className="text-heading-hero mb-6 animate-fade-in leading-tight">
+                  Describe an app.
+                  <br />
+                  <span className="text-[var(--link-default)]">Run it on your phone.</span>
+                </h1>
+                <p className="text-body-muted text-lg max-w-[520px] mx-auto animate-fade-in mb-10">
+                  Turn a text prompt into a real, native iOS app — running on your phone in minutes.
+                </p>
+                {/* Join form */}
+                <div id="join" className="scroll-mt-24">
+                  <Card className="waitlist-form-card animate-fade-in mx-auto max-w-xl p-6 sm:p-8 text-left">
+                    <h2 className="mb-6 text-center text-heading-card">Join the waitlist</h2>
+                    <p className="mb-6 text-center text-sm text-body-muted">
+                      Enter your email to reserve your spot. Complete actions below to move up.
+                    </p>
+                    <form onSubmit={handleJoin} className="space-y-4">
+                      <div>
+                        <label htmlFor="waitlist-email" className="mb-1.5 block pl-3 text-sm font-medium text-body-muted">
+                          Email
+                        </label>
+                        <Input
+                          id="waitlist-email"
+                          type="email"
+                          placeholder="you@example.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="w-full"
+                          autoComplete="email"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="waitlist-name" className="mb-1.5 block pl-3 text-sm font-medium text-body-muted">
+                          Name <span className="text-[var(--text-tertiary)]">(optional)</span>
+                        </label>
+                        <Input
+                          id="waitlist-name"
+                          type="text"
+                          placeholder="Your name"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          className="w-full"
+                          autoComplete="name"
+                        />
+                      </div>
+                      {error && <p className="text-sm text-[var(--semantic-error)]">{error}</p>}
+                      <div className="flex justify-center pt-4 pb-2">
+                        <Button type="submit" variant="primary" disabled={loading} className="w-full sm:w-auto">
+                          {loading ? "Joining…" : "Join the waitlist"}
+                        </Button>
+                      </div>
+                    </form>
+                  </Card>
+                </div>
+                {/* Scroll hint */}
+                <div className="mt-12 flex flex-col items-center gap-2">
+                  <span className="text-xs font-medium uppercase tracking-widest text-[var(--text-tertiary)]">
+                    See what you can build
+                  </span>
+                  <div
+                    className="h-6 w-6 border-r-2 border-b-2 border-[var(--text-tertiary)] rotate-45 animate-bounce"
+                    style={{ animationDuration: "2s" }}
+                    aria-hidden
+                  />
+                </div>
+              </div>
+            </section>
+
+            <WaitlistShowcase />
+            <WaitlistHowItWorks />
+            <WaitlistWhy />
+            <WaitlistBottomCta glassMode={glassMode} email={email} name={name} error={error} loading={loading} onEmailChange={setEmail} onNameChange={setName} onSubmit={handleJoin} setError={setError} />
+          </>
+        ) : (
+          /* Post-signup: existing flow — one viewport with card + actions below */
+          <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
+            <section className="landing-section relative flex flex-shrink-0 flex-col justify-center overflow-hidden px-4 pt-[calc(4rem-3vh)] pb-4 sm:px-6 sm:pt-[calc(5rem-3vh)] sm:pb-6">
+              <div className="relative mx-auto max-w-2xl text-center">
+                <h1 className="text-heading-hero mb-4 animate-fade-in">Get earlier access</h1>
+                <p className="text-body-muted animate-fade-in text-lg">
+                  Join the waitlist and move up by sharing, inviting friends, and following along. The more you do, the sooner you get in.
+                </p>
+              </div>
+            </section>
+            <section id="join" className="landing-section -mt-[3vh] flex flex-1 flex-col justify-center px-4 pt-2 pb-4 sm:px-6 sm:pt-4 sm:pb-6">
+              <div className="mx-auto w-full max-w-xl">
+            {status ? (
               <Card className="animate-fade-in py-10 text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--semantic-success)]/15">
-                  <Check className="h-7 w-7 text-[var(--semantic-success)]" aria-hidden />
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--link-default)]/15">
+                  <Check className="h-7 w-7 text-[var(--link-default)]" aria-hidden />
                 </div>
                 <h2 className="text-heading-card mb-1">You&apos;re on the list</h2>
                 <p className="text-body-muted text-sm">
@@ -554,14 +1112,15 @@ export default function WaitlistPage() {
           </div>
         </section>
         </div>
+        )}
 
         {/* Variant B: leaderboard above actions (outside page 1 so page 1 stays one screen) */}
         {abVariant === "b" && top10.length > 0 && (
           <Leaderboard top10={top10} userRank={userRank} />
         )}
 
-        {/* Page 2: actions — scroll snaps here so one scroll brings user to actions */}
-        <section id="move-up" className="landing-section snap-start border-t border-[var(--border-default)] px-4 pt-6 pb-12 sm:px-6 sm:pt-8 sm:pb-16">
+        {/* Page 2: actions */}
+        <section id="move-up" className="landing-section border-t border-[var(--border-default)] px-4 pt-6 pb-12 sm:px-6 sm:pt-8 sm:pb-16">
           <div className="mx-auto max-w-2xl">
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-heading-section">Move up the list</h2>
@@ -748,7 +1307,7 @@ function InviteCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-medium text-[var(--text-primary)]">Invite friends</h3>
-            <span className="rounded-full bg-[var(--button-primary-bg)]/20 px-2 py-0.5 text-xs font-semibold text-[var(--link-default)]">
+            <span className="rounded-full bg-[var(--link-default)]/20 px-2 py-0.5 text-xs font-semibold text-[var(--link-default)]">
               +{ACTION_POINTS.invite} pts / referral
             </span>
           </div>
@@ -773,9 +1332,9 @@ function InviteCard({
         </p>
       )}
       {referralCount > 0 && (
-        <div className="mt-3 flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--semantic-success)]/10 px-3 py-2">
-          <Users className="h-4 w-4 text-[var(--semantic-success)]" />
-          <span className="text-xs font-medium text-[var(--semantic-success)]">
+        <div className="mt-3 flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--link-default)]/10 px-3 py-2">
+          <Users className="h-4 w-4 text-[var(--link-default)]" />
+          <span className="text-xs font-medium text-[var(--link-default)]">
             {referralCount} friend{referralCount !== 1 ? "s" : ""} signed up — {(referralCount * ACTION_POINTS.invite).toLocaleString()} pts earned!
           </span>
         </div>
