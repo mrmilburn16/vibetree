@@ -358,7 +358,7 @@ export function ChatPanel({
     busy
       ? "Stop"
       : blockSendUntilPreflight
-        ? "Complete Run on iPhone checks above to send"
+        ? "Complete Run on iPhone setup in Account Settings to send"
         : !canSend
           ? "Building…"
           : !hasCreditsForMessage
@@ -421,68 +421,28 @@ export function ChatPanel({
         <div className="min-w-0" aria-hidden />
       </div>
 
-      {/* Run on iPhone readiness — inline on page when Pro (Swift) */}
+      {/* Run on iPhone readiness — single-line status */}
       {projectType === "pro" && (
         <div className="border-b border-[var(--border-default)] bg-[var(--background-secondary)]/50 px-4 py-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-medium text-[var(--text-tertiary)]">Run on iPhone</span>
-            <button
-              type="button"
-              onClick={runPreflight}
-              disabled={preflightLoading}
-              className="text-xs text-[var(--link-default)] hover:underline disabled:opacity-50"
-            >
-              {preflightLoading ? "Checking…" : "Re-check"}
-            </button>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs">
-            <span className="flex items-center gap-1">
-              {preflightLoading && !preflightChecks ? (
-                <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-[var(--border-default)] border-t-[var(--button-primary-bg)]" />
-              ) : preflightChecks?.runner.ok ? (
-                <span className="text-green-400">✓</span>
-              ) : (
-                <span className="text-red-400">✗</span>
-              )}
-              <span className="text-[var(--text-secondary)]">Mac runner</span>
+          {preflightLoading && !preflightChecks ? (
+            <span className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--text-tertiary)]" />
+              Checking…
             </span>
-            <span className="flex items-center gap-1">
-              {preflightChecks?.device.ok ? (
-                <span className="text-green-400">✓</span>
-              ) : (
-                <span className="text-red-400">✗</span>
-              )}
-              <span className="text-[var(--text-secondary)]">iPhone</span>
+          ) : proPreflightReady ? (
+            <span className="flex items-center gap-1.5 text-xs text-green-400">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400" />
+              Ready
             </span>
-            <span className="flex items-center gap-1">
-              {preflightChecks?.teamId.ok ? (
-                <span className="text-green-400">✓</span>
-              ) : (
-                <span className="text-red-400">✗</span>
-              )}
-              <span className="text-[var(--text-secondary)]">Team ID</span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-yellow-400" />
+              <span className="text-yellow-400">Setup needed</span>
+              <span className="text-[var(--text-tertiary)]">—</span>
+              <Link href="/settings#iphone" className="text-[var(--link-default)] hover:underline">
+                Account Settings
+              </Link>
             </span>
-          </div>
-          {blockSendUntilPreflight && preflightChecks != null && !preflightLoading && (
-            <p className="mt-2 text-xs text-[var(--semantic-warning)]">
-              Complete the checks above (Mac runner, iPhone, Team ID) to send a message.
-            </p>
-          )}
-          {preflightChecks && !preflightLoading && (!preflightChecks.runner.ok || !preflightChecks.device.ok || !preflightChecks.teamId.ok) && (
-            <div className="mt-2 rounded border border-[var(--border-default)] bg-[var(--background-primary)] px-3 py-2 text-xs">
-              <p className="mb-1.5 font-medium text-[var(--text-primary)]">Missing — fix to run on device:</p>
-              <ul className="list-inside list-disc space-y-0.5 text-[var(--text-secondary)]">
-                {!preflightChecks.runner.ok && (
-                  <li>Mac runner: run <code className="rounded bg-[var(--background-tertiary)] px-1">npm run mac-runner</code> in a terminal</li>
-                )}
-                {!preflightChecks.device.ok && (
-                  <li>iPhone: connect via USB or same WiFi</li>
-                )}
-                {!preflightChecks.teamId.ok && (
-                  <li>Team ID: set in Run on device or in .env (<code className="rounded bg-[var(--background-tertiary)] px-1">DEFAULT_DEVELOPMENT_TEAM</code>)</li>
-                )}
-              </ul>
-            </div>
           )}
         </div>
       )}
@@ -531,7 +491,7 @@ export function ChatPanel({
               id="chat-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={blockSendUntilPreflight ? "Complete the Run on iPhone checks above to type and send…" : placeholderText}
+              placeholder={blockSendUntilPreflight ? "Complete Run on iPhone setup in Account Settings to send…" : placeholderText}
               autoFocus={messages.length === 0 && !blockSendUntilPreflight}
               disabled={blockSendUntilPreflight}
               className="!border-0 !min-h-[38px] max-h-[112px] w-full resize-none bg-transparent pt-2 pb-3 pr-2 text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none disabled:cursor-not-allowed disabled:opacity-90"

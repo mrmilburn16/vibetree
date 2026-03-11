@@ -121,7 +121,7 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
   const currentBalance = balance ?? 0;
   const value: CreditsContextValue = {
     balance: currentBalance,
-    isLow: currentBalance < LOW_CREDIT_THRESHOLD,
+    isLow: balance !== null && currentBalance < LOW_CREDIT_THRESHOLD,
     hasCreditsForMessage: currentBalance >= 1,
     deduct,
     add,

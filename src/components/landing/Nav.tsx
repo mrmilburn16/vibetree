@@ -4,8 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
-import { ThemeSwitcher } from "@/components/ThemeSwitcher";
-
 type SessionUser = { uid: string; email: string | null } | null;
 
 export function Nav() {
@@ -71,7 +69,6 @@ export function Nav() {
           </span>
         </div>
         <div className="flex items-center gap-4 sm:gap-6">
-          <ThemeSwitcher />
           <Link
             href="/#features"
             className="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--link-default)]"

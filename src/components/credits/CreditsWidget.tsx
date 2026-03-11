@@ -40,7 +40,7 @@ export function CreditsWidget() {
   }, [open]);
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative inline-flex items-center">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -48,7 +48,7 @@ export function CreditsWidget() {
         aria-haspopup="true"
         aria-label="Credits balance and options"
         className={`
-          flex items-center gap-2 rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium
+          flex h-8 items-center gap-2 rounded-[var(--radius-md)] border px-3 text-sm font-medium
           cursor-pointer transition-colors
           ${isLow ? "border-[var(--link-default)]/50 bg-[color-mix(in_srgb,var(--button-primary-bg)_12%,var(--background-secondary))] text-[var(--link-default)]" : "border-[var(--border-default)] bg-[var(--background-secondary)] text-[var(--text-primary)] hover:bg-[var(--background-tertiary)]"}
         `}

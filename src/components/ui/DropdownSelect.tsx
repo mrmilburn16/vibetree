@@ -13,6 +13,7 @@ export interface DropdownSelectProps {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  triggerClassName?: string;
   "aria-label"?: string;
 }
 
@@ -38,6 +39,7 @@ export function DropdownSelect({
   value,
   onChange,
   className = "",
+  triggerClassName = "",
   "aria-label": ariaLabel,
 }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
@@ -157,6 +159,7 @@ export function DropdownSelect({
           hover:border-[var(--border-subtle)]
           focus:outline-none focus:border-[var(--button-primary-bg)] focus:ring-2 focus:ring-[var(--button-primary-bg)]/30
           ${open ? "border-[var(--button-primary-bg)] ring-2 ring-[var(--button-primary-bg)]/30" : "border-[var(--input-border)]"}
+          ${triggerClassName}
         `}
         >
           {selectedOption.icon && (

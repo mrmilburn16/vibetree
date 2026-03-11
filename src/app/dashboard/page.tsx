@@ -3,16 +3,14 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Send, Sparkles, ArrowRight, Copy, Trash2, Zap } from "lucide-react";
+import { Send, ArrowRight, Copy, Trash2, Zap, Plus } from "lucide-react";
 import { Button, BetaBadge, Textarea, DropdownSelect } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
-import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { getProjects, saveProjects, deleteProject, type Project } from "@/lib/projects";
 import { getFirebaseAuthAsync } from "@/lib/firebaseClient";
 import { CreditsWidget } from "@/components/credits/CreditsWidget";
 import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
-import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
 import { LLM_OPTIONS, DEFAULT_LLM } from "@/lib/llm-options";
 import { useRefetchOnVisible } from "@/hooks/useRefetchOnVisible";
 
@@ -54,12 +52,6 @@ const LLM_OPTIONS_WITH_ICONS = LLM_OPTIONS.map((opt) => ({
         : <AnthropicLogo />,
 }));
 
-const SUGGESTION_CHIPS = [
-  "A fitness tracker with activity rings",
-  "A recipe app with step-by-step cooking",
-  "A habit tracker with streaks and stats",
-  "A journaling app with mood tracking",
-];
 
 function timeAgo(ts: number): string {
   const diff = Date.now() - ts;
@@ -71,6 +63,196 @@ function timeAgo(ts: number): string {
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d ago`;
   return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// ── Animated placeholder ─────────────────────────────────────────────────────
+const PLACEHOLDER_PHRASES = [
+  "e.g. A pizza delivery tracker with Live Activities on the Lock Screen",
+  "e.g. A workout log that reads from HealthKit and shows weekly charts",
+  "e.g. A plant care app with photo identification and watering reminders",
+  "e.g. A meditation timer with ambient sounds and a sleep countdown",
+  "e.g. A dog walker app that tracks routes with GPS on a live map",
+];
+const MORPH_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&?";
+type PlaceholderStyle = "typewriter" | "crossfade" | "slide-up" | "blur" | "morph";
+
+function AnimatedPlaceholder({ style, visible }: { style: PlaceholderStyle; visible: boolean }) {
+  const [text, setText] = useState(PLACEHOLDER_PHRASES[0]);
+  const [phase, setPhase] = useState<"show" | "exit" | "enter">("show");
+  const idxRef = useRef(0);
+  const t1 = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const t2 = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const iv = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clear = useCallback(() => {
+    if (t1.current) { clearTimeout(t1.current); t1.current = null; }
+    if (t2.current) { clearTimeout(t2.current); t2.current = null; }
+    if (iv.current) { clearInterval(iv.current); iv.current = null; }
+  }, []);
+
+  useEffect(() => {
+    clear();
+    idxRef.current = 0;
+    setText(PLACEHOLDER_PHRASES[0]);
+    setPhase("show");
+  }, [style, clear]);
+
+  // Typewriter
+  useEffect(() => {
+    if (style !== "typewriter") return;
+    const state = { phraseIdx: 0, charIdx: PLACEHOLDER_PHRASES[0].length, deleting: true };
+    function tick() {
+      const phrase = PLACEHOLDER_PHRASES[state.phraseIdx];
+      if (state.deleting) {
+        state.charIdx = Math.max(0, state.charIdx - 1);
+        setText(phrase.slice(0, state.charIdx));
+        if (state.charIdx === 0) {
+          state.deleting = false;
+          state.phraseIdx = (state.phraseIdx + 1) % PLACEHOLDER_PHRASES.length;
+          t1.current = setTimeout(tick, 347);
+        } else {
+          t1.current = setTimeout(tick, 29);
+        }
+      } else {
+        const p = PLACEHOLDER_PHRASES[state.phraseIdx];
+        state.charIdx = Math.min(p.length, state.charIdx + 1);
+        setText(p.slice(0, state.charIdx));
+        if (state.charIdx === p.length) {
+          state.deleting = true;
+          t1.current = setTimeout(tick, 2310);
+        } else {
+          t1.current = setTimeout(tick, 52);
+        }
+      }
+    }
+    t1.current = setTimeout(tick, 2310);
+    return clear;
+  }, [style, clear]);
+
+  // Crossfade
+  useEffect(() => {
+    if (style !== "crossfade") return;
+    function cycle() {
+      setPhase("exit");
+      t1.current = setTimeout(() => {
+        idxRef.current = (idxRef.current + 1) % PLACEHOLDER_PHRASES.length;
+        setText(PLACEHOLDER_PHRASES[idxRef.current]);
+        setPhase("enter");
+        t2.current = setTimeout(() => { setPhase("show"); t1.current = setTimeout(cycle, 4000); }, 50);
+      }, 500);
+    }
+    t1.current = setTimeout(cycle, 4000);
+    return clear;
+  }, [style, clear]);
+
+  // Slide up
+  useEffect(() => {
+    if (style !== "slide-up") return;
+    function cycle() {
+      setPhase("exit");
+      t1.current = setTimeout(() => {
+        idxRef.current = (idxRef.current + 1) % PLACEHOLDER_PHRASES.length;
+        setText(PLACEHOLDER_PHRASES[idxRef.current]);
+        setPhase("enter");
+        t2.current = setTimeout(() => { setPhase("show"); t1.current = setTimeout(cycle, 4000); }, 50);
+      }, 450);
+    }
+    t1.current = setTimeout(cycle, 4000);
+    return clear;
+  }, [style, clear]);
+
+  // Blur swap
+  useEffect(() => {
+    if (style !== "blur") return;
+    function cycle() {
+      setPhase("exit");
+      t1.current = setTimeout(() => {
+        idxRef.current = (idxRef.current + 1) % PLACEHOLDER_PHRASES.length;
+        setText(PLACEHOLDER_PHRASES[idxRef.current]);
+        setPhase("enter");
+        t2.current = setTimeout(() => { setPhase("show"); t1.current = setTimeout(cycle, 4000); }, 50);
+      }, 450);
+    }
+    t1.current = setTimeout(cycle, 4000);
+    return clear;
+  }, [style, clear]);
+
+  // Morph / scramble
+  useEffect(() => {
+    if (style !== "morph") return;
+    let currentText = PLACEHOLDER_PHRASES[0];
+    function cycle() {
+      const to = PLACEHOLDER_PHRASES[(idxRef.current + 1) % PLACEHOLDER_PHRASES.length];
+      idxRef.current = (idxRef.current + 1) % PLACEHOLDER_PHRASES.length;
+      const STEPS = 14;
+      let step = 0;
+      iv.current = setInterval(() => {
+        step++;
+        if (step >= STEPS) {
+          currentText = to;
+          setText(to);
+          if (iv.current) { clearInterval(iv.current); iv.current = null; }
+          t1.current = setTimeout(cycle, 4000);
+          return;
+        }
+        const progress = step / STEPS;
+        setText(
+          Array.from({ length: Math.max(currentText.length, to.length) }, (_, i) => {
+            const c = to[i];
+            if (!c) return "";
+            if (c === " ") return " ";
+            return Math.random() < progress ? c : MORPH_CHARS[Math.floor(Math.random() * MORPH_CHARS.length)];
+          }).join("")
+        );
+      }, 35);
+    }
+    t1.current = setTimeout(cycle, 4000);
+    return clear;
+  }, [style, clear]);
+
+  const dynStyle = () => {
+    if (!visible) return { opacity: 0, transition: "opacity 0.15s ease" } as const;
+    switch (style) {
+      case "typewriter": return { opacity: 1 };
+      case "crossfade":
+        if (phase === "exit") return { opacity: 0, transition: "opacity 0.5s ease" };
+        if (phase === "enter") return { opacity: 0, transition: "none" };
+        return { opacity: 1, transition: "opacity 0.5s ease" };
+      case "slide-up":
+        if (phase === "exit") return { opacity: 0, transform: "translateY(-12px)", transition: "opacity 0.4s ease, transform 0.4s ease" };
+        if (phase === "enter") return { opacity: 0, transform: "translateY(12px)", transition: "none" };
+        return { opacity: 1, transform: "translateY(0)", transition: "opacity 0.4s ease, transform 0.4s ease" };
+      case "blur":
+        if (phase === "exit") return { opacity: 0, filter: "blur(6px)", transition: "opacity 0.4s ease, filter 0.4s ease" };
+        if (phase === "enter") return { opacity: 0, filter: "blur(6px)", transition: "none" };
+        return { opacity: 1, filter: "blur(0)", transition: "opacity 0.4s ease, filter 0.4s ease" };
+      case "morph": return { opacity: 1 };
+    }
+  };
+
+  return (
+    <>
+      <style>{`@keyframes tw-cursor-blink{0%,49%{opacity:1}50%,100%{opacity:0}}`}</style>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-nowrap pr-2 text-base text-[var(--input-placeholder)]"
+        style={dynStyle()}
+      >
+        {text}
+        {style === "typewriter" && visible && (
+          <span
+            className="ml-px inline-block w-[1.5px]"
+            style={{
+              height: "1em",
+              verticalAlign: "text-bottom",
+              backgroundColor: "var(--input-placeholder)",
+              animation: "tw-cursor-blink 0.85s step-end infinite",
+            }}
+          />
+        )}
+      </div>
+    </>
+  );
 }
 
 export default function DashboardPage() {
@@ -88,8 +270,10 @@ export default function DashboardPage() {
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectsFetchError, setProjectsFetchError] = useState<"session_expired" | "network" | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [portalLoading, setPortalLoading] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [attachedImage, setAttachedImage] = useState<File | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     console.log("[dashboard:trace] 2) Mount effect running, window=", typeof window);
@@ -381,36 +565,7 @@ export default function DashboardPage() {
             <BetaBadge />
           </div>
           <div className="flex items-center gap-3">
-            <ThemeSwitcher />
             <CreditsWidget />
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={portalLoading}
-              onClick={async () => {
-                setPortalLoading(true);
-                try {
-                  const res = await fetch("/api/stripe/create-portal-session", {
-                    method: "POST",
-                    credentials: "include",
-                  });
-                  const data = await res.json().catch(() => ({}));
-                  if (res.ok && typeof data.url === "string") {
-                    window.location.href = data.url;
-                    return;
-                  }
-                  if (res.status === 400) {
-                    router.push("/pricing");
-                    return;
-                  }
-                  setCreateError(typeof data.error === "string" ? data.error : "Could not open billing portal.");
-                } finally {
-                  setPortalLoading(false);
-                }
-              }}
-            >
-              {portalLoading ? "Opening…" : "Manage subscription"}
-            </Button>
             <Link href="/settings">
               <Button variant="ghost" size="sm">Settings</Button>
             </Link>
@@ -446,157 +601,103 @@ export default function DashboardPage() {
             Describe your app — AI writes the code, you ship to your iPhone.
           </p>
 
-          {/* Mode and model selectors */}
-          <div className="mt-8 flex w-full max-w-xl flex-col gap-2 sm:flex-row sm:items-center">
-            <DropdownSelect
-              options={[...PROJECT_TYPE_OPTIONS]}
-              value={projectType}
-              onChange={handleProjectTypeChange}
-              aria-label="Build mode: Standard (Expo) or Pro (Swift)"
-              className="w-full sm:w-auto"
-            />
-            <DropdownSelect
-              options={LLM_OPTIONS_WITH_ICONS}
-              value={llm}
-              onChange={handleLlmChange}
-              aria-label="Select AI model for app design"
-              className="w-full sm:w-auto"
-            />
-          </div>
-
-          {/* Pro (Swift): Run on iPhone readiness — check before spending credits */}
-          {projectType === "pro" && (
-            <div className="mt-4 w-full max-w-xl rounded-xl border border-[var(--border-default)] bg-[var(--background-secondary)] p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
-                  Run on iPhone readiness
-                </span>
+          {/* Prompt container — pill + dropdowns below */}
+          <div className="mt-8 w-full">
+            {/* Pill */}
+            <div className="relative w-full rounded-[9999px] border-2 border-[var(--border-default)] bg-[var(--background-secondary)] transition-all duration-300 focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/25">
+              <div className="flex h-[46px] items-center gap-2 px-3">
+                {/* LEFT: plus — triggers file picker */}
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => { setAttachedImage(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                />
                 <button
                   type="button"
-                  onClick={runPreflight}
-                  disabled={preflightLoading}
-                  className="text-xs text-[var(--link-default)] hover:underline disabled:opacity-50"
+                  onClick={() => imageInputRef.current?.click()}
+                  aria-label={attachedImage ? `Image attached: ${attachedImage.name}` : "Attach an image"}
+                  title={attachedImage ? attachedImage.name : "Attach an image"}
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors ${
+                    attachedImage ? "text-[var(--button-primary-bg)]" : "text-[var(--text-tertiary)] hover:text-white"
+                  }`}
                 >
-                  {preflightLoading ? "Checking…" : "Re-check"}
+                  <Plus className="h-[18px] w-[18px]" style={{ display: "block" }} aria-hidden />
+                </button>
+
+                {/* CENTER: textarea */}
+                <div className="relative flex min-w-0 flex-1 items-center">
+                  {!prompt && <AnimatedPlaceholder style="typewriter" visible={!inputFocused} />}
+                  <Textarea
+                    ref={textareaRef}
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder=""
+                    onFocus={() => setInputFocused(true)}
+                    onBlur={() => setInputFocused(false)}
+                    className="!border-0 !min-h-0 max-h-[120px] w-full resize-none bg-transparent text-[var(--input-text)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none"
+                    style={{ resize: "none", paddingTop: 4, paddingBottom: 4, paddingLeft: 0, paddingRight: 0, fontSize: 16, lineHeight: "22px", minHeight: 30, display: "block", overflow: "visible" }}
+                    rows={1}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmitPrompt();
+                      }
+                    }}
+                  />
+                </div>
+
+                {/* RIGHT: circular send button — using plain <button> to avoid Button's default py-2.5 */}
+                <button
+                  type="button"
+                  disabled={!prompt.trim() || blockStartUntilPreflight}
+                  onClick={() => handleSubmitPrompt()}
+                  className="flex h-[34px] w-[34px] shrink-0 items-center justify-center bg-[var(--button-primary-bg)] text-[var(--button-primary-text)] transition-all duration-[var(--transition-normal)] ease-out hover:bg-[var(--button-primary-hover)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:hover:scale-100"
+                  style={{ borderRadius: "9999px", padding: 0 }}
+                  aria-label={blockStartUntilPreflight ? "Fix iPhone setup in Settings to start building" : "Start building"}
+                  title={blockStartUntilPreflight ? "Fix iPhone setup in Settings before building" : undefined}
+                >
+                  <Send className="h-[18px] w-[18px]" style={{ display: "block", transform: "translate(-0.5px, -0.5px)" }} aria-hidden />
                 </button>
               </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                    {preflightLoading && !preflightChecks ? (
-                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-[var(--border-default)] border-t-[var(--button-primary-bg)]" />
-                    ) : preflightChecks?.runner.ok ? (
-                      <span className="text-green-400">✓</span>
-                    ) : (
-                      <span className="text-red-400">✗</span>
-                    )}
-                  </span>
-                  <span className="text-[var(--text-primary)]">Mac runner</span>
-                  {preflightChecks && (
-                    <span className="text-xs text-[var(--text-tertiary)]">
-                      {preflightChecks.runner.ok ? "Connected" : "Start npm run mac-runner"}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                    {preflightLoading && !preflightChecks ? null : preflightChecks?.device.ok ? (
-                      <span className="text-green-400">✓</span>
-                    ) : (
-                      <span className="text-red-400">✗</span>
-                    )}
-                  </span>
-                  <span className="text-[var(--text-primary)]">iPhone connected</span>
-                  {preflightChecks && (
-                    <span className="text-xs text-[var(--text-tertiary)]">
-                      {preflightChecks.device.ok ? (preflightChecks.device.name ?? "Detected") : "USB or same WiFi"}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                    {preflightLoading && !preflightChecks ? null : preflightChecks?.teamId.ok ? (
-                      <span className="text-green-400">✓</span>
-                    ) : (
-                      <span className="text-red-400">✗</span>
-                    )}
-                  </span>
-                  <span className="text-[var(--text-primary)]">Team ID</span>
-                  {preflightChecks && (
-                    <span className="text-xs text-[var(--text-tertiary)]">
-                      {preflightChecks.teamId.ok ? preflightChecks.teamId.value : "Set in editor or .env"}
-                    </span>
-                  )}
-                </div>
-              </div>
-              {preflightChecks && !proPreflightReady && (
-                <p className="mt-2 text-xs text-[var(--semantic-warning)]">
-                  Fix these before building so you can run on device and avoid wasting credits.
-                </p>
-              )}
             </div>
-          )}
 
-          {/* Prompt input */}
-          <div className="mt-4 w-full max-w-xl">
-            <div
-              className="flex items-end rounded-2xl border-2 border-[var(--border-default)] bg-[var(--background-secondary)] py-2 pr-2 pl-4 transition-colors duration-150 focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/25"
-            >
-              <Textarea
-                ref={textareaRef}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. A fitness tracker with activity rings and weekly stats"
-                autoFocus
-                className="!border-0 !min-h-[42px] max-h-[120px] w-full resize-none bg-transparent pt-2 pb-2 pr-2 text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none"
-                style={{ resize: "none" }}
-                rows={1}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmitPrompt();
-                  }
-                }}
+            {/* Dropdowns below pill */}
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <DropdownSelect
+                options={[...PROJECT_TYPE_OPTIONS]}
+                value={projectType}
+                onChange={handleProjectTypeChange}
+                aria-label="Build mode: Standard (Expo) or Pro (Swift)"
+                triggerClassName="!rounded-[9999px]"
               />
-              <Button
-                variant="primary"
-                disabled={!prompt.trim() || blockStartUntilPreflight}
-                onClick={() => handleSubmitPrompt()}
-                className="!flex h-10 w-10 shrink-0 items-center justify-center rounded-xl p-0"
-                aria-label={blockStartUntilPreflight ? "Complete Run on iPhone readiness above to start" : "Start building"}
-                title={blockStartUntilPreflight ? "Complete Run on iPhone readiness above to start building" : undefined}
-              >
-                <Send className="h-5 w-5" aria-hidden />
-              </Button>
+              <DropdownSelect
+                options={LLM_OPTIONS_WITH_ICONS}
+                value={llm}
+                onChange={handleLlmChange}
+                aria-label="Select AI model for app design"
+                triggerClassName="!rounded-[9999px]"
+              />
             </div>
-            {blockStartUntilPreflight && (
-              <p className="mt-2 text-xs text-[var(--semantic-warning)]">
-                Complete Run on iPhone readiness above to start building.
-              </p>
+
+            {/* Attached image indicator */}
+            {attachedImage && (
+              <div className="mt-1.5 flex items-center justify-center gap-1 text-xs text-[var(--text-tertiary)]">
+                <span className="max-w-[200px] truncate">{attachedImage.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setAttachedImage(null)}
+                  aria-label="Remove image"
+                  className="text-[var(--text-tertiary)] hover:text-[var(--semantic-error)]"
+                >
+                  ×
+                </button>
+              </div>
             )}
 
-            {/* Suggestion chips */}
-            <div className="mt-3 flex flex-wrap justify-center gap-2">
-              {SUGGESTION_CHIPS.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => handleSubmitPrompt(chip)}
-                  className="rounded-full border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--button-primary-bg)]/40 hover:bg-[var(--button-primary-bg)]/10 hover:text-[var(--link-default)]"
-                >
-                  {chip}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setPrompt(getRandomAppIdeaPrompt())}
-                className="inline-flex items-center gap-1 rounded-full border border-[var(--border-default)] bg-[var(--background-secondary)] px-3 py-1.5 text-xs text-[var(--text-tertiary)] transition-colors hover:border-[var(--button-primary-bg)]/40 hover:text-[var(--link-default)]"
-              >
-                <Sparkles className="h-3 w-3" aria-hidden />
-                Surprise me
-              </button>
-            </div>
           </div>
+
         </div>
 
         {/* Session expired — clear cookie and redirect so middleware does not loop */}
