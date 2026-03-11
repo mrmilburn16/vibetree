@@ -12,7 +12,7 @@ export async function GET() {
   const all = getApiMarketplaceEntries();
   const entries = all
     .filter((e) => e.enabled)
-    .map(({ id, proxySlug, name, category, userPricePerCallUsd, costPerCallUsd, note }) => ({
+    .map(({ id, proxySlug, name, category, userPricePerCallUsd, costPerCallUsd, note, dailyFreeLimit }) => ({
       id,
       proxySlug,
       name,
@@ -20,6 +20,7 @@ export async function GET() {
       userPricePerCallUsd,
       costPerCallUsd,
       note,
+      ...(dailyFreeLimit != null && { dailyFreeLimit }),
     }));
   return NextResponse.json({ entries });
 }

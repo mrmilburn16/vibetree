@@ -19,6 +19,8 @@ export type ApiMarketplaceEntry = {
   enabled: boolean;
   /** Optional note for display (e.g. "No per-call cost") */
   note?: string;
+  /** Daily free tier limit (calls/day). Only for free APIs; paid APIs are metered by credits. */
+  dailyFreeLimit?: number;
 };
 
 function markupPercent(cost: number | null, userPrice: number | null): number | null {
@@ -37,6 +39,7 @@ let registry: ApiMarketplaceEntry[] = [
     userPricePerCallUsd: 0,
     markupPercent: 0,
     enabled: true,
+    dailyFreeLimit: 25,
   },
   {
     id: "plant-id",

@@ -3,25 +3,34 @@
  * Proxies OpenWeatherMap current weather or forecast.
  * Auth: valid user session (cookie/Bearer) OR X-App-Token header matching VIBETREE_APP_TOKEN.
  * Query params: lat & lon (current location) OR city (city search); type = "current" | "forecast"; debug = true to return raw OpenWeather API response (dev only).
- * Rate limit: 100 calls per user (or per app-token) per calendar day. Returns 429 if exceeded.
+ * Rate limit: per-user daily limit (Firestore) when session present; 100/day in-memory for app-token-only. Returns 429 if exceeded.
  */
 
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createProxyCache } from "@/lib/proxyCache";
+import { getApiMarketplaceEntryBySlug } from "@/lib/apiMarketplace";
+import {
+  getDailyUsage,
+  incrementDailyUsage,
+  getTodayDateKey,
+} from "@/lib/apiUsageFirestore";
 
 const WEATHER_CACHE_TTL_SECONDS = 600; // 10 minutes
 const weatherCache = createProxyCache({ ttlSeconds: WEATHER_CACHE_TTL_SECONDS });
 
 const OPENWEATHER_WEATHER = "https://api.openweathermap.org/data/2.5/weather";
 const OPENWEATHER_FORECAST = "https://api.openweathermap.org/data/2.5/forecast";
-const RATE_LIMIT_MAX = 100;
+/** In-memory limit for app-token-only requests (no userId for Firestore). */
+const RATE_LIMIT_MAX_APP_TOKEN = 100;
+
+const WEATHER_API_ID = "openweathermap";
 
 function normalizeToken(s: string | undefined): string {
   return (s ?? "").replace(/\r\n?|\n/g, "").trim();
 }
 
-// In-memory: key = `${userId}:${YYYY-MM-DD}` -> count for that calendar day
+// In-memory: key = `${rateLimitKey}:${YYYY-MM-DD}` -> count (used only for app-token when no userId)
 const rateLimitMap = new Map<string, number>();
 
 function getDateKey(): string {
@@ -29,20 +38,20 @@ function getDateKey(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
-function getCount(rateLimitKey: string): number {
+function getCountInMemory(rateLimitKey: string): number {
   const key = `${rateLimitKey}:${getDateKey()}`;
   return rateLimitMap.get(key) ?? 0;
 }
 
-function incrementCount(rateLimitKey: string): void {
+function incrementCountInMemory(rateLimitKey: string): void {
   const key = `${rateLimitKey}:${getDateKey()}`;
   rateLimitMap.set(key, (rateLimitMap.get(key) ?? 0) + 1);
 }
 
-/** Resolve auth: session user or app token. Returns { rateLimitKey } or null if unauthorized. */
-async function resolveAuth(request: Request): Promise<{ rateLimitKey: string } | null> {
+/** Resolve auth: session user or app token. Returns { rateLimitKey, userId? } or null if unauthorized. */
+async function resolveAuth(request: Request): Promise<{ rateLimitKey: string; userId?: string } | null> {
   const user = await getSession(request);
-  if (user) return { rateLimitKey: user.uid };
+  if (user) return { rateLimitKey: user.uid, userId: user.uid };
 
   const appToken = process.env.VIBETREE_APP_TOKEN && normalizeToken(process.env.VIBETREE_APP_TOKEN);
   const headerToken = normalizeToken(request.headers.get("x-app-token") ?? request.headers.get("X-App-Token") ?? "");
@@ -83,11 +92,31 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (getCount(auth.rateLimitKey) >= RATE_LIMIT_MAX) {
-    return NextResponse.json(
-      { error: "Rate limit exceeded. Max 100 weather requests per day." },
-      { status: 429 }
-    );
+  const marketplaceEntry = getApiMarketplaceEntryBySlug("weather");
+  const dailyFreeLimit = marketplaceEntry?.dailyFreeLimit;
+  const dateKey = getTodayDateKey();
+
+  if (auth.userId != null && typeof dailyFreeLimit === "number") {
+    const count = await getDailyUsage(auth.userId, dateKey, WEATHER_API_ID);
+    if (count >= dailyFreeLimit) {
+      return NextResponse.json(
+        {
+          error: "daily_limit_reached",
+          limit: dailyFreeLimit,
+          resetsAt: "midnight UTC",
+        },
+        { status: 429 }
+      );
+    }
+    await incrementDailyUsage(auth.userId, dateKey, WEATHER_API_ID);
+  } else {
+    if (getCountInMemory(auth.rateLimitKey) >= RATE_LIMIT_MAX_APP_TOKEN) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Max 100 weather requests per day." },
+        { status: 429 }
+      );
+    }
+    incrementCountInMemory(auth.rateLimitKey);
   }
 
   const apiKey = process.env.OPENWEATHER_API_KEY?.trim();
@@ -120,7 +149,7 @@ export async function GET(request: Request) {
     const cached = weatherCache.get(cacheKey);
     if (cached != null) {
       console.log("[proxy/weather] cache HIT", { key: cacheKey });
-      incrementCount(auth.rateLimitKey);
+      if (!auth.userId) incrementCountInMemory(auth.rateLimitKey);
       return NextResponse.json(cached, {
         headers: { "X-Cache": "HIT" },
       });
@@ -143,7 +172,7 @@ export async function GET(request: Request) {
     const data = await res.json().catch(() => ({}));
 
     if (debug) {
-      incrementCount(auth.rateLimitKey);
+      if (!auth.userId) incrementCountInMemory(auth.rateLimitKey);
       return NextResponse.json(data, { status: res.status });
     }
 
@@ -160,7 +189,7 @@ export async function GET(request: Request) {
       weatherCache.set(cacheKey, data);
       console.log("[proxy/weather] cache MISS → stored", { key: cacheKey });
     }
-    incrementCount(auth.rateLimitKey);
+    if (!auth.userId) incrementCountInMemory(auth.rateLimitKey);
     return NextResponse.json(data, {
       headers: { "X-Cache": "MISS" },
     });
