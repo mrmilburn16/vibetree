@@ -38,15 +38,16 @@
     "NSFaceIDUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 18,
-    "firstAttemptCompile": 11,
-    "compileRate": 61,
+    "totalBuilds": 20,
+    "firstAttemptCompile": 12,
+    "compileRate": 60,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
       "type 'HKWorkoutActivityType' has no case 'strengthTraining', but it does have a case named 'FunctionalStrengthTraining'; if 'strengthTraining' worked before, a recent change to the underlying C enum may have affected how prefixes are stripped from its case names",
       "generic parameter 'Expanded' could not be inferred",
-      "extraneous argument label 'hex:' in call"
+      "extraneous argument label 'hex:' in call",
+      "value of type 'DraftRound' has no member 'typeColor'"
     ],
     "goldenExamples": []
   }

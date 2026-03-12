@@ -23,6 +23,7 @@ actor APIService {
     private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
         let base = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !base.isEmpty, let url = URL(string: base.hasSuffix("/") ? "\(base.dropLast())\(path)" : "\(base)\(path)") else {
+            print("[APIService] ❌ invalidURL — serverURL='\(baseURL)' path='\(path)'")
             throw APIError.invalidURL
         }
         var req = URLRequest(url: url)
@@ -31,6 +32,9 @@ actor APIService {
         let token = await apiToken
         if !token.isEmpty {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            print("[APIService] \(method) \(url.absoluteString) — token=\(token.prefix(12))…")
+        } else {
+            print("[APIService] \(method) \(url.absoluteString) — ⚠️ NO TOKEN (not signed in or Firebase user nil)")
         }
         req.httpBody = body
         req.timeoutInterval = 10
@@ -40,6 +44,8 @@ actor APIService {
             throw APIError.invalidResponse
         }
         guard (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "(binary)"
+            print("[APIService] ❌ HTTP \(http.statusCode) for \(method) \(url.path) — \(body.prefix(300))")
             throw APIError.httpError(http.statusCode, String(data: data, encoding: .utf8))
         }
         return data

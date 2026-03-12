@@ -45,9 +45,9 @@
     "NSMicrophoneUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 1,
+    "totalBuilds": 2,
     "firstAttemptCompile": 1,
-    "compileRate": 100,
+    "compileRate": 50,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],

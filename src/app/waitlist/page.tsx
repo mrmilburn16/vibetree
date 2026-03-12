@@ -328,78 +328,152 @@ function useReveal(threshold = 0.15) {
   return { ref, visible };
 }
 
-// ── Showcase JS scroll-snap (no CSS scroll-snap-type) ────────────────────────
-// Debounces scroll end, then snaps to the nearest showcase panel.
-// Only snaps if the user has scrolled ≥25% into the next/prev panel.
+// ── Showcase YouTube-Shorts-style scroll hijack (wheel + touch) ───────────────
+// Any wheel/swipe event while on a showcase panel immediately snaps to the
+// next or previous panel — exactly one panel at a time.
+//
+// Root cause of multi-skip: Mac trackpads fire wheel events for 800ms+ after a
+// single swipe. The fix uses TWO locks:
+//   isSnapping  — true while scrollTo animation is in flight (~700ms)
+//   snapCooldown — true from first wheel event until 150ms after the LAST wheel
+//                  event of that gesture. This outlasts the animation and covers
+//                  the entire swipe, so a hard flick can never skip two panels.
 function useShowcaseSnap() {
   useEffect(() => {
     const scrollEl = document.querySelector(".waitlist-scroll-container") as HTMLElement | null;
     if (!scrollEl) return;
-    const el = scrollEl; // non-null alias for use inside closures
+    const el = scrollEl;
 
-    let timer: ReturnType<typeof setTimeout> | null = null;
     let isSnapping = false;
+    let snapCooldown = false;
+    let wheelEndTimer: ReturnType<typeof setTimeout> | null = null;
+    let touchStartY = 0;
+    let touchStartTime = 0;
 
+    // Returns all snappable sections in DOM order: hero first, then showcase panels.
     function getPanels(): HTMLElement[] {
-      return Array.from(document.querySelectorAll("[data-showcase-panel]")) as HTMLElement[];
+      return Array.from(document.querySelectorAll("[data-snap-section]")) as HTMLElement[];
     }
 
-    function snapToNearest() {
-      if (isSnapping) return;
+    // Returns the index of the snap section the user is currently aligned with
+    // (0 = hero, 1-4 = showcase panels), or -1 if past the last snap section.
+    function getActiveIndex(): number {
       const panels = getPanels();
-      if (!panels.length) return;
-
+      if (!panels.length) return -1;
       const scrollTop = el.scrollTop;
-      const vh = el.clientHeight;
-
-      const firstPanelTop = panels[0]!.offsetTop;
       const lastPanel = panels[panels.length - 1]!;
-      const lastPanelBottom = lastPanel.offsetTop + lastPanel.offsetHeight;
+      const lastBottom = lastPanel.offsetTop + lastPanel.offsetHeight;
 
-      // Only act within the showcase area (±50% viewport buffer around edges)
-      if (scrollTop < firstPanelTop - vh * 0.5 || scrollTop > lastPanelBottom) return;
+      // Only intercept within the snappable range (hero through last showcase panel)
+      if (scrollTop > lastBottom - 4) return -1;
 
-      let target: HTMLElement | null = null;
-
+      // Find the section whose top is closest to current scroll position
+      let bestIdx = 0;
+      let bestDist = Infinity;
       for (let i = 0; i < panels.length; i++) {
-        const panelTop = panels[i]!.offsetTop;
-        const nextPanelTop = i < panels.length - 1 ? panels[i + 1]!.offsetTop : Infinity;
-
-        if (scrollTop >= panelTop && scrollTop < nextPanelTop) {
-          const progress = (scrollTop - panelTop) / vh;
-          // < 25% past this panel's top → snap back to this panel
-          // ≥ 25% past this panel's top → snap forward to next panel
-          if (progress < 0.25) {
-            target = panels[i]!;
-          } else {
-            target = panels[i + 1] ?? panels[i]!;
-          }
-          break;
+        const dist = Math.abs(scrollTop - panels[i]!.offsetTop);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = i;
         }
       }
+      return bestIdx;
+    }
 
-      // Fallback: if we're past all panels, stay at last
-      if (!target) target = panels[panels.length - 1]!;
-
-      const targetTop = target.offsetTop;
-      if (Math.abs(scrollTop - targetTop) < 8) return; // already aligned
-
+    function snapToIndex(index: number) {
+      const panels = getPanels();
+      if (index < 0 || index >= panels.length) return;
       isSnapping = true;
-      el.scrollTo({ top: targetTop, behavior: "smooth" });
-      // Release lock after animation (~700ms)
-      setTimeout(() => { isSnapping = false; }, 700);
+      snapCooldown = true;
+      el.scrollTo({ top: panels[index]!.offsetTop, behavior: "smooth" });
+
+      // Release isSnapping only once scrolling has truly stopped — detected by
+      // receiving no scroll events for 100ms. This matches the actual animation
+      // duration rather than guessing with a fixed timer.
+      let settleTimer: ReturnType<typeof setTimeout> | null = null;
+      let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+      function finish() {
+        if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+        if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+        el.removeEventListener("scroll", onAnimScroll);
+        isSnapping = false;
+      }
+
+      function onAnimScroll() {
+        if (settleTimer) clearTimeout(settleTimer);
+        settleTimer = setTimeout(finish, 100);
+      }
+
+      el.addEventListener("scroll", onAnimScroll, { passive: true });
+
+      // Fallback: if scrollTo fires no scroll events (already at target, distance ≈ 0)
+      fallbackTimer = setTimeout(finish, 1000);
     }
 
-    function onScroll() {
+    function handleWheel(e: WheelEvent) {
+      const idx = getActiveIndex();
+      if (idx === -1) return; // Outside showcase — free scroll
+
+      const panels = getPanels();
+      const goingDown = e.deltaY > 0;
+
+      // At boundary panels going outward → release control, let page scroll normally
+      if (goingDown && idx === panels.length - 1) return;
+      if (!goingDown && idx === 0) return;
+
+      // Inside showcase going inward → take control
+      e.preventDefault();
+
+      // Reset gesture-end timer on every wheel event.
+      // snapCooldown clears only 150ms after the last wheel event of this gesture,
+      // which prevents a hard flick from firing multiple snaps.
+      if (wheelEndTimer) clearTimeout(wheelEndTimer);
+      wheelEndTimer = setTimeout(() => {
+        snapCooldown = false;
+        wheelEndTimer = null;
+      }, 150);
+
+      if (isSnapping || snapCooldown) return;
+
+      snapToIndex(goingDown ? idx + 1 : idx - 1);
+    }
+
+    function handleTouchStart(e: TouchEvent) {
+      touchStartY = e.touches[0]?.clientY ?? 0;
+      touchStartTime = Date.now();
+    }
+
+    function handleTouchEnd(e: TouchEvent) {
+      const idx = getActiveIndex();
+      if (idx === -1) return;
+
+      const touchEndY = e.changedTouches[0]?.clientY ?? 0;
+      const diff = touchStartY - touchEndY; // positive = swipe up (scroll down)
+      const elapsed = Date.now() - touchStartTime;
+
+      // Require a deliberate swipe: ≥30px, ≤500ms
+      if (Math.abs(diff) < 30 || elapsed > 500) return;
+
+      const panels = getPanels();
+      const goingDown = diff > 0;
+      if (goingDown && idx === panels.length - 1) return;
+      if (!goingDown && idx === 0) return;
+
       if (isSnapping) return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(snapToNearest, 150);
+      snapToIndex(goingDown ? idx + 1 : idx - 1);
     }
 
-    el.addEventListener("scroll", onScroll, { passive: true });
+    // passive: false is required to call preventDefault() on wheel
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    el.addEventListener("touchstart", handleTouchStart, { passive: true });
+    el.addEventListener("touchend", handleTouchEnd, { passive: true });
+
     return () => {
-      el.removeEventListener("scroll", onScroll);
-      if (timer) clearTimeout(timer);
+      el.removeEventListener("wheel", handleWheel);
+      el.removeEventListener("touchstart", handleTouchStart);
+      el.removeEventListener("touchend", handleTouchEnd);
+      if (wheelEndTimer) clearTimeout(wheelEndTimer);
     };
   }, []);
 }
@@ -471,10 +545,6 @@ function WaitlistShowcase() {
   useShowcaseSnap();
   return (
     <>
-      <section className="px-4 pt-24 pb-16 sm:px-6 text-center">
-        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--link-default)] mb-4">Built with VibeTree</p>
-        <h2 className="text-heading-section">One prompt. One app. Every time.</h2>
-      </section>
       {SHOWCASE_APPS.map((app, index) => (
         <AppShowcasePanel key={app.id} app={app} index={index} />
       ))}
@@ -488,7 +558,7 @@ function AppShowcasePanel({ app, index }: { app: (typeof SHOWCASE_APPS)[0]; inde
   return (
     <section
       ref={ref}
-      data-showcase-panel
+      data-snap-section
       className={`min-h-[100dvh] flex items-center justify-center px-4 py-12 sm:px-6 lg:px-20 transition-all duration-700 ${
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
       }`}
@@ -509,11 +579,35 @@ function AppShowcasePanel({ app, index }: { app: (typeof SHOWCASE_APPS)[0]; inde
 
 function PhoneMockup({ app }: { app: (typeof SHOWCASE_APPS)[0] }) {
   const videoSrc = app.videoSrc;
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return;
+        if (entry.isIntersecting) {
+          video.currentTime = 0;
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+        }
+      },
+      { threshold: 0.5 } // panel must be ≥50% visible to trigger play
+    );
+
+    obs.observe(video);
+    return () => obs.disconnect();
+  }, []);
+
   return (
     <div className="waitlist-phone-frame relative w-[280px] sm:w-[300px]" style={{ border: "none", outline: "none", boxShadow: "none" }}>
       <div className="aspect-[9/19.5] w-full overflow-hidden bg-[#0A0A0B] relative" style={{ border: "none", outline: "none", boxShadow: "none", borderRadius: 0 }}>
         {videoSrc ? (
           <video
+            ref={videoRef}
             src={videoSrc}
             autoPlay
             muted
@@ -875,7 +969,7 @@ export default function WaitlistPage() {
         {!joined ? (
           <>
             {/* Hero: countdown, headline, subheading, form, scroll hint */}
-            <section className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-4 pt-16 pb-12 sm:px-6 sm:pt-20">
+            <section data-snap-section className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-4 pt-8 pb-6 sm:px-6 sm:pt-10">
               <div
                 className="absolute inset-0 opacity-30 pointer-events-none"
                 style={{
@@ -884,7 +978,7 @@ export default function WaitlistPage() {
               />
               <div className="relative mx-auto max-w-2xl text-center">
                 {/* Countdown pill */}
-                <div className="waitlist-countdown-badge mb-9 inline-flex items-center gap-4 rounded-full border border-[var(--border-default)] bg-[var(--link-default)]/10 px-6 py-2.5">
+                <div className="waitlist-countdown-badge mb-5 inline-flex items-center gap-4 rounded-full border border-[var(--border-default)] bg-[var(--link-default)]/10 px-6 py-2.5">
                   {countdown.live ? (
                     <span className="text-sm font-semibold text-[var(--link-default)]">We&apos;re live!</span>
                   ) : (
@@ -924,67 +1018,52 @@ export default function WaitlistPage() {
                     </>
                   )}
                 </div>
-                <h1 className="text-heading-hero mb-6 animate-fade-in leading-tight">
+                <h1 className="text-heading-hero mb-3.5 animate-fade-in leading-tight">
                   Describe an app.
                   <br />
                   <span className="text-[var(--link-default)]">Run it on your phone.</span>
                 </h1>
-                <p className="text-body-muted text-lg max-w-[520px] mx-auto animate-fade-in mb-10">
+                <p className="text-body-muted text-lg max-w-[520px] mx-auto animate-fade-in mb-6">
                   Turn a text prompt into a real, native iOS app — running on your phone in minutes.
                 </p>
                 {/* Join form */}
                 <div id="join" className="scroll-mt-24">
-                  <Card className="waitlist-form-card animate-fade-in mx-auto max-w-xl p-6 sm:p-8 text-left">
-                    <h2 className="mb-6 text-center text-heading-card">Join the waitlist</h2>
-                    <p className="mb-6 text-center text-sm text-body-muted">
-                      Enter your email to reserve your spot. Complete actions below to move up.
-                    </p>
-                    <form onSubmit={handleJoin} className="space-y-4">
-                      <div>
-                        <label htmlFor="waitlist-email" className="mb-1.5 block pl-3 text-sm font-medium text-body-muted">
-                          Email
-                        </label>
-                        <Input
-                          id="waitlist-email"
-                          type="email"
-                          placeholder="you@example.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="w-full"
-                          autoComplete="email"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="waitlist-name" className="mb-1.5 block pl-3 text-sm font-medium text-body-muted">
-                          Name <span className="text-[var(--text-tertiary)]">(optional)</span>
-                        </label>
-                        <Input
-                          id="waitlist-name"
-                          type="text"
-                          placeholder="Your name"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          className="w-full"
-                          autoComplete="name"
-                        />
-                      </div>
+                  <Card className="waitlist-form-card animate-fade-in mx-auto max-w-xl p-4 sm:p-5 text-left">
+                    <form onSubmit={handleJoin} className="space-y-3">
+                      <Input
+                        id="waitlist-email"
+                        type="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full"
+                        autoComplete="email"
+                        aria-label="Email"
+                      />
+                      <Input
+                        id="waitlist-name"
+                        type="text"
+                        placeholder="Your name (optional)"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full"
+                        autoComplete="name"
+                        aria-label="Name (optional)"
+                      />
                       {error && <p className="text-sm text-[var(--semantic-error)]">{error}</p>}
-                      <div className="flex justify-center pt-4 pb-2">
-                        <Button type="submit" variant="primary" disabled={loading} className="w-full sm:w-auto">
-                          {loading ? "Joining…" : "Join the waitlist"}
-                        </Button>
-                      </div>
+                      <Button type="submit" variant="primary" disabled={loading} className="w-full">
+                        {loading ? "Joining…" : "Join the waitlist →"}
+                      </Button>
                     </form>
                   </Card>
                 </div>
                 {/* Scroll hint */}
-                <div className="mt-12 flex flex-col items-center gap-2">
+                <div className="mt-6 flex flex-col items-center gap-2">
                   <span className="text-xs font-medium uppercase tracking-widest text-[var(--text-tertiary)]">
                     See what you can build
                   </span>
-                  <div
-                    className="h-6 w-6 border-r-2 border-b-2 border-[var(--text-tertiary)] rotate-45 animate-bounce"
-                    style={{ animationDuration: "2s" }}
+                  <ChevronDown
+                    className="h-5 w-5 text-[var(--text-tertiary)] animate-arrow-nudge"
                     aria-hidden
                   />
                 </div>

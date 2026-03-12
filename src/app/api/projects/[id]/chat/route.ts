@@ -39,15 +39,25 @@ function asMessages(input: unknown): Array<{
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const authHeader = request.headers.get("authorization") ?? request.headers.get("Authorization");
+  const usingBearer = authHeader?.startsWith("Bearer ") ?? false;
+  console.log("[chat] GET request", { projectId: id, authMethod: usingBearer ? "bearer" : "cookie" });
   const auth = await requireProjectAuth(request, id);
   if (auth instanceof NextResponse) {
     if (auth.status === 404) {
       console.warn("[chat] GET 404: project not found or not owned (see [projectAuth] log for Firestore existence)", {
         projectId: id,
+        authMethod: usingBearer ? "bearer" : "cookie",
+      });
+    } else if (auth.status === 401) {
+      console.warn("[chat] GET 401: no valid session — token missing or expired", {
+        projectId: id,
+        hasAuthHeader: !!authHeader,
       });
     }
     return auth;
   }
+  console.log("[chat] GET auth OK", { projectId: id, userId: (auth as any).user?.uid });
   const chat = await getProjectChat(id);
   const allJobs = getAllBuildJobs();
   const latestJob = allJobs
@@ -57,6 +67,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     latestJob ?
       { id: latestJob.id, status: latestJob.status, error: latestJob.error ?? undefined }
     : undefined;
+  const messageCount = chat?.messages?.length ?? 0;
+  console.log("[chat] GET returning", { projectId: id, messageCount, hasBuildJob: !!buildJob });
   return NextResponse.json({
     projectId: id,
     updatedAt: chat?.updatedAt ?? null,

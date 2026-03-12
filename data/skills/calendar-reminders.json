@@ -36,9 +36,9 @@
     "NSRemindersUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 23,
-    "firstAttemptCompile": 16,
-    "compileRate": 70,
+    "totalBuilds": 32,
+    "firstAttemptCompile": 22,
+    "compileRate": 69,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [

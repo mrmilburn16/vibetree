@@ -40,9 +40,9 @@
   "antiPatterns": [],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 26,
-    "firstAttemptCompile": 11,
-    "compileRate": 42,
+    "totalBuilds": 48,
+    "firstAttemptCompile": 26,
+    "compileRate": 54,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -67,7 +67,8 @@
       "'UserLocation' cannot be constructed because it has no accessible initializers",
       "referencing instance method 'onChange(of:initial:_:)' on 'Optional' requires that 'GitHubUser' conform to 'Equatable'",
       "Expected declaration",
-      "expected declaration"
+      "expected declaration",
+      "the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions"
     ],
     "goldenExamples": []
   }

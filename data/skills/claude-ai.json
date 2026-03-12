@@ -50,9 +50,9 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 45,
-    "firstAttemptCompile": 26,
-    "compileRate": 58,
+    "totalBuilds": 75,
+    "firstAttemptCompile": 46,
+    "compileRate": 61,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -78,7 +78,8 @@
       "Expected declaration",
       "expected declaration",
       "generic parameter 'Expanded' could not be inferred",
-      "extraneous argument label 'hex:' in call"
+      "extraneous argument label 'hex:' in call",
+      "value of type 'DraftRound' has no member 'typeColor'"
     ],
     "goldenExamples": []
   }

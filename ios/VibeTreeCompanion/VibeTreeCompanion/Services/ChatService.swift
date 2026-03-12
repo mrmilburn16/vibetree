@@ -58,20 +58,42 @@ final class ChatService: ObservableObject {
 
     /// Load conversation history from server so web and iOS stay in sync. Call from view .onAppear.
     func loadHistory() async {
+        // If a previous load left an error, allow retry by resetting the flag.
+        if hasLoadedHistory && self.error != nil {
+            hasLoadedHistory = false
+        }
         guard !hasLoadedHistory else { return }
         hasLoadedHistory = true
+        let rawToken = await AuthService.shared.getValidIDToken()
+        let tokenSnippet = rawToken.map { "\($0.prefix(12))…" } ?? "nil"
+        print("[ChatService] loadHistory projectId=\(projectId) token=\(tokenSnippet)")
         do {
             let history = try await APIService.shared.fetchChat(projectId: projectId)
+            print("[ChatService] loadHistory fetched \(history.count) messages for \(projectId)")
             if !history.isEmpty {
                 messages = history
                 buildStatus = .ready
                 if suggestedProjectName == nil, let name = Self.appNameFromHistory(history) {
                     suggestedProjectName = name
                 }
+            } else {
+                print("[ChatService] loadHistory: server returned 0 messages for \(projectId)")
             }
         } catch {
             hasLoadedHistory = false
+            print("[ChatService] loadHistory FAILED for \(projectId): \(error.localizedDescription)")
             logger.error("loadHistory failed: \(error.localizedDescription)")
+            // Surface the error so the UI can show it instead of the blank empty state.
+            let desc = error.localizedDescription
+            if desc.contains("401") || desc.contains("Unauthorized") {
+                self.error = "Not signed in. Open Settings and sign in with your VibeTree account."
+            } else if desc.contains("404") || desc.contains("Project not found") {
+                self.error = "Project not found on server. Make sure you're signed in with the same account used on the web app. (UID may differ)"
+            } else if desc.contains("Invalid server URL") || desc.contains("invalidURL") {
+                self.error = "Server URL not configured. Open Settings and set your server URL."
+            } else {
+                self.error = "Could not load chat: \(desc)"
+            }
         }
         startChatPolling()
     }
@@ -91,11 +113,20 @@ final class ChatService: ObservableObject {
         guard !isStreaming else { return }
         do {
             let server = try await APIService.shared.fetchChat(projectId: projectId)
-            if server.count > messages.count {
+            // Update if server has more messages, OR if local is empty and server has any.
+            // Also detect if the last message IDs differ (content changed server-side).
+            let shouldUpdate = server.count > messages.count
+                || (messages.isEmpty && !server.isEmpty)
+                || (!server.isEmpty && server.last?.id != messages.last?.id)
+            if shouldUpdate {
                 messages = server
+                if !server.isEmpty && self.error != nil {
+                    // Clear the error if polling eventually succeeds.
+                    self.error = nil
+                }
             }
         } catch {
-            // Ignore poll errors (e.g. network)
+            // Ignore poll errors silently (network blips, etc.)
         }
     }
 

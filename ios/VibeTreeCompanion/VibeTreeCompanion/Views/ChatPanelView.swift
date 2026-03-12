@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Preference key to pass LLM trigger frame (global) so dropdown can be positioned on top of all content.
+/// Preference key to pass the LLM trigger button frame in the chat-panel coordinate space.
 private struct LLMTriggerFrameKey: PreferenceKey {
     static var defaultValue: CGRect = .zero
     static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
@@ -64,6 +64,8 @@ struct ChatPanelView: View {
 
             inputForm
         }
+        // Named coordinate space so the trigger frame and overlay share the same origin.
+        .coordinateSpace(name: "chatPanel")
         .onAppear {
             selectedProjectType = projectType
             runPreflightIfNeeded()
@@ -83,16 +85,21 @@ struct ChatPanelView: View {
         }
         .overlay {
             if isLLMMenuOpen {
+                // Right-align the dropdown to the Claude Sonnet button's right edge.
+                // triggerW  = the button's actual width (or min width as fallback)
+                // dropW     = the rendered dropdown width (max of trigger or min width)
+                // offset.x  = maxX - dropW  →  trailing edge of dropdown == trailing edge of button
+                let triggerW = llmTriggerFrame.width > 0 ? llmTriggerFrame.width : ChatPanelView.dropdownTriggerWidth
+                let dropW = max(triggerW, ChatPanelView.dropdownTriggerWidth)
                 ZStack(alignment: .topLeading) {
+                    // Full-screen dismiss area — tapping outside closes the dropdown.
                     Color.black.opacity(0.001)
                         .ignoresSafeArea()
                         .contentShape(Rectangle())
                         .onTapGesture { isLLMMenuOpen = false }
-                    GeometryReader { geo in
-                        let origin = geo.frame(in: .global).origin
-                        llmDropdownList(width: llmTriggerFrame.width > 0 ? llmTriggerFrame.width : ChatPanelView.dropdownTriggerWidth)
-                            .offset(x: llmTriggerFrame.minX - origin.x, y: llmTriggerFrame.maxY - origin.y)
-                    }
+                    // Dropdown right-aligned below the trigger button.
+                    llmDropdownList(width: triggerW)
+                        .offset(x: llmTriggerFrame.maxX - dropW, y: llmTriggerFrame.maxY)
                 }
                 .zIndex(1000)
             }
@@ -135,7 +142,9 @@ struct ChatPanelView: View {
             }
             .background(
                 GeometryReader { geo in
-                    Color.clear.preference(key: LLMTriggerFrameKey.self, value: geo.frame(in: .global))
+                    // Measure in "chatPanel" space — the same space used by the overlay offset.
+                    Color.clear.preference(key: LLMTriggerFrameKey.self,
+                                          value: geo.frame(in: .named("chatPanel")))
                 }
             )
             .onPreferenceChange(LLMTriggerFrameKey.self) { llmTriggerFrame = $0 }
@@ -434,15 +443,38 @@ struct ChatPanelView: View {
     private var emptyState: some View {
         VStack(spacing: Forest.space3) {
             Spacer().frame(height: Forest.space12)
-            Text("What do you want to build?")
-                .font(Forest.font(size: Forest.textXl, weight: .semibold))
-                .foregroundColor(Forest.textPrimary)
-                .tracking(-0.3)
-            Text("Describe your app in plain language—AI writes Swift and you preview live.")
-                .font(Forest.font(size: Forest.textSm))
-                .foregroundColor(Forest.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Forest.space8)
+            if let errorMsg = chatService.error {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(Forest.font(size: 28))
+                    .foregroundColor(Forest.warning)
+                Text("Couldn't load chat history")
+                    .font(Forest.font(size: Forest.textBase, weight: .semibold))
+                    .foregroundColor(Forest.textPrimary)
+                Text(errorMsg)
+                    .font(Forest.font(size: Forest.textSm))
+                    .foregroundColor(Forest.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Forest.space6)
+                Button("Retry") {
+                    Task { await chatService.loadHistory() }
+                }
+                .font(Forest.font(size: Forest.textSm, weight: .semibold))
+                .foregroundColor(Forest.backgroundPrimary)
+                .padding(.horizontal, Forest.space5)
+                .padding(.vertical, Forest.space2)
+                .background(Forest.accent)
+                .cornerRadius(Forest.radiusSm)
+            } else {
+                Text("What do you want to build?")
+                    .font(Forest.font(size: Forest.textXl, weight: .semibold))
+                    .foregroundColor(Forest.textPrimary)
+                    .tracking(-0.3)
+                Text("Describe your app in plain language—AI writes Swift and you preview live.")
+                    .font(Forest.font(size: Forest.textSm))
+                    .foregroundColor(Forest.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Forest.space8)
+            }
             Spacer()
         }
         .frame(maxWidth: .infinity)

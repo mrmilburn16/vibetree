@@ -41,9 +41,9 @@
   "canonicalCode": {},
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 35,
-    "firstAttemptCompile": 20,
-    "compileRate": 57,
+    "totalBuilds": 43,
+    "firstAttemptCompile": 24,
+    "compileRate": 56,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [

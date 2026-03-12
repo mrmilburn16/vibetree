@@ -62,11 +62,11 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 10,
-    "firstAttemptCompile": 6,
-    "compileRate": 60,
+    "totalBuilds": 11,
+    "firstAttemptCompile": 7,
+    "compileRate": 64,
     "functionalSuccesses": 1,
-    "functionalRate": 10,
+    "functionalRate": 9,
     "commonErrors": [
       "Double-counting reps (v1: narrow hysteresis gap)",
       "Stopwatch-like phantom counting when still (v2: hardcoded thresholds too wide for user's camera setup)",

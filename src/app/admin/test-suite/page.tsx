@@ -2897,6 +2897,29 @@ export default function TestSuitePage() {
             /* ignore */
           }
         }
+
+        // Persist the conversation to project_chats so the iOS companion app can load it.
+        // The test suite calls the stream API directly (no useChat hook), so nothing else saves it.
+        {
+          const userMsgId = `msg_${Date.now()}_user`;
+          const asstMsgId = `msg_${Date.now() + 1}_asst`;
+          const filePaths = projectFiles?.map((f) => f.path) ?? [];
+          const chatMessages: Array<{ id: string; role: string; content: string; editedFiles?: string[] }> = [
+            { id: userMsgId, role: "user", content: idea.prompt },
+            ...(typeof contentRaw === "string" && contentRaw.trim()
+              ? [{ id: asstMsgId, role: "assistant", content: contentRaw, ...(filePaths.length ? { editedFiles: filePaths } : {}) }]
+              : []),
+          ];
+          if (chatMessages.length > 0) {
+            fetch(`/api/projects/${projectId}/chat`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ messages: chatMessages }),
+              credentials: "include",
+            }).catch(() => { /* ignore — don't fail the test run if chat persistence fails */ });
+          }
+        }
+
         if (!projectFiles?.length) throw new Error("No files generated");
 
         const generationMs = Date.now() - genStart;

@@ -57,14 +57,12 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 217,
-    "firstAttemptCompile": 139,
+    "totalBuilds": 260,
+    "firstAttemptCompile": 166,
     "compileRate": 64,
     "functionalSuccesses": 2,
     "functionalRate": 1,
     "commonErrors": [
-      "instance method 'background(_:in:fillStyle:)' requires that 'Group<_ConditionalContent<Color, Color>>' conform to 'ShapeStyle'",
-      "cannot convert value of type '(String?) -> ()' to expected argument type '@MainActor () -> Void'",
       "Multi-line string literal content must begin on a new line",
       "Multi-line string literal closing delimiter must begin on a new line",
       "multi-line string literal content must begin on a new line",
@@ -92,7 +90,9 @@
       "Expected declaration",
       "expected declaration",
       "generic parameter 'Expanded' could not be inferred",
-      "extraneous argument label 'hex:' in call"
+      "extraneous argument label 'hex:' in call",
+      "value of type 'DraftRound' has no member 'typeColor'",
+      "the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions"
     ],
     "goldenExamples": [
       {

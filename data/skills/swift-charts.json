@@ -52,9 +52,9 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 45,
-    "firstAttemptCompile": 31,
-    "compileRate": 69,
+    "totalBuilds": 70,
+    "firstAttemptCompile": 45,
+    "compileRate": 64,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -73,7 +73,8 @@
       "main actor-isolated property 'lastAnalysisTime' can not be referenced from a nonisolated context",
       "main actor-isolated property 'lastAnalysisTime' can not be mutated from a nonisolated context",
       "main actor-isolated property 'faceLandmarksRequest' can not be referenced from a nonisolated context",
-      "referencing instance method 'onChange(of:initial:_:)' on 'Optional' requires that 'GitHubUser' conform to 'Equatable'"
+      "referencing instance method 'onChange(of:initial:_:)' on 'Optional' requires that 'GitHubUser' conform to 'Equatable'",
+      "the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions"
     ],
     "goldenExamples": []
   },
