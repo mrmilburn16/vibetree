@@ -240,7 +240,7 @@ type PipelineResult = {
   wallMs: number;
 };
 
-async function runFreshBuild(headers: Record<string, string>): Promise<PipelineResult> {
+async function runFreshBuild(headers: Record<string, string>, baseUrl = BASE): Promise<PipelineResult> {
   const t0 = Date.now();
 
   // Step 1 of pipeline — create project
@@ -274,10 +274,24 @@ async function runFreshBuild(headers: Record<string, string>): Promise<PipelineR
   });
   if (!done) throw new Error("No 'done' event received from stream");
 
-  const projectFiles = (
+  let projectFiles = (
     done["projectFiles"] as Array<{ path: string; content: string }> | undefined
   ) ?? [];
   const skillsUsed = Array.isArray(done["skillIds"]) ? (done["skillIds"] as string[]) : [];
+
+  // Fallback: if projectFiles weren't embedded in the done event, fetch them separately.
+  // The test-suite page does the same thing.
+  if (!projectFiles.length) {
+    dim(`  → done event had no projectFiles — fetching from /api/projects/${projectId}/files`);
+    try {
+      const filesRes = await fetch(`${baseUrl}/api/projects/${projectId}/files`, { headers });
+      if (filesRes.ok) {
+        const data = (await filesRes.json()) as { files?: Array<{ path: string; content: string }> };
+        if (Array.isArray(data.files) && data.files.length > 0) projectFiles = data.files;
+      }
+    } catch { /* ignore */ }
+  }
+
   fileCount = projectFiles.length || fileCount;
   dim(`  → generation complete: ${fileCount} files, skills: [${skillsUsed.join(", ") || "none"}]`);
 
