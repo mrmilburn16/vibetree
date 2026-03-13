@@ -402,7 +402,9 @@ export default function DashboardPage() {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    const next = Math.min(el.scrollHeight, 200);
+    el.style.height = `${next}px`;
+    el.style.overflowY = el.scrollHeight > 200 ? "auto" : "hidden";
   }, [prompt]);
 
   const doSubmitPrompt = useCallback(
@@ -605,7 +607,7 @@ export default function DashboardPage() {
           <div className="mt-8 w-full">
             {/* Pill */}
             <div className="relative w-full rounded-[9999px] border-2 border-[var(--border-default)] bg-[var(--background-secondary)] transition-all duration-300 focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/25">
-              <div className="flex h-[46px] items-center gap-2 px-3">
+              <div className="flex min-h-[46px] items-end gap-2 px-3 py-[6px]">
                 {/* LEFT: plus — triggers file picker */}
                 <input
                   ref={imageInputRef}
@@ -636,8 +638,8 @@ export default function DashboardPage() {
                     placeholder=""
                     onFocus={() => setInputFocused(true)}
                     onBlur={() => setInputFocused(false)}
-                    className="!border-0 !min-h-0 max-h-[120px] w-full resize-none bg-transparent text-[var(--input-text)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none"
-                    style={{ resize: "none", paddingTop: 4, paddingBottom: 4, paddingLeft: 0, paddingRight: 0, fontSize: 16, lineHeight: "22px", minHeight: 30, display: "block", overflow: "visible" }}
+                    className="!border-0 !min-h-0 max-h-[200px] w-full resize-none bg-transparent text-[var(--input-text)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none"
+                    style={{ resize: "none", paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0, fontSize: 16, lineHeight: "22px", minHeight: 22, display: "block", overflowY: "hidden" }}
                     rows={1}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
