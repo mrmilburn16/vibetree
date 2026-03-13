@@ -479,11 +479,19 @@ export async function getClaudeResponse(
     Math.round(qaTokens / 1000)
   );
 
+  // Build system as a block array so cache_control sits only on the constant base
+  // prompt. Skills and QA rules are appended as separate uncached blocks, keeping
+  // the cache key stable across requests that match different skills.
+  const systemBlocks: Array<{ type: "text"; text: string; cache_control?: typeof CACHE_CONTROL }> = [
+    { type: "text", text: basePrompt, ...(CACHE_CONTROL && { cache_control: CACHE_CONTROL }) },
+  ];
+  if (skillPromptBlock) systemBlocks.push({ type: "text", text: skillPromptBlock });
+  if (qaRulesBlock) systemBlocks.push({ type: "text", text: qaRulesBlock });
+
   const response = await client.messages.create({
     model,
     max_tokens: MAX_TOKENS,
-    system: systemPrompt,
-    ...(CACHE_CONTROL && { cache_control: CACHE_CONTROL }),
+    system: systemBlocks as Parameters<typeof client.messages.create>[0]["system"],
     output_config: { format: jsonSchemaOutputFormat(STRUCTURED_OUTPUT_SCHEMA) },
     messages: [{ role: "user", content: userContent }],
   });
@@ -587,6 +595,15 @@ async function getClaudeResponseStream(
     Math.round(qaTokens / 1000)
   );
 
+  // Build system as a block array so cache_control sits only on the constant base
+  // prompt. Skills and QA rules are appended as separate uncached blocks, keeping
+  // the cache key stable across requests that match different skills.
+  const systemBlocks: Array<{ type: "text"; text: string; cache_control?: typeof CACHE_CONTROL }> = [
+    { type: "text", text: basePrompt, ...(CACHE_CONTROL && { cache_control: CACHE_CONTROL }) },
+  ];
+  if (skillPromptBlock) systemBlocks.push({ type: "text", text: skillPromptBlock });
+  if (qaRulesBlock) systemBlocks.push({ type: "text", text: qaRulesBlock });
+
   let lastReported = 0;
   const throttleChars = 80;
   let lastScannedLen = 0;
@@ -621,8 +638,7 @@ async function getClaudeResponseStream(
     .stream({
       model,
       max_tokens: MAX_TOKENS,
-      system: systemPrompt,
-      ...(CACHE_CONTROL && { cache_control: CACHE_CONTROL }),
+      system: systemBlocks as Parameters<typeof client.messages.stream>[0]["system"],
       output_config: { format: jsonSchemaOutputFormat(STRUCTURED_OUTPUT_SCHEMA) },
       messages: [{ role: "user", content: userContent }],
     })
