@@ -1,9 +1,10 @@
 /**
  * GET /api/proxy/places
  * Proxies Apple MapKit Server API to search for nearby places.
- * Query params: lat, lng, radius (meters, default 5000), category (coffee | gym | pharmacy).
+ * Query params: lat, lng, radius (meters, default 5000), category or query (any search term).
+ * `query` and `category` are aliases — either works. The value is passed directly to Apple MapKit.
  * Rate limit: 100 requests per hour per IP. Returns 429 if exceeded.
- * Response cached 1 hour by lat/lng/radius/category.
+ * Response cached 1 hour by lat/lng/radius/searchTerm.
  */
 
 import { NextResponse } from "next/server";
@@ -16,12 +17,6 @@ const placesCache = createProxyCache({ ttlSeconds: PLACES_CACHE_TTL_SECONDS });
 
 const APPLE_MAPS_TOKEN_URL = "https://maps-api.apple.com/v1/token";
 const APPLE_MAPS_SEARCH_URL = "https://maps-api.apple.com/v1/search";
-
-const CATEGORY_TO_QUERY: Record<string, string> = {
-  coffee: "coffee shop",
-  gym: "gym",
-  pharmacy: "pharmacy",
-};
 
 const RATE_LIMIT_MAX = 100;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
@@ -139,12 +134,13 @@ export async function GET(request: Request) {
   const latParam = searchParams.get("lat");
   const lngParam = searchParams.get("lng");
   const radiusParam = searchParams.get("radius");
-  const categoryParam = searchParams.get("category")?.toLowerCase().trim();
+  const searchTerm = (
+    searchParams.get("query") ?? searchParams.get("category") ?? ""
+  ).trim();
 
   const lat = latParam != null ? Number(latParam) : NaN;
   const lng = lngParam != null ? Number(lngParam) : NaN;
   const radius = radiusParam != null ? Math.max(0, Number(radiusParam)) : 5000;
-  const category = categoryParam && CATEGORY_TO_QUERY[categoryParam] ? categoryParam : null;
 
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
     return NextResponse.json(
@@ -153,14 +149,14 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!category) {
+  if (!searchTerm) {
     return NextResponse.json(
-      { error: "Query param category is required and must be one of: coffee, gym, pharmacy." },
+      { error: "Query param 'query' or 'category' is required (e.g. category=tacos)." },
       { status: 400 }
     );
   }
 
-  const cacheKey = `places:${lat.toFixed(3)},${lng.toFixed(3)}:${radius}:${category}`;
+  const cacheKey = `places:${lat.toFixed(3)},${lng.toFixed(3)}:${radius}:${searchTerm.toLowerCase()}`;
   const cached = placesCache.get(cacheKey);
   if (cached != null) {
     console.log("[proxy/places] cache HIT", { key: cacheKey });
@@ -170,11 +166,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const searchQuery = CATEGORY_TO_QUERY[category];
-
   try {
     const accessToken = await getMapsAccessToken();
-    const appleParams = new URLSearchParams({ q: searchQuery });
+    const appleParams = new URLSearchParams({ q: searchTerm });
     appleParams.set("searchLocation", `${lat},${lng}`);
     const searchUrl = `${APPLE_MAPS_SEARCH_URL}?${appleParams.toString()}`;
     const searchRes = await fetch(searchUrl, {
@@ -206,7 +200,7 @@ export async function GET(request: Request) {
           address,
           lat: placeLat,
           lng: placeLng,
-          category,
+          category: searchTerm,
           distance: Math.round(distance),
         };
       })

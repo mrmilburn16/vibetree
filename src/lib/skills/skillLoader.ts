@@ -39,8 +39,10 @@ function compileTriggerPattern(trigger: string): RegExp {
 
 interface CachedSkill {
   name: string;
+  file: string;
   promptBlock: string;
   patterns: RegExp[];
+  triggers: string[];
   alwaysLoad?: boolean;
 }
 
@@ -79,8 +81,10 @@ function loadAndCacheSkills(): CachedSkill[] {
 
       skills.push({
         name: parsed.name,
+        file,
         promptBlock: parsed.promptBlock,
         patterns,
+        triggers,
         alwaysLoad: parsed.alwaysLoad === true,
       });
     } catch {
@@ -129,15 +133,30 @@ export function getSkillStats(): {
 export function matchSkills(userMessage: string): string {
   const skills = loadAndCacheSkills();
   const message = userMessage ?? "";
+  const promptSnippet = message.length > 60 ? message.slice(0, 60) + "…" : message;
 
   const blocks: string[] = [];
   const matchedNames: string[] = [];
   for (const skill of skills) {
-    const matches = skill.alwaysLoad || skill.patterns.some((re) => re.test(message));
-    if (matches) {
+    if (skill.alwaysLoad) {
       blocks.push(skill.promptBlock);
       matchedNames.push(skill.name);
+      // DEBUG
+      console.log(`[skill-match] Matched skill: ${skill.file} | Triggered by: alwaysLoad | prompt: '${promptSnippet}'`);
+      continue;
     }
+    const triggeringKeyword = skill.triggers.find((t, i) => skill.patterns[i]?.test(message));
+    if (triggeringKeyword !== undefined) {
+      blocks.push(skill.promptBlock);
+      matchedNames.push(skill.name);
+      // DEBUG
+      console.log(`[skill-match] Matched skill: ${skill.file} | Triggered by keyword: '${triggeringKeyword}' in prompt: '${promptSnippet}'`);
+    }
+  }
+
+  // DEBUG
+  if (matchedNames.length === 0) {
+    console.log(`[skill-match] No skills matched for prompt: '${promptSnippet}'`);
   }
 
   logSkillMatch(matchedNames, message);
