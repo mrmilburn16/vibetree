@@ -1259,6 +1259,7 @@ function ResultRow({
   maxFixes?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [promptExpanded, setPromptExpanded] = useState(false);
   const [xcodeLoading, setXcodeLoading] = useState(false);
   const [xcodeError, setXcodeError] = useState<string | null>(null);
   const [runOnDeviceLoading, setRunOnDeviceLoading] = useState(false);
@@ -1309,20 +1310,33 @@ function ResultRow({
             </span>
           )}
           <div className="min-w-[260px] flex-1">
-            <p className="text-sm font-medium text-[var(--text-primary)] truncate" title={result.idea.title}>
-              {result.idea.title}
-              {result.model && (
-                <span className="ml-2 inline-flex items-center rounded-full bg-[var(--background-tertiary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)]">
-                  {result.model === "opus-4.6" ? "Opus" : result.model === "sonnet-4.6" ? "Sonnet" : result.model}
-                </span>
-              )}
-            </p>
+            <button
+              type="button"
+              onClick={() => setPromptExpanded((v) => !v)}
+              className="group flex w-full items-start gap-1 text-left"
+              title={promptExpanded ? "Hide full prompt" : "Click to see full prompt"}
+            >
+              <p className={`text-sm font-medium text-[var(--text-primary)] ${promptExpanded ? "" : "truncate"}`}>
+                {result.idea.title}
+                {result.model && (
+                  <span className="ml-2 inline-flex items-center rounded-full bg-[var(--background-tertiary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)]">
+                    {result.model === "opus-4.6" ? "Opus" : result.model === "sonnet-4.6" ? "Sonnet" : result.model}
+                  </span>
+                )}
+              </p>
+              <ChevronDown className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)] opacity-0 transition-all group-hover:opacity-100 ${promptExpanded ? "rotate-180 opacity-100" : ""}`} aria-hidden />
+            </button>
             <p className="text-xs text-[var(--text-tertiary)]">
               {result.idea.category}
               {isActive && result.liveStatus && (
                 <span className="ml-2 text-blue-400">{result.liveStatus}</span>
               )}
             </p>
+            {promptExpanded && (
+              <p className="mt-2 text-xs leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap rounded-[var(--radius-md)] bg-[var(--background-tertiary)] px-3 py-2">
+                {result.idea.prompt}
+              </p>
+            )}
           </div>
         </div>
 
