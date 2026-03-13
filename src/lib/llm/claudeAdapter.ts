@@ -512,6 +512,11 @@ export async function getClaudeResponse(
             cache_read_input_tokens: rawUsage.cache_read_input_tokens ?? 0,
           }
         : undefined;
+    console.log(
+      `[PromptCache] creation: ${usage?.cache_creation_input_tokens ?? 0}, ` +
+      `cache_read: ${usage?.cache_read_input_tokens ?? 0}, ` +
+      `input: ${usage?.input_tokens ?? 0}`,
+    );
     return {
       content: parsed.summary,
       editedFiles: parsed.files.map((f) => f.path),
@@ -660,6 +665,11 @@ async function getClaudeResponseStream(
             cache_read_input_tokens: rawUsage.cache_read_input_tokens ?? 0,
           }
         : undefined;
+    console.log(
+      `[PromptCache] creation: ${usage?.cache_creation_input_tokens ?? 0}, ` +
+      `cache_read: ${usage?.cache_read_input_tokens ?? 0}, ` +
+      `input: ${usage?.input_tokens ?? 0}`,
+    );
     return {
       content: parsed.summary,
       editedFiles: parsed.files.map((f) => f.path),

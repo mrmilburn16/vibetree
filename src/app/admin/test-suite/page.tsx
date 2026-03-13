@@ -98,6 +98,8 @@ type TestResult = {
   runtimeLogs?: string;
   /** True when this result was served from the 1-hour in-memory build cache. */
   cached?: boolean;
+  /** Anthropic prompt cache token counts from the generation step. */
+  promptCacheStats?: { creation: number; read: number; input: number; output: number };
   /** Claude vision automated test report (Auto Test). */
   visionTestReport?: {
     projectId: string;
@@ -1908,6 +1910,65 @@ function SummaryPanel({
         </div>
       </div>
 
+      {/* ── Anthropic Prompt Cache efficiency ── */}
+      {(() => {
+        const withStats = completed.filter((r) => r.promptCacheStats != null);
+        if (withStats.length === 0) return null;
+        const totalCreation = withStats.reduce((s, r) => s + (r.promptCacheStats?.creation ?? 0), 0);
+        const totalRead = withStats.reduce((s, r) => s + (r.promptCacheStats?.read ?? 0), 0);
+        // Savings = tokens that would have cost full input price but were served at 10% instead
+        const PRICE_PER_M: Record<string, number> = { "opus-4.6": 5, "sonnet-4.6": 3, "sonnet-4.5": 3 };
+        let totalSavedUsd = 0;
+        for (const r of withStats) {
+          const inPerM = PRICE_PER_M[r.model ?? ""] ?? 3;
+          totalSavedUsd += ((r.promptCacheStats?.read ?? 0) / 1_000_000) * inPerM * 0.9;
+        }
+        const fmtTok = (n: number) =>
+          n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n);
+        const cacheHitRate = totalCreation + totalRead > 0
+          ? Math.round((totalRead / (totalCreation + totalRead)) * 100)
+          : 0;
+        return (
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+              Anthropic Prompt Cache{" "}
+              <span className="font-normal normal-case">(cache_control: ephemeral · 1h TTL)</span>
+            </p>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Cache writes</p>
+                <p className="mt-0.5 text-xl font-semibold tabular-nums text-yellow-400">{fmtTok(totalCreation)}</p>
+                <p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">tokens · first call</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Cache reads</p>
+                <p className="mt-0.5 text-xl font-semibold tabular-nums text-[var(--semantic-success)]">{fmtTok(totalRead)}</p>
+                <p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">tokens · subsequent calls</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Hit rate</p>
+                <p className={`mt-0.5 text-xl font-semibold tabular-nums ${cacheHitRate >= 70 ? "text-[var(--semantic-success)]" : cacheHitRate >= 30 ? "text-yellow-400" : "text-[var(--text-primary)]"}`}>
+                  {withStats.length > 1 ? `${cacheHitRate}%` : "—"}
+                </p>
+                <p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">reads / (reads + writes)</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-tertiary)]">Est. savings</p>
+                <p className="mt-0.5 text-xl font-semibold tabular-nums text-[var(--semantic-success)]">
+                  {totalSavedUsd < 0.0001 ? "<$0.01" : `$${totalSavedUsd.toFixed(totalSavedUsd < 0.01 ? 4 : 2)}`}
+                </p>
+                <p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">90% discount on reads</p>
+              </div>
+            </div>
+            {totalRead === 0 && totalCreation > 0 && (
+              <p className="mt-3 text-[10px] text-[var(--text-tertiary)]">
+                Cache was written on the first call but not yet read. Run more apps — subsequent calls will hit the cache and show savings here.
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
       {isM6 && completed.some((r) => r.integrationChecks != null) && (
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-secondary)] p-4">
           <button
@@ -2966,6 +3027,17 @@ export default function TestSuitePage() {
             console.warn(`M6 Summary NOT captured for ${idea.title} (summary empty or parse failed)`);
           }
         }
+        // Extract Anthropic prompt cache stats from the generation response
+        const rawGenUsage = (done as { assistantMessage?: { usage?: { cache_creation_input_tokens?: number; cache_read_input_tokens?: number; input_tokens?: number; output_tokens?: number } } }).assistantMessage?.usage;
+        const promptCacheStats = rawGenUsage
+          ? {
+              creation: rawGenUsage.cache_creation_input_tokens ?? 0,
+              read: rawGenUsage.cache_read_input_tokens ?? 0,
+              input: rawGenUsage.input_tokens ?? 0,
+              output: rawGenUsage.output_tokens ?? 0,
+            }
+          : undefined;
+
         const filesFromDone = (done as { projectFiles?: Array<{ path: string; content: string }> }).projectFiles;
         if (Array.isArray(filesFromDone) && filesFromDone.length > 0) projectFiles = filesFromDone;
         if (!projectFiles?.length) {
@@ -3173,6 +3245,7 @@ export default function TestSuitePage() {
           ...(builtFiles?.length ? { projectFiles: builtFiles } : {}),
           ...(generationSummary != null ? { generationSummary } : {}),
           ...(integrationChecks != null ? { integrationChecks } : {}),
+          ...(promptCacheStats != null ? { promptCacheStats } : {}),
         };
 
         updateResult(index, finalResult);
