@@ -33,6 +33,7 @@ import {
   ClipboardPaste,
   X,
   Upload,
+  Database,
 } from "lucide-react";
 import { Button, DropdownSelect } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
@@ -95,6 +96,8 @@ type TestResult = {
   };
   /** Pasted Xcode runtime logs for this app (Paste Logs modal). */
   runtimeLogs?: string;
+  /** True when this result was served from the 1-hour in-memory build cache. */
+  cached?: boolean;
   /** Claude vision automated test report (Auto Test). */
   visionTestReport?: {
     projectId: string;
@@ -124,6 +127,15 @@ function parsePrompts(text: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+}
+
+/** djb2-style hash — matches hashString() in src/lib/proxyCache.ts. Used to compute build cache keys client-side. */
+function hashPrompt(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h) ^ s.charCodeAt(i);
+  }
+  return (h >>> 0).toString(36);
 }
 
 function isScreenshotMostlyBlank(base64: string): Promise<boolean> {
@@ -1288,6 +1300,12 @@ function ResultRow({
           ) : (
             <StatusBadge status={result.status} />
           )}
+          {result.cached && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/15 px-2.5 py-1 text-xs font-medium text-violet-400">
+              <Database className="h-3 w-3" aria-hidden />
+              cached
+            </span>
+          )}
           <div className="min-w-[260px] flex-1">
             <p className="text-sm font-medium text-[var(--text-primary)] truncate" title={result.idea.title}>
               {result.idea.title}
@@ -2417,6 +2435,9 @@ export default function TestSuitePage() {
   });
   const maxFixesRef = useRef(maxFixes);
   maxFixesRef.current = maxFixes;
+  const [skipCache, setSkipCache] = useState(false);
+  const skipCacheRef = useRef(false);
+  skipCacheRef.current = skipCache;
   useEffect(() => {
     autoVisionEnabledRef.current = autoVisionEnabled;
   }, [autoVisionEnabled]);
@@ -2790,6 +2811,67 @@ export default function TestSuitePage() {
       }
       const t0 = Date.now();
 
+      // --- BUILD CACHE CHECK (admin test suite only) ---
+      if (!skipCacheRef.current) {
+        try {
+          const promptHash = hashPrompt(idea.prompt.trim().toLowerCase());
+          const cacheRes = await fetch(`/api/admin/build-cache?promptHash=${promptHash}`, {
+            credentials: "include",
+          });
+          if (cacheRes.ok) {
+            const cacheJson = (await cacheRes.json()) as {
+              cached: {
+                result: {
+                  compiled: boolean; attempts: number; compilerErrors: string[];
+                  fileCount: number; fileNames: string[]; durationMs: number;
+                  skillsUsed: string[]; projectId: string; projectName: string;
+                  prompt: string; tier: string; category: string; autoFixUsed: boolean;
+                };
+                projectFiles: Record<string, string>;
+              } | null;
+            };
+            if (cacheJson.cached) {
+              const { result: cr, projectFiles: cachedFilesMap } = cacheJson.cached;
+              const cachedFileArr = Object.entries(cachedFilesMap).map(([path, content]) => ({ path, content }));
+              const durationMs = Date.now() - t0;
+
+              let buildResultId: string | undefined;
+              try {
+                const brRes = await fetch("/api/build-results", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ ...cr, durationMs }),
+                });
+                if (brRes.ok) {
+                  const brJson = await brRes.json();
+                  buildResultId = brJson.result?.id;
+                }
+              } catch {}
+
+              const cachedResult: Partial<TestResult> = {
+                status: cr.compiled ? "succeeded" : "failed",
+                compiled: cr.compiled,
+                attempts: cr.attempts,
+                compilerErrors: cr.compilerErrors,
+                fileCount: cr.fileCount,
+                durationMs,
+                model: config.model,
+                buildResultId,
+                cached: true,
+                projectFiles: cachedFileArr,
+                liveStatus: undefined,
+                startedAt: undefined,
+              };
+              updateResult(index, cachedResult);
+              pushLiveEvent(index, "Loaded from cache.");
+              return { idea, ...cachedResult } as TestResult;
+            }
+          }
+        } catch {
+          // Cache check failure is non-fatal — fall through to normal pipeline
+        }
+      }
+
       try {
         if (getAbort()) throw new Error(ABORTED_MSG);
         const entryStart = Date.now();
@@ -3026,6 +3108,38 @@ export default function TestSuitePage() {
             const brJson = await brRes.json();
             buildResultId = brJson.result?.id;
           }
+        } catch {}
+
+        // --- WRITE TO BUILD CACHE (admin test suite only) ---
+        try {
+          const cacheFilesRecord: Record<string, string> = {};
+          for (const f of (builtFiles ?? projectFiles)) {
+            cacheFilesRecord[f.path] = f.content;
+          }
+          fetch("/api/admin/build-cache", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              prompt: idea.prompt,
+              result: {
+                projectId,
+                projectName: idea.title,
+                prompt: idea.prompt,
+                tier: idea.tier,
+                category: idea.category,
+                compiled,
+                attempts,
+                autoFixUsed: attempts > 1,
+                compilerErrors,
+                fileCount,
+                fileNames: projectFiles.map((f) => f.path),
+                durationMs,
+                skillsUsed: Array.isArray(done?.skillIds) ? done.skillIds : [],
+              },
+              projectFiles: cacheFilesRecord,
+            }),
+          }).catch(() => { /* ignore cache write failures */ });
         } catch {}
 
         if (compiled && builtFiles?.length && projectId) {
@@ -4333,6 +4447,29 @@ Please:
                   />
                   Auto Vision
                 </label>
+                <label className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--text-secondary)]" title="Force fresh Claude + Xcode build even when a cached result exists">
+                  <input
+                    type="checkbox"
+                    checked={skipCache}
+                    onChange={(e) => setSkipCache(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-[var(--border-default)] bg-[var(--input-bg)] text-[var(--button-primary-bg)] focus:ring-[var(--button-primary-bg)]/50"
+                    aria-label="Skip Cache: always run full Claude + Xcode pipeline, ignoring cached results"
+                  />
+                  Skip Cache
+                </label>
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      await fetch("/api/admin/build-cache", { method: "DELETE", credentials: "include" });
+                    } catch {}
+                  }}
+                  className="gap-2"
+                  title="Clear all in-memory build cache entries (next run will do fresh Claude + Xcode builds)"
+                >
+                  <Database className="h-4 w-4" aria-hidden />
+                  Clear Cache
+                </Button>
                 <span className="text-xs text-[var(--text-tertiary)]">Tap mode:</span>
                 <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-tertiary)]/50 p-0.5">
                   <button
