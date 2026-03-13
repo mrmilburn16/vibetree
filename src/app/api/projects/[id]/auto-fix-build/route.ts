@@ -18,6 +18,13 @@ type SwiftFile = { path: string; content: string };
 
 const FIX_MODEL = "claude-sonnet-4-5-20250929";
 const FIX_MAX_TOKENS = 32000;
+
+const FIX_CACHE_CONTROL: { type: "ephemeral"; ttl?: "1h" } | undefined =
+  process.env.CACHE_TTL === "off"
+    ? undefined
+    : process.env.CACHE_TTL === "5m"
+      ? { type: "ephemeral" }
+      : { type: "ephemeral", ttl: "1h" };
 /** Timeout for the auto-fix Claude API call so a hung request eventually fails and we can move on. */
 const AUTO_FIX_CLAUDE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 /** Max retries per attempt when Anthropic returns 529 overloaded_error. */
@@ -221,6 +228,13 @@ Rules:
 
 Output: JSON { "explanation": "what you fixed", "files": [{ "path": "...", "content": "..." }] }`;
 
+// The auto-fix system prompt is constant across all calls; variable content
+// (compiler errors, file contents) is in the user message. Cache the system
+// prompt so repeat attempts within the same build session are cheap.
+const AUTO_FIX_SYSTEM_BLOCKS: Array<{ type: "text"; text: string; cache_control?: typeof FIX_CACHE_CONTROL }> = [
+  { type: "text", text: AUTO_FIX_SYSTEM_PROMPT, ...(FIX_CACHE_CONTROL && { cache_control: FIX_CACHE_CONTROL }) },
+];
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -358,7 +372,7 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       const stream = client.messages.stream({
         model: FIX_MODEL,
         max_tokens: FIX_MAX_TOKENS,
-        system: AUTO_FIX_SYSTEM_PROMPT,
+        system: AUTO_FIX_SYSTEM_BLOCKS as Parameters<typeof client.messages.stream>[0]["system"],
         output_config: { format: jsonSchemaOutputFormat(FIX_SCHEMA) },
         messages: [{ role: "user", content: userPrompt }],
       });
