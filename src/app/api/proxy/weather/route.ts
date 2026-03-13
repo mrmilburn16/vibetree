@@ -18,9 +18,13 @@ import {
 
 const WEATHER_CACHE_TTL_SECONDS = 600; // 10 minutes
 const weatherCache = createProxyCache({ ttlSeconds: WEATHER_CACHE_TTL_SECONDS });
+// Geocoding results are cached with the same TTL so a weather-cache miss doesn't
+// trigger a redundant reverse-geocode call for coordinates fetched recently.
+const geoCache = createProxyCache({ ttlSeconds: WEATHER_CACHE_TTL_SECONDS });
 
 const OPENWEATHER_WEATHER = "https://api.openweathermap.org/data/2.5/weather";
 const OPENWEATHER_FORECAST = "https://api.openweathermap.org/data/2.5/forecast";
+const OPENWEATHER_GEO_REVERSE = "http://api.openweathermap.org/geo/1.0/reverse";
 /** In-memory limit for app-token-only requests (no userId for Firestore). */
 const RATE_LIMIT_MAX_APP_TOKEN = 100;
 
@@ -160,15 +164,31 @@ export async function GET(request: Request) {
     type === "forecast" ? OPENWEATHER_FORECAST : OPENWEATHER_WEATHER;
   // Imperial = Fahrenheit and mph so the app doesn't need to convert from Kelvin.
   const units = "&units=imperial";
-  let url: string;
+  let weatherUrl: string;
   if (hasCity) {
-    url = `${base}?q=${encodeURIComponent(city)}&appid=${apiKey}${units}`;
+    weatherUrl = `${base}?q=${encodeURIComponent(city)}&appid=${apiKey}${units}`;
   } else {
-    url = `${base}?lat=${lat}&lon=${lon}&appid=${apiKey}${units}`;
+    weatherUrl = `${base}?lat=${lat}&lon=${lon}&appid=${apiKey}${units}`;
   }
 
+  // For lat/lon requests, resolve a city name from the reverse geocoding API.
+  // City-name searches already carry an explicit name; no need to geocode those.
+  const geoCacheKey = hasLatLon ? `geo:${lat},${lon}` : null;
+  const cachedGeoName: string | null = geoCacheKey
+    ? ((geoCache.get(geoCacheKey) as { name?: string } | null)?.name ?? null)
+    : null;
+  const geoFetchUrl =
+    hasLatLon && cachedGeoName === null
+      ? `${OPENWEATHER_GEO_REVERSE}?lat=${lat}&lon=${lon}&limit=1&appid=${apiKey}`
+      : null;
+
   try {
-    const res = await fetch(url);
+    // Fetch weather and (if needed) geocoding in parallel.
+    const [res, geoRes] = await Promise.all([
+      fetch(weatherUrl),
+      geoFetchUrl ? fetch(geoFetchUrl) : Promise.resolve(null),
+    ]);
+
     const data = await res.json().catch(() => ({}));
 
     if (debug) {
@@ -185,10 +205,40 @@ export async function GET(request: Request) {
       );
     }
 
-    if (!debug) {
-      weatherCache.set(cacheKey, data);
-      console.log("[proxy/weather] cache MISS → stored", { key: cacheKey });
+    // Resolve the best city name: prefer reverse geocoding over OWM's own field.
+    let resolvedCityName: string | null = cachedGeoName;
+    if (geoRes && geoCacheKey) {
+      try {
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          const geoName: string | undefined = Array.isArray(geoData) && geoData.length > 0
+            ? geoData[0]?.name
+            : undefined;
+          if (geoName) {
+            resolvedCityName = geoName;
+            geoCache.set(geoCacheKey, { name: geoName });
+            console.log("[proxy/weather] geo resolved", { lat, lon, name: geoName });
+          }
+        }
+      } catch {
+        // Non-fatal: fall back to OWM's own name field.
+      }
     }
+
+    // Patch the response with the resolved city name.
+    if (resolvedCityName) {
+      if (type === "forecast" && data && typeof data === "object" && data.city) {
+        (data as Record<string, unknown>).city = {
+          ...(data.city as object),
+          name: resolvedCityName,
+        };
+      } else if (data && typeof data === "object") {
+        (data as Record<string, unknown>).name = resolvedCityName;
+      }
+    }
+
+    weatherCache.set(cacheKey, data);
+    console.log("[proxy/weather] cache MISS → stored", { key: cacheKey });
     if (!auth.userId) incrementCountInMemory(auth.rateLimitKey);
     return NextResponse.json(data, {
       headers: { "X-Cache": "MISS" },
