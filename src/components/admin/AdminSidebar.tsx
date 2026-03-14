@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -15,11 +15,13 @@ import {
   Menu,
   X,
   DollarSign,
+  ShieldAlert,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/admin/moderation", label: "Moderation Queue", icon: ShieldAlert, badgeKey: "moderation" },
   { href: "/admin/test-suite", label: "Test Suite", icon: FlaskConical },
   { href: "/admin/skills", label: "Skills", icon: Zap },
   { href: "/admin/builds", label: "Builds", icon: Hammer },
@@ -32,6 +34,30 @@ const NAV_ITEMS = [
 export function AdminSidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [moderationCount, setModerationCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCount = async () => {
+      try {
+        const res = await fetch("/api/admin/moderation/count");
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setModerationCount(data.count ?? 0);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const badges: Record<string, number> = { moderation: moderationCount };
 
   const navContent = (
     <nav className="flex flex-col gap-1 px-3 py-4">
@@ -40,6 +66,7 @@ export function AdminSidebar() {
       </p>
       {NAV_ITEMS.map((item) => {
         const active = pathname === item.href || (item.href !== "/admin/dashboard" && pathname.startsWith(item.href));
+        const badge = item.badgeKey ? (badges[item.badgeKey] ?? 0) : 0;
         return (
           <Link
             key={item.href}
@@ -52,7 +79,12 @@ export function AdminSidebar() {
             }`}
           >
             <item.icon className="h-4 w-4 shrink-0" aria-hidden />
-            {item.label}
+            <span className="flex-1">{item.label}</span>
+            {badge > 0 && (
+              <span className="ml-auto rounded-full bg-[var(--badge-error)] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                {badge}
+              </span>
+            )}
           </Link>
         );
       })}

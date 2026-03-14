@@ -16,6 +16,8 @@ export interface ProjectDoc {
   userId: string;
   /** Appetize public key (persisted); set by Mac runner after successful upload. */
   appetizePublicKey?: string | null;
+  /** Set to true by admin moderation when a project violates content policy. */
+  disabled?: boolean;
 }
 
 const COLLECTION = "projects";
@@ -40,15 +42,16 @@ export async function getProjectFromFirestore(id: string, userId?: string): Prom
     if (userId != null && docUserId !== userId) return null;
     const appetizePublicKey = data.appetizePublicKey;
     return {
-      id: (data.id as string) || snap.id,
-      name: (data.name as string) || "Untitled app",
-      bundleId: (data.bundleId as string) || "",
-      projectType: (data.projectType === "standard" ? "standard" : "pro") as "standard" | "pro",
-      createdAt: typeof data.createdAt === "number" ? data.createdAt : Date.now(),
-      updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : Date.now(),
-      userId: docUserId,
-      appetizePublicKey: typeof appetizePublicKey === "string" && appetizePublicKey.length > 0 ? appetizePublicKey : undefined,
-    };
+        id: (data.id as string) || snap.id,
+        name: (data.name as string) || "Untitled app",
+        bundleId: (data.bundleId as string) || "",
+        projectType: (data.projectType === "standard" ? "standard" : "pro") as "standard" | "pro",
+        createdAt: typeof data.createdAt === "number" ? data.createdAt : Date.now(),
+        updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : Date.now(),
+        userId: docUserId,
+        appetizePublicKey: typeof appetizePublicKey === "string" && appetizePublicKey.length > 0 ? appetizePublicKey : undefined,
+        disabled: data.disabled === true,
+      };
   } catch {
     return null;
   }

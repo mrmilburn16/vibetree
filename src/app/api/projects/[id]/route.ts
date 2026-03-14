@@ -29,6 +29,7 @@ export async function GET(
   return NextResponse.json({
     ...project,
     projectType: project.projectType ?? "pro",
+    disabled: project.disabled ?? false,
     fileCount: filePaths.length,
     filePaths,
   });

@@ -33,5 +33,11 @@ export async function requireProjectAuth(
     }
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
+  if (project.disabled) {
+    return NextResponse.json(
+      { error: "Project disabled", disabled: true },
+      { status: 403 }
+    );
+  }
   return { user, project };
 }
