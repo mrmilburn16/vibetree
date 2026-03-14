@@ -11,6 +11,9 @@ import { NextResponse } from "next/server";
 import * as jwt from "jsonwebtoken";
 import { getClientIp } from "@/lib/adminAuth";
 import { createProxyCache } from "@/lib/proxyCache";
+import { logProxyCall } from "@/lib/proxyCallLog";
+import { isProxyOwner } from "@/lib/proxyOwnerBypass";
+import { checkAndConsumeFreeTier } from "@/lib/proxyFreeTier";
 
 const PLACES_CACHE_TTL_SECONDS = 3600; // 1 hour
 const placesCache = createProxyCache({ ttlSeconds: PLACES_CACHE_TTL_SECONDS });
@@ -137,6 +140,8 @@ export async function GET(request: Request) {
   const searchTerm = (
     searchParams.get("query") ?? searchParams.get("category") ?? ""
   ).trim();
+  // Optional userId — generated apps append &userId=kUserId to enable per-user Firestore tracking.
+  const userId = (searchParams.get("userId") ?? "").trim();
 
   const lat = latParam != null ? Number(latParam) : NaN;
   const lng = lngParam != null ? Number(lngParam) : NaN;
@@ -161,9 +166,28 @@ export async function GET(request: Request) {
   if (cached != null) {
     console.log("[proxy/places] cache HIT", { key: cacheKey });
     recordRequest(ipKey);
+    logProxyCall({ endpoint: "places", userId, actualCostUsd: 0, chargedCredits: 0, meta: { cacheHit: true } }).catch(() => {});
     return NextResponse.json(cached, {
       headers: { "X-Cache": "HIT" },
     });
+  }
+
+  // Per-user free tier check (only when userId is provided by the generated app).
+  let freeTier: Awaited<ReturnType<typeof checkAndConsumeFreeTier>> | null = null;
+  if (userId) {
+    const ownerBypass = isProxyOwner(userId);
+    freeTier = await checkAndConsumeFreeTier(userId, "places", "apple-mapkit", ownerBypass);
+    if (!freeTier.isFree) {
+      // Places is free to us (Apple MapKit free tier), so we hard-cap rather than bill credits.
+      return NextResponse.json(
+        {
+          error: "daily_limit_reached",
+          limit: freeTier.limitToday,
+          resetsAt: "midnight UTC",
+        },
+        { status: 429 }
+      );
+    }
   }
 
   try {
@@ -209,8 +233,28 @@ export async function GET(request: Request) {
 
     const responseBody = { results: places };
     placesCache.set(cacheKey, responseBody);
-    console.log("[proxy/places] cache MISS → stored", { key: cacheKey });
+    if (freeTier) {
+      console.log(
+        `[proxy/places] FREE (${freeTier.usedToday}/${freeTier.limitToday} used today)`,
+        { key: cacheKey, resultCount: places.length }
+      );
+    } else {
+      console.log("[proxy/places] cache MISS → stored (no userId, IP-limited)", { key: cacheKey });
+    }
     recordRequest(ipKey);
+    logProxyCall({
+      endpoint: "places",
+      userId,
+      actualCostUsd: 0,
+      chargedCredits: 0,
+      meta: {
+        cacheHit: false,
+        resultCount: places.length,
+        freeTier: freeTier?.isFree ?? null,
+        freeTierUsed: freeTier?.usedToday ?? null,
+        freeTierLimit: freeTier?.limitToday ?? null,
+      },
+    }).catch(() => {});
     return NextResponse.json(responseBody, {
       headers: { "X-Cache": "MISS" },
     });

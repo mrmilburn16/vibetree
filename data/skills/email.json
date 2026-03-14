@@ -1,0 +1,65 @@
+{
+  "id": "email",
+  "name": "Email via Resend Proxy",
+  "frameworks": [],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "email",
+      "send email",
+      "send an email",
+      "email confirmation",
+      "confirmation email",
+      "RSVP",
+      "rsvp confirmation",
+      "email notification",
+      "welcome email",
+      "receipt email",
+      "booking confirmation",
+      "appointment confirmation",
+      "invite",
+      "invitation email",
+      "thank you email",
+      "email alert",
+      "notify by email",
+      "contact form",
+      "email form",
+      "mail",
+      "send mail",
+      "email reminder",
+      "newsletter",
+      "transactional email"
+    ],
+    "excludeKeywords": []
+  },
+  "triggers": [
+    "email",
+    "send email",
+    "confirmation email",
+    "RSVP",
+    "email notification",
+    "booking confirmation",
+    "appointment confirmation",
+    "invite",
+    "email reminder",
+    "contact form"
+  ],
+  "promptInjection": "CAPABILITY: Email Sending via /api/proxy/email\n\nOVERVIEW:\n- Generated apps can send emails through the VibeTree email proxy backed by Resend.\n- Emails always send FROM apps@vibetree.app — you cannot change the from address.\n- No attachments are supported — plain text (body) or HTML (html) only.\n- Costs 0.1 credits per email. Rate limit: 50 per user per day.\n\nENDPOINT:\n  POST kApiBaseURL + \"/api/proxy/email\"\n\nREQUEST HEADERS:\n  Content-Type: application/json\n  X-App-Token: kAppToken\n\nREQUEST BODY (JSON):\n  {\n    \"to\": \"recipient@example.com\",   // Required: recipient email\n    \"subject\": \"Your RSVP Confirmed\", // Required: email subject\n    \"body\": \"Thanks for signing up!\", // Plain text content (use this OR html)\n    \"html\": \"<p>Thanks!</p>\",         // HTML content (optional, use instead of body)\n    \"userId\": kUserId                 // Required: the current user's ID for billing\n  }\n\nRESPONSE:\n  { \"success\": true, \"messageId\": \"abc123\" }   // on success\n  { \"error\": \"...\", \"required\": 0.1 }          // on insufficient credits (HTTP 402)\n  { \"error\": \"Daily email limit reached...\" }  // on rate limit (HTTP 429)\n\nSWIFT PATTERN:\n\nfunc sendConfirmationEmail(to: String, subject: String, body: String) async {\n    guard let url = URL(string: kApiBaseURL + \"/api/proxy/email\") else { return }\n    var request = URLRequest(url: url)\n    request.httpMethod = \"POST\"\n    request.setValue(\"application/json\", forHTTPHeaderField: \"Content-Type\")\n    request.setValue(kAppToken, forHTTPHeaderField: \"X-App-Token\")\n    let payload: [String: Any] = [\n        \"to\": to,\n        \"subject\": subject,\n        \"body\": body,\n        \"userId\": kUserId\n    ]\n    request.httpBody = try? JSONSerialization.data(withJSONObject: payload)\n    do {\n        let (data, response) = try await URLSession.shared.data(for: request)\n        if let http = response as? HTTPURLResponse, http.statusCode == 200 {\n            print(\"Email sent successfully\")\n        } else if let http = response as? HTTPURLResponse, http.statusCode == 402 {\n            // Show user a credits-insufficient message\n            print(\"Insufficient credits to send email\")\n        } else {\n            print(\"Email send failed:\", String(data: data, encoding: .utf8) ?? \"unknown\")\n        }\n    } catch {\n        print(\"Email request error:\", error)\n    }\n}\n\nUSE CASES:\n- RSVP / event registration confirmation: send a summary of what the user signed up for.\n- Booking confirmation: send appointment details (date, time, service).\n- Contact form submission: forward user message to the app owner's email.\n- Welcome email: greet new users after they create an account.\n- Reminder email: send a reminder before an event or deadline (trigger on a date/time action in-app).\n\nANTI-PATTERNS:\n- Do NOT attempt to set a custom from address — it is always apps@vibetree.app.\n- Do NOT include attachments or file data — plain text or HTML only.\n- Do NOT call Resend or any other email API directly — always go through /api/proxy/email.\n- Do NOT send emails without user intent or confirmation — always send in response to an explicit user action (button tap, form submit, etc.).\n- Do NOT display the raw JSON error to the user — show a friendly message like 'Could not send email. Please try again.'",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Setting a custom from address (always apps@vibetree.app)",
+    "Including attachments",
+    "Calling Resend directly instead of the proxy",
+    "Sending email without explicit user action"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 1,
+    "firstAttemptCompile": 1,
+    "compileRate": 100,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

@@ -8,5 +8,35 @@
     "affectedSkills": [],
     "active": true,
     "appliedAt": "2026-02-26T09:52:22.577Z"
+  },
+  {
+    "id": "qr_widgetkit_cross_target",
+    "tag": "widgetkit_shared_types",
+    "description": "WidgetKit cross-target type visibility and access levels",
+    "rule": "When using WidgetKit with shared data between the main app and widget extension: 1) Define ALL shared types (models, data bridges, constants like App Group identifiers) in files that are added to BOTH the main app target AND the WidgetExtension target. Never reference a type from one target that is only compiled in the other. 2) Use a consistent access level. Shared types and their properties should use the default internal access level, not public. Do not mark methods or properties as public if their parameter or return types are internal. 3) For App Group suite names, define the string as a static constant in a shared file included in both targets, not as a separate type only visible to one target.",
+    "type": "prompt_rule",
+    "affectedSkills": ["widgetkit"],
+    "active": true,
+    "appliedAt": "2026-03-13T20:00:00.000Z"
+  },
+  {
+    "id": "qr_weather_city_geocoder",
+    "tag": "weather_city_name",
+    "description": "Use CLGeocoder for city name instead of weather API name field",
+    "rule": "When displaying the user's city name in a weather app, do NOT use the name field from the /api/proxy/weather response. It can be inaccurate. Instead, use CLGeocoder().reverseGeocodeLocation() on the user's CoreLocation coordinates to get the correct city and state name for display. Use placemark.locality for the city name.",
+    "type": "prompt_rule",
+    "affectedSkills": ["weather"],
+    "active": true,
+    "appliedAt": "2026-03-13T20:00:00.000Z"
+  },
+  {
+    "id": "qr_clcoordinate_onchange",
+    "tag": "clcoordinate2d_equatable",
+    "description": "Avoid onChange(of:) with CLLocationCoordinate2D — use onReceive instead",
+    "rule": "When using .onChange(of:) in SwiftUI to observe a CLLocationCoordinate2D or CLLocationCoordinate2D? value, the code will fail to compile because CLLocationCoordinate2D does not conform to Equatable. Instead, use .onReceive on the published property (e.g. .onReceive(locationManager.$userLocation) { loc in ... }) which does not require Equatable conformance. Do NOT add a retroactive Equatable conformance to CLLocationCoordinate2D.",
+    "type": "prompt_rule",
+    "affectedSkills": ["corelocation", "mapkit"],
+    "active": true,
+    "appliedAt": "2026-03-14T04:00:00.000Z"
   }
 ]

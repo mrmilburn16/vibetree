@@ -48,9 +48,9 @@
     "NSMotionUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 8,
-    "firstAttemptCompile": 7,
-    "compileRate": 88,
+    "totalBuilds": 9,
+    "firstAttemptCompile": 8,
+    "compileRate": 89,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [],

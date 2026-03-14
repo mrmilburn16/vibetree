@@ -3,20 +3,32 @@
  * Proxies chat completion to Claude Sonnet. Used by generated apps (AI/coach/recommend features).
  * Auth: X-App-Token required. Body must include userId for credit deduction.
  * Body: { messages: [{role, content}], systemPrompt?: string, maxTokens?: number, userId: string }
- * Returns { response: string }. Deducts 0.30 credits per call; 402 if insufficient.
- * Owner bypass: if userId is in OWNER_USER_IDS or matches OWNER_USER_ID_HARDCODED, credit check and deduction are skipped.
+ * Returns { response: string }.
+ * Credits per call: read live from the API marketplace registry (proxySlug "ai") so admin
+ * price changes take effect without a redeploy.  Falls back to 0.3 if the registry is
+ * unreachable.
+ * Owner bypass: if userId is in OWNER_USER_IDS or matches OWNER_USER_ID_HARDCODED, credit
+ * check and deduction are skipped.
  */
 
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getCreditBalance, deductCredits } from "@/lib/userCreditsFirestore";
 import { isProxyOwner } from "@/lib/proxyOwnerBypass";
+import { logProxyCall } from "@/lib/proxyCallLog";
+import { getProxyCreditsPerCall } from "@/lib/proxyBillingRate";
+import { checkAndConsumeFreeTier } from "@/lib/proxyFreeTier";
 
 const DEFAULT_SYSTEM_PROMPT =
   "You are a helpful assistant. Always respond with a JSON object in this format: {\"response\": \"your message here\"}. Never respond with plain text, markdown, or code blocks outside of this JSON structure.";
-const CREDITS_PER_CALL = 0.3;
+/** Fallback rate used only if the registry/Firestore is completely unreachable. */
+const CREDITS_PER_CALL_FALLBACK = 0.3;
 const MAX_OUTPUT_TOKENS_CAP = 1000;
 const MODEL = "claude-sonnet-4-6";
+
+// Anthropic Sonnet pricing (USD per token)
+const INPUT_PRICE_PER_TOKEN = 3 / 1_000_000;
+const OUTPUT_PRICE_PER_TOKEN = 15 / 1_000_000;
 
 /** 5-minute prompt cache (ephemeral, no ttl). */
 const CACHE_CONTROL_5M = { type: "ephemeral" as const };
@@ -88,21 +100,31 @@ export async function POST(request: Request) {
   }
 
   const ownerBypass = isProxyOwner(userId);
-  if (!ownerBypass) {
-    const balance = await getCreditBalance(userId);
-    if (balance < CREDITS_PER_CALL) {
-      return NextResponse.json(
-        { error: "Insufficient credits", required: CREDITS_PER_CALL },
-        { status: 402 }
-      );
-    }
 
-    const deductResult = await deductCredits(userId, CREDITS_PER_CALL);
-    if (!deductResult.ok) {
-      return NextResponse.json(
-        { error: deductResult.error ?? "Could not deduct credits" },
-        { status: 402 }
-      );
+  // Check free tier first — if within the daily allowance, skip credit deduction.
+  const freeTier = await checkAndConsumeFreeTier(userId, "ai", "anthropic-claude", ownerBypass);
+
+  let creditsPerCall = 0;
+  if (!freeTier.isFree) {
+    // Read live billing rate from the Firestore-backed marketplace registry.
+    creditsPerCall = (await getProxyCreditsPerCall("ai")) || CREDITS_PER_CALL_FALLBACK;
+
+    if (!ownerBypass) {
+      const balance = await getCreditBalance(userId);
+      if (balance < creditsPerCall) {
+        return NextResponse.json(
+          { error: "Insufficient credits", required: creditsPerCall },
+          { status: 402 }
+        );
+      }
+
+      const deductResult = await deductCredits(userId, creditsPerCall);
+      if (!deductResult.ok) {
+        return NextResponse.json(
+          { error: deductResult.error ?? "Could not deduct credits" },
+          { status: 402 }
+        );
+      }
     }
   }
 
@@ -167,14 +189,37 @@ export async function POST(request: Request) {
 
     const inputTokens = (response.usage as { input_tokens?: number })?.input_tokens ?? 0;
     const outputTokens = (response.usage as { output_tokens?: number })?.output_tokens ?? 0;
+    const actualCostUsd =
+      inputTokens * INPUT_PRICE_PER_TOKEN + outputTokens * OUTPUT_PRICE_PER_TOKEN;
 
-    console.log("[proxy/ai] call", {
+    if (freeTier.isFree) {
+      console.log(
+        `[proxy/ai] FREE (${freeTier.usedToday}/${freeTier.limitToday} used today)`,
+        { userId, inputTokens, outputTokens, actualCostUsd }
+      );
+    } else {
+      console.log(
+        `[proxy/ai] CHARGED ${ownerBypass ? 0 : creditsPerCall} credits (free limit exceeded: ${freeTier.usedToday}/${freeTier.limitToday} used today)`,
+        { userId, inputTokens, outputTokens, actualCostUsd, ownerBypass }
+      );
+    }
+
+    // Fire-and-forget log to Firestore
+    logProxyCall({
+      endpoint: "ai",
       userId,
-      inputTokens,
-      outputTokens,
-      creditCost: ownerBypass ? 0 : CREDITS_PER_CALL,
-      ownerBypass,
-    });
+      actualCostUsd,
+      chargedCredits: freeTier.isFree || ownerBypass ? 0 : creditsPerCall,
+      meta: {
+        inputTokens,
+        outputTokens,
+        model: MODEL,
+        ownerBypass,
+        freeTier: freeTier.isFree,
+        freeTierUsed: freeTier.usedToday,
+        freeTierLimit: freeTier.limitToday,
+      },
+    }).catch(() => {});
 
     return NextResponse.json({ response: responseText });
   } catch (err) {

@@ -1,0 +1,71 @@
+{
+  "id": "image-search",
+  "name": "Image Search via Unsplash Proxy",
+  "frameworks": [],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "photos",
+      "images",
+      "stock photos",
+      "stock images",
+      "listing photos",
+      "gallery",
+      "image search",
+      "Unsplash",
+      "photo gallery",
+      "photo library",
+      "image library",
+      "background image",
+      "hero image",
+      "photo browser",
+      "image picker",
+      "search photos",
+      "find photos",
+      "property photos",
+      "product photos",
+      "travel photos",
+      "nature photos",
+      "food photos",
+      "photo wall",
+      "photo grid",
+      "cover photo",
+      "thumbnail",
+      "photo feed"
+    ],
+    "excludeKeywords": []
+  },
+  "triggers": [
+    "photos",
+    "images",
+    "stock photos",
+    "gallery",
+    "image search",
+    "Unsplash",
+    "photo gallery",
+    "listing photos",
+    "image picker",
+    "search photos",
+    "photo grid",
+    "photo feed"
+  ],
+  "promptInjection": "CAPABILITY: Image Search via /api/proxy/images (Unsplash)\n\nOVERVIEW:\n- Generated apps can search for stock photos by keyword using the VibeTree image proxy backed by Unsplash.\n- Images are hotlinked directly from Unsplash URLs — do NOT download, cache, or re-host images.\n- Always show attribution: \"Photo by [photographer] on Unsplash\" linked to photographerUrl. This is required by Unsplash terms.\n- Daily limit: 30 searches/user/day.\n\nENDPOINT:\n  GET kApiBaseURL + \"/api/proxy/images\"\n\nREQUEST HEADERS:\n  X-App-Token: kAppToken\n\nQUERY PARAMS:\n  query       (required) — search term, e.g. \"beach house\", \"coffee shop\", \"hiking trail\"\n  count       (optional, default 5, max 10) — number of photos to return\n  orientation (optional) — \"landscape\", \"portrait\", or \"squarish\"\n  userId      (required) — pass kUserId for per-user daily limit tracking\n\nRESPONSE:\n  {\n    \"results\": [\n      {\n        \"id\": \"abc123\",\n        \"url\": \"https://images.unsplash.com/...\",\n        \"thumbUrl\": \"https://images.unsplash.com/...&w=200\",\n        \"smallUrl\": \"https://images.unsplash.com/...&w=400\",\n        \"regularUrl\": \"https://images.unsplash.com/...&w=1080\",\n        \"photographer\": \"John Smith\",\n        \"photographerUrl\": \"https://unsplash.com/@johnsmith\",\n        \"downloadUrl\": \"https://api.unsplash.com/photos/abc123/download\"\n      }\n    ]\n  }\n\nURL USAGE GUIDE:\n  - thumbUrl   → thumbnails in lists/grids (fast load)\n  - smallUrl   → medium preview cards\n  - regularUrl → full-screen detail view, hero images, background fills\n  - url        → original full resolution (use sparingly — large file)\n  - For AsyncImage, use URL(string: photo.regularUrl) for most cases\n\nSWIFT PATTERN:\n\nstruct UnsplashPhoto: Codable, Identifiable {\n    let id: String\n    let url: String\n    let thumbUrl: String\n    let smallUrl: String\n    let regularUrl: String\n    let photographer: String\n    let photographerUrl: String\n    let downloadUrl: String\n}\n\nstruct ImageSearchResponse: Codable {\n    let results: [UnsplashPhoto]\n}\n\nfunc searchPhotos(query: String, count: Int = 5, orientation: String? = nil) async -> [UnsplashPhoto] {\n    var components = URLComponents(string: kApiBaseURL + \"/api/proxy/images\")!\n    components.queryItems = [\n        URLQueryItem(name: \"query\", value: query),\n        URLQueryItem(name: \"count\", value: String(count)),\n        URLQueryItem(name: \"userId\", value: kUserId)\n    ]\n    if let orientation = orientation {\n        components.queryItems?.append(URLQueryItem(name: \"orientation\", value: orientation))\n    }\n    guard let url = components.url else { return [] }\n    var request = URLRequest(url: url)\n    request.setValue(kAppToken, forHTTPHeaderField: \"X-App-Token\")\n    do {\n        let (data, _) = try await URLSession.shared.data(for: request)\n        let response = try JSONDecoder().decode(ImageSearchResponse.self, from: data)\n        return response.results\n    } catch {\n        print(\"Image search failed:\", error)\n        return []\n    }\n}\n\nATTRIBUTION (REQUIRED):\n\n// Always include this view below or overlaid on each Unsplash photo:\nstruct UnsplashAttribution: View {\n    let photo: UnsplashPhoto\n    var body: some View {\n        Link(\"Photo by \\(photo.photographer) on Unsplash\",\n             destination: URL(string: photo.photographerUrl) ?? URL(string: \"https://unsplash.com\")!)\n        .font(.caption2)\n        .foregroundColor(.secondary)\n    }\n}\n\nUSE CASES:\n- Listing/property apps: search for photos by property type (\"modern kitchen\", \"cozy bedroom\")\n- Travel apps: search by destination (\"paris\", \"hawaii beach\", \"mountain trail\")\n- Food/recipe apps: search by dish (\"pasta carbonara\", \"avocado toast\")\n- Real estate: search by feature (\"open floor plan\", \"backyard pool\")\n- Gallery/inspiration boards: let users search and save photos by theme\n- App header/hero images: search for high-quality background images by topic\n\nANTI-PATTERNS:\n- Do NOT use url or downloadUrl in AsyncImage — use thumbUrl, smallUrl, or regularUrl instead.\n- Do NOT download or re-host images — always load via AsyncImage with the hotlink URL.\n- Do NOT omit photographer attribution — it is required by Unsplash terms of service.\n- Do NOT show a broken image placeholder on error — always show a fallback color/icon.\n- Do NOT call the endpoint without userId — pass kUserId so daily limits are tracked properly.",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Downloading or re-hosting Unsplash images instead of hotlinking",
+    "Omitting photographer attribution (required by Unsplash ToS)",
+    "Using url or downloadUrl in AsyncImage instead of thumbUrl/smallUrl/regularUrl",
+    "Calling the endpoint without userId",
+    "Showing no fallback when images fail to load"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 1,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

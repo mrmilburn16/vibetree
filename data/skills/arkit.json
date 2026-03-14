@@ -57,14 +57,12 @@
     "NSCameraUsageDescription"
   ],
   "stats": {
-    "totalBuilds": 267,
-    "firstAttemptCompile": 171,
-    "compileRate": 64,
+    "totalBuilds": 288,
+    "firstAttemptCompile": 182,
+    "compileRate": 63,
     "functionalSuccesses": 2,
     "functionalRate": 1,
     "commonErrors": [
-      "Multi-line string literal content must begin on a new line",
-      "Multi-line string literal closing delimiter must begin on a new line",
       "multi-line string literal content must begin on a new line",
       "multi-line string literal closing delimiter must begin on a new line",
       "main actor-isolated property 'isPlacingMode' can not be referenced from a nonisolated context",
@@ -92,7 +90,9 @@
       "generic parameter 'Expanded' could not be inferred",
       "extraneous argument label 'hex:' in call",
       "value of type 'DraftRound' has no member 'typeColor'",
-      "the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions"
+      "the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions",
+      "cannot find 'WidgetDataBridge' in scope",
+      "type 'Any' cannot conform to 'TimelineEntry'"
     ],
     "goldenExamples": [
       {

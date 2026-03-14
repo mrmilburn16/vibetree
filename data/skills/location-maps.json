@@ -72,9 +72,9 @@
   "antiPatterns": [],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 52,
-    "firstAttemptCompile": 28,
-    "compileRate": 54,
+    "totalBuilds": 78,
+    "firstAttemptCompile": 40,
+    "compileRate": 51,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [
@@ -100,7 +100,9 @@
       "referencing instance method 'onChange(of:initial:_:)' on 'Optional' requires that 'GitHubUser' conform to 'Equatable'",
       "Expected declaration",
       "expected declaration",
-      "the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions"
+      "the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions",
+      "cannot find 'WidgetDataBridge' in scope",
+      "type 'Any' cannot conform to 'TimelineEntry'"
     ],
     "goldenExamples": []
   }

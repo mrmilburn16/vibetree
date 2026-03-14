@@ -285,13 +285,22 @@ function CompilerErrorsBlock({ errors, className = "" }: { errors: string[]; cla
 function ErrorHistoryBlock({
   errorHistory,
   className = "",
+  title,
+  defaultOpen = false,
 }: {
   errorHistory: ErrorHistoryEntry[];
   className?: string;
+  /** Override the default "Compiler Errors" heading. */
+  title?: string;
+  /** Start the section expanded. */
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const totalErrors = errorHistory.reduce((n, e) => n + e.errors.length, 0);
   if (errorHistory.length === 0 || totalErrors === 0) return null;
+  const heading = title
+    ? `${title} (${errorHistory.length} attempt${errorHistory.length !== 1 ? "s" : ""}, ${totalErrors} error${totalErrors !== 1 ? "s" : ""})`
+    : `Compiler Errors (${errorHistory.length} attempt${errorHistory.length !== 1 ? "s" : ""}, ${totalErrors} total)`;
   return (
     <div className={className}>
       <button
@@ -299,18 +308,18 @@ function ErrorHistoryBlock({
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between text-left text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
       >
-        Compiler Errors ({errorHistory.length} attempt{errorHistory.length !== 1 ? "s" : ""}, {totalErrors} total)
+        {heading}
         {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
       </button>
       {open && (
-        <div className="mt-2 space-y-3 rounded-[var(--radius-md)] border border-[var(--badge-error)]/30 bg-[var(--badge-error)]/10 p-3">
+        <div className="mt-2 space-y-4 rounded-[var(--radius-md)] border border-[var(--badge-error)]/30 bg-[var(--badge-error)]/10 p-3">
           {errorHistory.map(({ attempt, errors }) => (
             <div key={attempt}>
               <p className="mb-1.5 text-xs font-semibold text-[var(--text-primary)]">
-                Attempt {attempt} errors:
+                Attempt {attempt} — {errors.length} error{errors.length !== 1 ? "s" : ""}:
               </p>
               <pre className="whitespace-pre-wrap break-all font-mono text-xs text-[var(--text-secondary)]">
-                {errors.map((e) => `- ${e}`).join("\n")}
+                {errors.map((e) => `• ${e}`).join("\n\n")}
               </pre>
             </div>
           ))}
@@ -603,9 +612,14 @@ Based on this, should we fix the system prompt, a skill file, or both? If so, gi
         </p>
       )}
 
-      {/* Always show error history when present, including for compiled builds (so auto-fix attempts are visible). */}
+      {/* Show per-attempt compiler errors. For auto-fixed builds, label the section so it's clear
+          these are the errors that triggered the fix, not errors from the final (passing) build. */}
       {(result.errorHistory?.length ?? 0) > 0 ? (
-        <ErrorHistoryBlock errorHistory={result.errorHistory!} className="mt-3 border-t border-[var(--border-default)] pt-3" />
+        <ErrorHistoryBlock
+          errorHistory={result.errorHistory!}
+          className="mt-3 border-t border-[var(--border-default)] pt-3"
+          title={result.autoFixUsed ? "Errors before auto-fix" : undefined}
+        />
       ) : (
         <CompilerErrorsBlock errors={result.compilerErrors} className="mt-3 border-t border-[var(--border-default)] pt-3" />
       )}
