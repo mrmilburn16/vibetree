@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { setProject, type ProjectRecord } from "@/lib/projectStore";
 import { getProjectFiles, getProjectFilePaths } from "@/lib/projectFileStore";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
+import { getSubscription } from "@/lib/subscriptionFirestore";
 
 function toRecord(doc: { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number }): ProjectRecord {
   return { id: doc.id, name: doc.name, bundleId: doc.bundleId, projectType: doc.projectType, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
@@ -23,6 +24,16 @@ export async function GET(
   const auth = await requireProjectAuth(request, id);
   if (auth instanceof NextResponse) return auth;
   setProject(toRecord(auth.project));
+  // Plan check — free plan cannot export source code
+  const sub = await getSubscription(auth.user.uid);
+  const planId = sub?.planId;
+  const isPaid = planId === "starter" || planId === "builder" || planId === "pro";
+  if (!isPaid) {
+    return NextResponse.json(
+      { error: "upgrade_required", message: "Xcode export is available on paid plans." },
+      { status: 403 }
+    );
+  }
   const url = new URL(request.url);
   const projectType = url.searchParams.get("projectType") === "pro" ? "pro" : "standard";
 

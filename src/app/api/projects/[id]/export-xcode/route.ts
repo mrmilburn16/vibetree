@@ -7,6 +7,16 @@ import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
 import { getProjectFromFirestore } from "@/lib/projectsFirestore";
 import { getDevelopmentTeamId } from "@/lib/userDevelopmentTeamFirestore";
+import { getSubscription } from "@/lib/subscriptionFirestore";
+
+const UPGRADE_REQUIRED = NextResponse.json(
+  { error: "upgrade_required", message: "Xcode export is available on paid plans." },
+  { status: 403 }
+);
+
+function isPaidPlan(planId: string | null | undefined): boolean {
+  return planId === "starter" || planId === "builder" || planId === "pro";
+}
 
 function requireRunnerAuth(request: Request): { ok: true } | { ok: false; response: Response } {
   const token = process.env.MAC_RUNNER_TOKEN;
@@ -463,6 +473,9 @@ export async function POST(
     if (auth instanceof NextResponse) return auth;
     setProject(toRecord(auth.project));
     userId = auth.user.uid;
+    // Plan check — free plan cannot export Xcode projects
+    const sub = await getSubscription(userId);
+    if (!isPaidPlan(sub?.planId)) return UPGRADE_REQUIRED;
   }
   const body = await request.json().catch(() => ({}));
   const files = Array.isArray(body?.files) ? (body.files as SwiftFile[]) : [];
@@ -514,6 +527,9 @@ export async function GET(
     const auth = await requireProjectAuth(request, id);
     if (auth instanceof NextResponse) return auth;
     setProject(toRecord(auth.project));
+    // Plan check — free plan cannot export Xcode projects
+    const sub = await getSubscription(auth.user.uid);
+    if (!isPaidPlan(sub?.planId)) return UPGRADE_REQUIRED;
   }
   const url = new URL(request.url);
   const paramTeam = (url.searchParams.get("developmentTeam") ?? "").trim();

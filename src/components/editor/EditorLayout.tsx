@@ -614,6 +614,7 @@ export function EditorLayout({
         onExpoUrl={setExpoUrl}
         backgroundInstallJobIdRef={backgroundInstallJobIdRef}
         onConsumedBackgroundJob={clearBackgroundInstallJobId}
+        planId={planId}
       />
       <ShareModal
         isOpen={shareOpen}

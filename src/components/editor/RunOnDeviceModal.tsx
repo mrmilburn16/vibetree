@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Unlock, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { Unlock, Loader2, Lock } from "lucide-react";
 import { Modal, Button, QRCode, Input } from "@/components/ui";
+import type { PlanId } from "@/hooks/useSimulatorWallet";
 
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
 const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
@@ -83,6 +85,7 @@ export function RunOnDeviceModal({
   projectType: projectTypeProp,
   backgroundInstallJobIdRef,
   onConsumedBackgroundJob,
+  planId: planIdProp,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -98,11 +101,17 @@ export function RunOnDeviceModal({
   backgroundInstallJobIdRef?: React.MutableRefObject<string | null>;
   /** Called when install flow completes (success or failure) so parent can clear the background job ref. */
   onConsumedBackgroundJob?: () => void;
+  /** User's current plan ID — used to gate Xcode export for free users. */
+  planId?: PlanId;
 }) {
   const [expoUrlLocal, setExpoUrlLocal] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadLoading, setDownloadLoading] = useState(false);
+  const [exportUpgradeRequired, setExportUpgradeRequired] = useState(false);
+
+  // Derive whether the user can export based on their plan
+  const canExport = planIdProp === "starter" || planIdProp === "builder" || planIdProp === "pro";
   const [teamId, setTeamId] = useState("");
   const [preferredRunDevice, setPreferredRunDevice] = useState("");
   const [bundleIdOverride, setBundleIdOverride] = useState("");
@@ -580,6 +589,10 @@ export function RunOnDeviceModal({
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        if (res.status === 403 && data?.error === "upgrade_required") {
+          setExportUpgradeRequired(true);
+          return;
+        }
         throw new Error(data?.error ?? "Export failed");
       }
       const blob = await res.blob();
@@ -983,16 +996,38 @@ export function RunOnDeviceModal({
 
           {/* ── Fallback download link ── */}
           <div className="pt-1 text-center">
-            <button
-              type="button"
-              onClick={handleDownloadForXcode}
-              disabled={downloadLoading}
-              className="cursor-pointer text-xs text-[var(--text-tertiary)] hover:text-[var(--link-default)] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {downloadLoading
-                ? "Preparing download\u2026"
-                : "Or download Xcode project (.zip)"}
-            </button>
+            {canExport ? (
+              <button
+                type="button"
+                onClick={handleDownloadForXcode}
+                disabled={downloadLoading}
+                className="cursor-pointer text-xs text-[var(--text-tertiary)] hover:text-[var(--link-default)] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {downloadLoading
+                  ? "Preparing download\u2026"
+                  : "Or download Xcode project (.zip)"}
+              </button>
+            ) : (
+              <span
+                title="Available on paid plans."
+                className="inline-flex cursor-not-allowed items-center gap-1.5 text-xs text-[var(--text-tertiary)] opacity-60"
+              >
+                <Lock className="h-3 w-3 shrink-0" />
+                Or download Xcode project (.zip)
+                <span className="rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-[var(--button-primary-bg)]/20 text-[var(--link-default)]">
+                  Paid
+                </span>
+              </span>
+            )}
+            {exportUpgradeRequired && (
+              <p className="mt-2 text-xs text-[var(--badge-error)]">
+                Xcode export is a paid feature.{" "}
+                <Link href="/pricing" className="font-medium text-[var(--link-default)] hover:underline">
+                  Upgrade your plan
+                </Link>{" "}
+                to download your project&apos;s source code.
+              </p>
+            )}
           </div>
         </div>
       </Modal>
