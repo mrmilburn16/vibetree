@@ -16,6 +16,8 @@ export interface Plan {
   monthlyPrice: number;
   /** Prompts per month (displayed in plan). */
   promptsPerMonth: number;
+  /** Maximum number of active projects allowed. null = unlimited. */
+  maxProjects: number | null;
   /** Optional overage note (e.g. Pro: $1.00 per additional prompt). */
   overageNote?: string;
   features: PlanFeature[];
@@ -34,6 +36,7 @@ export const PLANS: Plan[] = [
     description: "Build your first app for free.",
     monthlyPrice: 0,
     promptsPerMonth: 5,
+    maxProjects: 2,
     cta: "Get started free",
     ctaVariant: "ghost",
     simulatorAddOnNote: false,
@@ -55,6 +58,7 @@ export const PLANS: Plan[] = [
     description: "Start building real iOS apps.",
     monthlyPrice: 25,
     promptsPerMonth: 25,
+    maxProjects: 10,
     cta: "Get started",
     ctaVariant: "primary",
     simulatorAddOnNote: true,
@@ -76,6 +80,7 @@ export const PLANS: Plan[] = [
     description: "For serious app builders.",
     monthlyPrice: 50,
     promptsPerMonth: 50,
+    maxProjects: 25,
     cta: "Start building",
     ctaVariant: "primary",
     highlighted: true,
@@ -98,6 +103,7 @@ export const PLANS: Plan[] = [
     description: "For power users and high volume.",
     monthlyPrice: 100,
     promptsPerMonth: 100,
+    maxProjects: null,
     overageNote: "Overages at $1.00 per additional prompt",
     cta: "Go Pro",
     ctaVariant: "primary",
@@ -120,6 +126,17 @@ export const DEFAULT_PLAN_ID = "free";
 export function getMonthlyCreditsForPlanId(planId: string): number {
   const plan = PLANS.find((p) => p.id === planId);
   return plan ? plan.promptsPerMonth : 0;
+}
+
+/**
+ * Maximum number of active projects a user on this plan can own.
+ * Returns null for unlimited (Pro), or the integer cap.
+ * Defaults to the Free cap (2) for unknown plan IDs.
+ */
+export function getProjectLimitForPlanId(planId: string | null | undefined): number | null {
+  const plan = PLANS.find((p) => p.id === planId);
+  if (!plan) return 2; // unknown plan → treat as free
+  return plan.maxProjects;
 }
 
 /** Legacy: credit usage (for reference; plans are now prompt-based). */

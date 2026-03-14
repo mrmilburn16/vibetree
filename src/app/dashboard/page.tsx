@@ -270,6 +270,7 @@ export default function DashboardPage() {
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectsFetchError, setProjectsFetchError] = useState<"session_expired" | "network" | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [limitError, setLimitError] = useState<{ limit: number; planName: string } | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
   const [attachedImage, setAttachedImage] = useState<File | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -411,6 +412,7 @@ export default function DashboardPage() {
     async (trimmed: string) => {
       localStorage.setItem(PENDING_PROMPT_KEY, trimmed);
       setCreateError(null);
+      setLimitError(null);
       try {
         const res = await fetch("/api/projects", {
           method: "POST",
@@ -419,6 +421,10 @@ export default function DashboardPage() {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
+          if (data?.error === "project_limit_reached") {
+            setLimitError({ limit: data.limit, planName: data.planName ?? "current" });
+            return;
+          }
           const msg = typeof data?.error === "string" ? data.error : "Project could not be created.";
           setCreateError(msg);
           console.warn("[dashboard] POST /api/projects failed", { status: res.status, code: data?.code, error: msg });
@@ -451,6 +457,7 @@ export default function DashboardPage() {
 
   async function handleNewApp() {
     setCreateError(null);
+    setLimitError(null);
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
@@ -459,6 +466,10 @@ export default function DashboardPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (data?.error === "project_limit_reached") {
+          setLimitError({ limit: data.limit, planName: data.planName ?? "current" });
+          return;
+        }
         const msg = typeof data?.error === "string" ? data.error : "Project could not be created.";
         setCreateError(msg);
         console.warn("[dashboard] handleNewApp: POST /api/projects failed", { status: res.status, code: data?.code, error: msg });
@@ -510,6 +521,7 @@ export default function DashboardPage() {
     if (!source) return;
     const name = `${source.name} (copy)`;
     setCreateError(null);
+    setLimitError(null);
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
@@ -518,6 +530,10 @@ export default function DashboardPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (data?.error === "project_limit_reached") {
+          setLimitError({ limit: data.limit, planName: data.planName ?? "current" });
+          return;
+        }
         const msg = typeof data?.error === "string" ? data.error : "Project could not be created.";
         setCreateError(msg);
         console.warn("[dashboard] handleDuplicate: POST /api/projects failed", { status: res.status, code: data?.code, error: msg });
@@ -708,6 +724,25 @@ export default function DashboardPage() {
             <p className="text-sm text-[var(--text-primary)]">
               Session expired. Redirecting to sign in…
             </p>
+          </div>
+        )}
+
+        {limitError && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 py-3">
+            <p className="text-sm text-[var(--text-primary)]">
+              You&apos;ve reached the {limitError.limit}-app limit on your{" "}
+              <span className="font-semibold">{limitError.planName}</span> plan.{" "}
+              <Link href="/pricing" className="font-medium text-[var(--link-default)] hover:underline">
+                Upgrade to create more apps
+              </Link>
+            </p>
+            <button
+              type="button"
+              onClick={() => setLimitError(null)}
+              className="shrink-0 text-sm font-medium text-[var(--link-default)] hover:underline"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 

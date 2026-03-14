@@ -142,6 +142,31 @@ export async function updateProjectInFirestore(
   }
 }
 
+/**
+ * Count how many active (non-disabled) projects a user owns in Firestore.
+ * Used to enforce per-plan project limits before creating a new project.
+ */
+export async function countActiveProjectsFromFirestore(userId: string): Promise<number> {
+  const db = getDb();
+  if (!db) return 0; // can't read → fail open (let the write proceed; Firestore will catch real issues)
+  try {
+    const snap = await db
+      .collection(COLLECTION)
+      .where("userId", "==", userId)
+      .where("disabled", "!=", true)
+      .get();
+    return snap.size;
+  } catch {
+    // Firestore query errors (e.g. missing index) fall back to a full scan
+    try {
+      const snap = await db.collection(COLLECTION).where("userId", "==", userId).get();
+      return snap.docs.filter((d) => d.data().disabled !== true).length;
+    } catch {
+      return 0; // fail open — let the write proceed
+    }
+  }
+}
+
 export async function deleteProjectFromFirestore(id: string, userId?: string): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
