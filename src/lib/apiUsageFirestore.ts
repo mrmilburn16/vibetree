@@ -24,7 +24,9 @@ export function getTodayDateKey(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
-/** Get current day's usage count for a user and API. */
+/** Get current day's usage count for a user and API.
+ *  Returns 999999 on Firestore error so free-tier checks fail closed
+ *  (a Firestore outage denies free access rather than granting unlimited calls). */
 export async function getDailyUsage(
   userId: string,
   dateKey: string,
@@ -39,7 +41,9 @@ export async function getDailyUsage(
     const val = snap.data()?.[apiId];
     return typeof val === "number" && Number.isInteger(val) && val >= 0 ? val : 0;
   } catch {
-    return 0;
+    // Fail closed: treat any Firestore error as "limit exceeded" so an outage
+    // denies free tier rather than granting unlimited calls.
+    return 999999;
   }
 }
 

@@ -14,7 +14,7 @@ const DEFAULT_API_PREFERENCES: Record<string, boolean> = {
 
 type PublicApiEntry = {
   id: string;
-  proxySlug: string;
+  proxySlug?: string | null;
   name: string;
   category: string;
   userPricePerCallUsd: number | null;
@@ -75,7 +75,7 @@ function EnableApiModal({
 
   const isNoteOnly = entry.userPricePerCallUsd === null && entry.costPerCallUsd === null;
   const costText = isNoteOnly
-    ? entry.note ?? "Contact us"
+    ? "No usage fees"
     : `$${Number(entry.userPricePerCallUsd).toFixed(3)} / call`;
   const callExample = CALL_EXAMPLES[entry.id] ?? DEFAULT_CALL_EXAMPLE;
 
@@ -340,7 +340,7 @@ function ApiCard({
   const pricingText = isFree
     ? "Free"
     : isNoteOnly
-    ? entry.note ?? "Contact us"
+    ? "No usage fees"
     : entry.userPricePerCallUsd != null
     ? `$${entry.userPricePerCallUsd.toFixed(3)} / call`
     : null;
@@ -515,49 +515,83 @@ export default function PricingApisPage() {
         </section>
 
         <section className="border-b border-[var(--border-default)] px-4 py-12 sm:px-6 sm:py-16">
-          <div className="mx-auto max-w-4xl">
-            <h2 className="text-heading-section mb-2">Supported APIs</h2>
-            <p className="text-body-muted mb-6">
-              These APIs are available to your generated apps. Usage is deducted from your credit balance automatically.
-            </p>
-
+          <div className="mx-auto max-w-4xl space-y-14">
             {loading ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {[1, 2, 3].map((i) => (
-                  <Card key={i} className="h-36 animate-pulse bg-[var(--background-tertiary)]">
-                    <span className="sr-only">Loading</span>
-                  </Card>
-                ))}
+              <div>
+                <div className="mb-6 h-10 w-48 animate-pulse rounded bg-[var(--background-tertiary)]" />
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {[1, 2, 3].map((i) => (
+                    <Card key={i} className="h-36 animate-pulse bg-[var(--background-tertiary)]">
+                      <span className="sr-only">Loading</span>
+                    </Card>
+                  ))}
+                </div>
               </div>
             ) : entries.length === 0 ? (
               <p className="text-body-muted">No APIs are currently listed. Check back later.</p>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {entries.map((entry) => (
-                  <ApiCard
-                    key={entry.id}
-                    entry={entry}
-                    enabled={preferences[entry.id] ?? DEFAULT_API_PREFERENCES[entry.id] ?? false}
-                    onToggle={() => handleToggle(entry.id)}
-                    saving={!!saving[entry.id]}
-                  />
-                ))}
-              </div>
-            )}
-
-            <div className="mt-8 rounded-lg border border-[var(--border-default)] bg-[var(--background-secondary)] px-4 py-3">
-              <p className="text-sm text-[var(--text-secondary)]">
-                <strong className="text-[var(--text-primary)]">Most APIs work instantly with no setup</strong>{" "}
-                — usage is deducted from your credits automatically. Some integrations like Stripe and RevenueCat require connecting your own account.
-              </p>
-            </div>
+            ) : (() => {
+              const isNoteOnly = (e: PublicApiEntry) =>
+                e.userPricePerCallUsd === null && e.costPerCallUsd === null;
+              const readyToUse = entries
+                .filter((e) => !!e.proxySlug && !isNoteOnly(e))
+                .sort((a, b) => {
+                  const aFree = a.userPricePerCallUsd === 0;
+                  const bFree = b.userPricePerCallUsd === 0;
+                  if (aFree && !bFree) return -1;
+                  if (!aFree && bFree) return 1;
+                  return (a.userPricePerCallUsd ?? Infinity) - (b.userPricePerCallUsd ?? Infinity);
+                });
+              const advanced = entries.filter((e) => !e.proxySlug || isNoteOnly(e));
+              return (
+                <>
+                  {readyToUse.length > 0 && (
+                    <div>
+                      <h2 className="text-heading-section mb-1">Ready to Use</h2>
+                      <p className="text-body-muted mb-6">
+                        No setup needed — these APIs work instantly in your generated apps. Usage is deducted from your credit balance.
+                      </p>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {readyToUse.map((entry) => (
+                          <ApiCard
+                            key={entry.id}
+                            entry={entry}
+                            enabled={preferences[entry.id] ?? DEFAULT_API_PREFERENCES[entry.id] ?? false}
+                            onToggle={() => handleToggle(entry.id)}
+                            saving={!!saving[entry.id]}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {advanced.length > 0 && (
+                    <div>
+                      <h2 className="text-heading-section mb-1">Advanced Integrations</h2>
+                      <p className="text-body-muted mb-6">
+                        Connect your own account for payments, subscriptions, and more.
+                      </p>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {advanced.map((entry) => (
+                          <ApiCard
+                            key={entry.id}
+                            entry={entry}
+                            enabled={preferences[entry.id] ?? DEFAULT_API_PREFERENCES[entry.id] ?? false}
+                            onToggle={() => handleToggle(entry.id)}
+                            saving={!!saving[entry.id]}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </section>
 
         <section className="px-4 py-12 sm:px-6 sm:py-16">
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-body-muted mb-4">
-              Need an API that's not listed? We're adding more over time.
+              Need an API that&apos;s not listed? We&apos;re adding more over time.
             </p>
             <Link
               href="/pricing"

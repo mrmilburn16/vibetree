@@ -3,18 +3,14 @@
  * Proxies OpenWeatherMap current weather or forecast.
  * Auth: valid user session (cookie/Bearer) OR X-App-Token header matching VIBETREE_APP_TOKEN.
  * Query params: lat & lon (current location) OR city (city search); type = "current" | "forecast"; debug = true to return raw OpenWeather API response (dev only).
- * Rate limit: per-user daily limit (Firestore) when session present; 100/day in-memory for app-token-only. Returns 429 if exceeded.
+ * Rate limit: per-user daily limit from Firestore-merged registry (checkAndConsumeFreeTier) when session present; 100/day in-memory for app-token-only. Returns 429 if exceeded.
  */
 
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createProxyCache } from "@/lib/proxyCache";
-import { getApiMarketplaceEntryBySlug } from "@/lib/apiMarketplace";
-import {
-  getDailyUsage,
-  incrementDailyUsage,
-  getTodayDateKey,
-} from "@/lib/apiUsageFirestore";
+import { checkAndConsumeFreeTier } from "@/lib/proxyFreeTier";
+import { isProxyOwner } from "@/lib/proxyOwnerBypass";
 
 const WEATHER_CACHE_TTL_SECONDS = 600; // 10 minutes
 const weatherCache = createProxyCache({ ttlSeconds: WEATHER_CACHE_TTL_SECONDS });
@@ -96,24 +92,23 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const marketplaceEntry = getApiMarketplaceEntryBySlug("weather");
-  const dailyFreeLimit = marketplaceEntry?.dailyFreeLimit;
-  const dateKey = getTodayDateKey();
-
-  if (auth.userId != null && typeof dailyFreeLimit === "number") {
-    const count = await getDailyUsage(auth.userId, dateKey, WEATHER_API_ID);
-    if (count >= dailyFreeLimit) {
+  if (auth.userId != null) {
+    // Session user: use checkAndConsumeFreeTier so the limit is read from the
+    // Firestore-merged registry (admin edits apply instantly, no restart needed).
+    const ownerBypass = isProxyOwner(auth.userId);
+    const freeTier = await checkAndConsumeFreeTier(auth.userId, "weather", WEATHER_API_ID, ownerBypass);
+    if (!freeTier.isFree) {
       return NextResponse.json(
         {
           error: "daily_limit_reached",
-          limit: dailyFreeLimit,
+          limit: freeTier.limitToday,
           resetsAt: "midnight UTC",
         },
         { status: 429 }
       );
     }
-    await incrementDailyUsage(auth.userId, dateKey, WEATHER_API_ID);
   } else {
+    // App-token-only path (no session user): fall back to in-memory rate limit.
     if (getCountInMemory(auth.rateLimitKey) >= RATE_LIMIT_MAX_APP_TOKEN) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 100 weather requests per day." },

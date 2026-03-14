@@ -126,6 +126,10 @@ export async function GET(request: Request) {
     );
   }
 
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized: userId is required." }, { status: 401 });
+  }
+
   const validOrientations = ["landscape", "portrait", "squarish"];
   const orientationParam =
     orientation && validOrientations.includes(orientation) ? orientation : null;
@@ -144,21 +148,18 @@ export async function GET(request: Request) {
     return NextResponse.json(cached, { headers: { "X-Cache": "HIT" } });
   }
 
-  // Per-user daily free tier check.
-  let freeTier: Awaited<ReturnType<typeof checkAndConsumeFreeTier>> | null = null;
-  if (userId) {
-    const ownerBypass = isProxyOwner(userId);
-    freeTier = await checkAndConsumeFreeTier(userId, "images", "unsplash-images", ownerBypass);
-    if (!freeTier.isFree) {
-      return NextResponse.json(
-        {
-          error: "daily_limit_reached",
-          limit: freeTier.limitToday,
-          resetsAt: "midnight UTC",
-        },
-        { status: 429 }
-      );
-    }
+  // Per-user daily free tier check — userId is always present (401 guard above).
+  const ownerBypass = isProxyOwner(userId);
+  const freeTier = await checkAndConsumeFreeTier(userId, "images", "unsplash-images", ownerBypass);
+  if (!freeTier.isFree) {
+    return NextResponse.json(
+      {
+        error: "daily_limit_reached",
+        limit: freeTier.limitToday,
+        resetsAt: "midnight UTC",
+      },
+      { status: 429 }
+    );
   }
 
   const accessKey = process.env.UNSPLASH_ACCESS_KEY?.trim();
@@ -209,13 +210,9 @@ export async function GET(request: Request) {
     const responseBody = { results };
     imagesCache.set(cacheKey, responseBody);
 
-    if (freeTier) {
-      console.log(
-        `[proxy/images] FREE (${freeTier.usedToday}/${freeTier.limitToday} used today) query: "${query}", results: ${results.length}`
-      );
-    } else {
-      console.log(`[proxy/images] query: "${query}", results: ${results.length}`);
-    }
+    console.log(
+      `[proxy/images] FREE (${freeTier.usedToday}/${freeTier.limitToday} used today) query: "${query}", results: ${results.length}`
+    );
 
     logProxyCall({
       endpoint: "images",
@@ -227,8 +224,8 @@ export async function GET(request: Request) {
         count,
         resultCount: results.length,
         cacheHit: false,
-        freeTierUsed: freeTier?.usedToday ?? null,
-        freeTierLimit: freeTier?.limitToday ?? null,
+        freeTierUsed: freeTier.usedToday,
+        freeTierLimit: freeTier.limitToday,
       },
     }).catch(() => {});
 

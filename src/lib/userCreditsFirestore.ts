@@ -1,7 +1,9 @@
 /**
  * Server-side unified credit balance (app generation + AI proxy).
  * Collection: user_credits (doc id = userId). Field: balance (number).
- * New users get DEFAULT_CREDITS (10) on first access (lazy init on signup / first use).
+ * New users have their credit doc created eagerly by POST /api/auth/session (which runs
+ * IP-based checks and may set balance to 0). The lazy-init fallback here only triggers
+ * for accounts that pre-date that change or when the session-route Firestore write failed.
  */
 
 import { getAdminDb } from "@/lib/firebaseAdmin";
@@ -58,6 +60,9 @@ export async function deductCredits(
     const snap = await ref.get();
     let current: number;
     if (!snap.exists) {
+      // Doc missing means the session-route write failed during signup. Initialise
+      // with DEFAULT_CREDITS rather than blocking the user, but log for review.
+      console.warn("[userCredits] deduct: no credits doc for uid", userId, "— lazy-init with defaults");
       await ref.set({ balance: DEFAULT_CREDITS, updatedAt: Date.now() });
       current = DEFAULT_CREDITS;
     } else {
@@ -102,8 +107,12 @@ export async function addCredits(
     const snap = await ref.get();
     let current: number;
     if (!snap.exists) {
-      await ref.set({ balance: DEFAULT_CREDITS, updatedAt: Date.now() });
-      current = DEFAULT_CREDITS;
+      // Doc missing — session-route write may have failed. Initialise at 0 so
+      // addCredits (e.g. after a purchase) starts from a clean slate rather than
+      // silently granting DEFAULT_CREDITS on top of the purchased amount.
+      console.warn("[userCredits] add: no credits doc for uid", userId, "— lazy-init at 0");
+      await ref.set({ balance: 0, updatedAt: Date.now() });
+      current = 0;
     } else {
       const bal = snap.data()?.balance;
       current = typeof bal === "number" && bal >= 0 ? bal : 0;

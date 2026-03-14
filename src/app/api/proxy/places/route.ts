@@ -140,8 +140,11 @@ export async function GET(request: Request) {
   const searchTerm = (
     searchParams.get("query") ?? searchParams.get("category") ?? ""
   ).trim();
-  // Optional userId — generated apps append &userId=kUserId to enable per-user Firestore tracking.
+  // userId is required — all generated apps must pass &userId=kUserId.
   const userId = (searchParams.get("userId") ?? "").trim();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized: userId is required." }, { status: 401 });
+  }
 
   const lat = latParam != null ? Number(latParam) : NaN;
   const lng = lngParam != null ? Number(lngParam) : NaN;
@@ -172,22 +175,19 @@ export async function GET(request: Request) {
     });
   }
 
-  // Per-user free tier check (only when userId is provided by the generated app).
-  let freeTier: Awaited<ReturnType<typeof checkAndConsumeFreeTier>> | null = null;
-  if (userId) {
-    const ownerBypass = isProxyOwner(userId);
-    freeTier = await checkAndConsumeFreeTier(userId, "places", "apple-mapkit", ownerBypass);
-    if (!freeTier.isFree) {
-      // Places is free to us (Apple MapKit free tier), so we hard-cap rather than bill credits.
-      return NextResponse.json(
-        {
-          error: "daily_limit_reached",
-          limit: freeTier.limitToday,
-          resetsAt: "midnight UTC",
-        },
-        { status: 429 }
-      );
-    }
+  // Per-user free tier check — userId is always present (401 guard above).
+  const ownerBypass = isProxyOwner(userId);
+  const freeTier = await checkAndConsumeFreeTier(userId, "places", "apple-mapkit", ownerBypass);
+  if (!freeTier.isFree) {
+    // Places is free to us (Apple MapKit free tier), so we hard-cap rather than bill credits.
+    return NextResponse.json(
+      {
+        error: "daily_limit_reached",
+        limit: freeTier.limitToday,
+        resetsAt: "midnight UTC",
+      },
+      { status: 429 }
+    );
   }
 
   try {
@@ -233,14 +233,10 @@ export async function GET(request: Request) {
 
     const responseBody = { results: places };
     placesCache.set(cacheKey, responseBody);
-    if (freeTier) {
-      console.log(
-        `[proxy/places] FREE (${freeTier.usedToday}/${freeTier.limitToday} used today)`,
-        { key: cacheKey, resultCount: places.length }
-      );
-    } else {
-      console.log("[proxy/places] cache MISS → stored (no userId, IP-limited)", { key: cacheKey });
-    }
+    console.log(
+      `[proxy/places] FREE (${freeTier.usedToday}/${freeTier.limitToday} used today)`,
+      { key: cacheKey, resultCount: places.length }
+    );
     recordRequest(ipKey);
     logProxyCall({
       endpoint: "places",
@@ -250,9 +246,9 @@ export async function GET(request: Request) {
       meta: {
         cacheHit: false,
         resultCount: places.length,
-        freeTier: freeTier?.isFree ?? null,
-        freeTierUsed: freeTier?.usedToday ?? null,
-        freeTierLimit: freeTier?.limitToday ?? null,
+        freeTier: freeTier.isFree,
+        freeTierUsed: freeTier.usedToday,
+        freeTierLimit: freeTier.limitToday,
       },
     }).catch(() => {});
     return NextResponse.json(responseBody, {
