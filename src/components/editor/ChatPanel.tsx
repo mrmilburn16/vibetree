@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button, Textarea, DropdownSelect } from "@/components/ui";
-import { Send, Sparkles, Square, X, Zap } from "lucide-react";
+import { ArrowUp, Sparkles, Square, X, Zap } from "lucide-react";
 import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { BuildingIndicator } from "./BuildingIndicator";
@@ -201,8 +201,9 @@ export function ChatPanel({
     canSend,
     maxMessageLength,
     isHydrating,
-    streamProgressMessageId,
+    streamContentMessageId,
     streamElapsedSeconds,
+    streamReceivedChars,
     validateProgressMessageId,
     validateProgressBase,
     validateElapsedSeconds,
@@ -461,8 +462,9 @@ export function ChatPanel({
           isHydrating={isHydrating}
           buildStatus={buildStatus}
           projectId={projectId}
-          streamProgressMessageId={streamProgressMessageId}
+          streamContentMessageId={streamContentMessageId}
           streamElapsedSeconds={streamElapsedSeconds}
+          streamReceivedChars={streamReceivedChars}
           validateProgressMessageId={validateProgressMessageId}
           validateProgressBase={validateProgressBase}
           validateElapsedSeconds={validateElapsedSeconds}
@@ -533,7 +535,7 @@ export function ChatPanel({
                     aria-hidden
                   />
                 ) : canSend ? (
-                  <Send className="h-6 w-6 shrink-0" aria-hidden size={24} />
+                  <ArrowUp className="h-6 w-6 shrink-0" aria-hidden size={24} color="#FFFFFF" />
                 ) : (
                   <span className="h-6 w-6 shrink-0 rounded-sm bg-current opacity-90" aria-hidden />
                 )}

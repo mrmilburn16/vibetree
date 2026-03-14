@@ -27,7 +27,7 @@ export interface SocialLink {
 }
 
 const DEFAULT_LINKS: SocialLink[] = [
-  { key: "x", href: "https://x.com/vibetree", label: "X (Twitter)" },
+  { key: "x", href: "https://x.com/vibetreeapp", label: "X (Twitter)" },
   { key: "discord", href: "https://discord.gg/vibetree", label: "Discord" },
   { key: "appStore", href: "https://apps.apple.com/app/vibetree", label: "Download on the App Store" },
 ];

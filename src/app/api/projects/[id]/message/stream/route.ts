@@ -233,6 +233,9 @@ export async function POST(
                     }
                     enqueueProgress(data.receivedChars);
                   },
+                  onSummaryChunk: (text) => {
+                    safeEnqueue({ type: "content", text });
+                  },
                   onDiscoveredFilePath: (path) => {
                     discoveredFilesCount += 1;
                     const existing = paths.length > 0 && paths.includes(path);

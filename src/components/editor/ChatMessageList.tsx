@@ -73,7 +73,8 @@ function isStreamStepMessage(msg: ChatMessage): boolean {
   return (
     msg.id.startsWith("stream-progress-") ||
     msg.id.startsWith("stream-phase-") ||
-    msg.id.startsWith("stream-file-")
+    msg.id.startsWith("stream-file-") ||
+    msg.id.startsWith("stream-plan-")
   );
 }
 
@@ -82,6 +83,66 @@ function getStreamRunId(msg: ChatMessage): string | null {
   const parts = msg.id.split("-");
   if (parts[0] !== "stream" || !parts[2]) return null;
   return parts[2];
+}
+
+function isStreamPlanMessage(msg: ChatMessage): boolean {
+  return typeof msg.id === "string" && msg.id.startsWith("stream-plan-");
+}
+
+function isStreamContentMessage(msg: ChatMessage): boolean {
+  return typeof msg.id === "string" && msg.id.startsWith("stream-content-");
+}
+
+/** Live streamed narrative from the LLM: content + optional file chips + footer (elapsed, tokens). */
+function StreamContentBubble({
+  content,
+  fileAnnotations,
+  isStreaming,
+  streamElapsedSeconds,
+  streamReceivedChars,
+}: {
+  content: string;
+  fileAnnotations: string[];
+  isStreaming: boolean;
+  streamElapsedSeconds: number;
+  streamReceivedChars: number;
+}) {
+  const approxTokens = Math.round(streamReceivedChars / 4);
+  const footerParts: string[] = [];
+  if (streamElapsedSeconds >= 0) footerParts.push(formatDurationShortSec(streamElapsedSeconds));
+  if (approxTokens >= 50) footerParts.push(`~${approxTokens >= 1000 ? (approxTokens / 1000).toFixed(1) + "k" : approxTokens} tokens`);
+
+  return (
+    <div key="stream-content-bubble" className="animate-chat-message-in max-w-[88%] py-0.5 chat-accent-full-box-v2">
+      {content ? (
+        <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">
+          {content}
+          {isStreaming && <span className="chat-step-dots ml-0.5 inline-block w-4 align-middle" aria-hidden />}
+        </p>
+      ) : (
+        <p className="text-sm text-[var(--text-tertiary)]">
+          {isStreaming ? <span className="chat-step-dots inline-block w-4" aria-hidden /> : null}
+        </p>
+      )}
+      {fileAnnotations.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {fileAnnotations.map((label, i) => (
+            <span
+              key={i}
+              className="rounded bg-[var(--background-tertiary)]/80 px-2 py-0.5 text-xs text-[var(--text-tertiary)]"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
+      {footerParts.length > 0 && (
+        <p className="mt-2 border-t border-[var(--border-subtle)]/50 pt-2 text-xs text-[var(--text-tertiary)]" aria-live="polite">
+          {footerParts.join(" · ")}
+        </p>
+      )}
+    </div>
+  );
 }
 
 type StreamBlock = { start: number; steps: ChatMessage[]; runId: string; isActive: boolean };
@@ -137,6 +198,92 @@ function toPastTense(label: string): string {
 
 function isFileStep(msg: ChatMessage): boolean {
   return typeof msg.id === "string" && msg.id.startsWith("stream-file-");
+}
+
+function BuildPlanCard({
+  planSteps,
+  completedIndices,
+  isTyping,
+  progressContent,
+  streamElapsedSeconds,
+  streamProgressMessageId,
+}: {
+  planSteps: string[];
+  completedIndices: number[];
+  isTyping: boolean;
+  progressContent: string;
+  streamElapsedSeconds?: number;
+  streamProgressMessageId?: string | null;
+}) {
+  const completedSet = new Set(completedIndices);
+  const currentIndex = isTyping
+    ? planSteps.findIndex((_, i) => !completedSet.has(i))
+    : -1;
+  const elapsed = streamElapsedSeconds ?? -1;
+  const displayProgress =
+    streamProgressMessageId && elapsed >= 0
+      ? progressContent.replace(/\s*·\s*\d+s?\s*$/i, "").trim() + (progressContent ? " · " : "") + formatDurationShortSec(elapsed)
+      : progressContent;
+
+  return (
+    <div className="mb-2">
+      <div className="rounded-lg border border-[var(--border-default)]/70 bg-[var(--background-secondary)]/60 px-3 py-2">
+        <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-[var(--text-tertiary)]">
+          <span>Build plan</span>
+          <span className="font-medium text-[var(--text-secondary)]">
+            {planSteps.length === 0
+              ? "—"
+              : `${completedSet.size} of ${planSteps.length} steps`}
+          </span>
+        </div>
+        <ul className="space-y-1.5" aria-live="polite">
+          {planSteps.map((label, idx) => {
+            const isDone = completedSet.has(idx);
+            const isCurrent = isTyping && currentIndex === idx;
+            return (
+              <li
+                key={idx}
+                className={
+                  "flex items-center gap-2 text-sm transition-colors " +
+                  (isCurrent
+                    ? "chat-step-current text-[var(--text-primary)]"
+                    : "text-[var(--text-secondary)]")
+                }
+              >
+                {isDone ? (
+                  <span
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-[var(--semantic-success)] bg-[var(--semantic-success)]/20 text-[10px] font-bold text-[var(--semantic-success)]"
+                    aria-hidden
+                  >
+                    ✓
+                  </span>
+                ) : isCurrent ? (
+                  <span
+                    className="chat-step-dots flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-[var(--button-primary-bg)]/50 bg-[var(--button-primary-bg)]/10 text-[10px]"
+                    aria-hidden
+                  />
+                ) : (
+                  <span
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-[var(--border-default)] bg-transparent text-[var(--text-tertiary)]"
+                    aria-hidden
+                  >
+                    ○
+                  </span>
+                )}
+                <span>{isCurrent ? stripTrailingEllipsis(label) : label}</span>
+                {isCurrent && <span className="chat-step-dots ml-0.5 inline-block w-4" aria-hidden />}
+              </li>
+            );
+          })}
+        </ul>
+        {displayProgress.trim() && (
+          <p className="mt-2 border-t border-[var(--border-subtle)]/50 pt-2 text-xs text-[var(--text-tertiary)]">
+            {displayProgress}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function StreamTodoCard({
@@ -301,8 +448,9 @@ export function ChatMessageList({
   buildStatus,
   projectId,
   isHydrating = false,
-  streamProgressMessageId = null,
+  streamContentMessageId = null,
   streamElapsedSeconds = -1,
+  streamReceivedChars = 0,
   validateProgressMessageId = null,
   validateProgressBase = "",
   validateElapsedSeconds = -1,
@@ -313,8 +461,9 @@ export function ChatMessageList({
   onEnterGuidedMode?: () => void;
   buildStatus?: string;
   projectId?: string;
-  streamProgressMessageId?: string | null;
+  streamContentMessageId?: string | null;
   streamElapsedSeconds?: number;
+  streamReceivedChars?: number;
   validateProgressMessageId?: string | null;
   validateProgressBase?: string;
   validateElapsedSeconds?: number;
@@ -510,9 +659,44 @@ export function ChatMessageList({
           {(() => {
             const allBlocks = getAllStreamBlocks(messages);
             return messages.map((msg, index) => {
+              if (typeof msg.id === "string" && (msg.id.startsWith("stream-progress-") || msg.id.startsWith("stream-phase-") || msg.id.startsWith("stream-file-") || msg.id.startsWith("stream-plan-"))) {
+                return null;
+              }
+              if (isStreamContentMessage(msg)) {
+                const elapsed = streamContentMessageId === msg.id ? (streamElapsedSeconds ?? -1) : -1;
+                const chars = streamContentMessageId === msg.id ? (streamReceivedChars ?? 0) : 0;
+                return (
+                  <StreamContentBubble
+                    key={msg.id}
+                    content={msg.content}
+                    fileAnnotations={msg.fileAnnotations ?? []}
+                    isStreaming={isTyping && streamContentMessageId === msg.id}
+                    streamElapsedSeconds={elapsed}
+                    streamReceivedChars={chars}
+                  />
+                );
+              }
+
               const block = allBlocks.find((b) => index >= b.start && index < b.start + b.steps.length);
               if (block) {
                 if (index === block.start) {
+                  const planMsg = block.steps.find(isStreamPlanMessage);
+                  const progressStep = block.steps.find((s) => typeof s.id === "string" && s.id.startsWith("stream-progress-"));
+                  const progressContent = progressStep?.content ?? "";
+                  if (planMsg?.planSteps && planMsg.planSteps.length > 0) {
+                    return (
+                      <div key={`stream-block-${block.runId}`} className="animate-chat-step-in">
+                        <BuildPlanCard
+                          planSteps={planMsg.planSteps}
+                          completedIndices={planMsg.completedIndices ?? []}
+                          isTyping={block.isActive && isTyping}
+                          progressContent={progressContent}
+                          streamElapsedSeconds={streamElapsedSeconds ?? -1}
+                          streamProgressMessageId={streamContentMessageId}
+                        />
+                      </div>
+                    );
+                  }
                   return (
                     <div key={`stream-block-${block.runId}`} className="animate-chat-step-in">
                       <StreamTodoCard steps={block.steps} isTyping={block.isActive && isTyping} />
@@ -525,9 +709,7 @@ export function ChatMessageList({
           const isStreamFile = isStreamFileMessage(msg);
           const isStreamingThis = msg.role === "assistant" && msg.id === streamingMessageId;
           let displayContent = isStreamingThis ? streamedContent : msg.content;
-          if (msg.id === streamProgressMessageId && streamElapsedSeconds >= 0) {
-            displayContent = `${msg.content} · ${formatDurationShortSec(streamElapsedSeconds)}`;
-          } else if (msg.id === validateProgressMessageId && validateElapsedSeconds >= 0) {
+          if (msg.id === validateProgressMessageId && validateElapsedSeconds >= 0) {
             displayContent = `${validateProgressBase} (${formatDurationShortSec(validateElapsedSeconds)})`;
           }
           const streamingComplete = !isStreamingThis || streamedContent === msg.content;
@@ -608,6 +790,11 @@ export function ChatMessageList({
           );
             });
           })()}
+          {isTyping && !messages.some((m) => isStreamContentMessage(m)) && (
+            <div className="flex justify-start py-1" aria-live="polite">
+              <span className="chat-step-dots inline-block h-4 w-6 align-middle" aria-hidden title="Thinking" />
+            </div>
+          )}
         </div>
         <div ref={bottomRef} />
       </div>

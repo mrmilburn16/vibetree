@@ -19,6 +19,7 @@ const THEMES = [
   { value: "fuchsia",        label: "Fuchsia",                  color: "#D946EF", mode: "dark"  },
   { value: "sky",            label: "Sky",                      color: "#0284C7", mode: "dark"  },
   { value: "lime",           label: "Lime",                     color: "#84CC16", mode: "dark"  },
+  { value: "white",          label: "White",                    color: "#FFFFFF", mode: "dark"  },
   { value: "emerald-light",  label: "Forest (Light)",           color: "#10B981", mode: "light" },
   { value: "violet-light",   label: "Twilight Violet (Light)",  color: "#6366F1", mode: "light" },
   { value: "amber-light",    label: "Amber (Light)",            color: "#F59E0B", mode: "light" },
@@ -29,6 +30,7 @@ const THEMES = [
   { value: "fuchsia-light",  label: "Fuchsia (Light)",          color: "#D946EF", mode: "light" },
   { value: "sky-light",      label: "Sky (Light)",              color: "#0284C7", mode: "light" },
   { value: "lime-light",     label: "Lime (Light)",             color: "#84CC16", mode: "light" },
+  { value: "white-light",    label: "White (Light)",            color: "#FFFFFF", mode: "light" },
 ] as const;
 
 const THEME_STORAGE_KEY = "vibetree-theme";
@@ -418,7 +420,11 @@ export default function SettingsPage() {
                           className="h-7 w-7 rounded-full shadow-sm"
                           style={{
                             backgroundColor: t.color,
-                            border: mode === "light" ? "2px solid rgba(0,0,0,0.12)" : "2px solid rgba(255,255,255,0.18)",
+                            border: t.color === "#FFFFFF"
+                              ? "2px solid rgba(0,0,0,0.35)"
+                              : mode === "light"
+                              ? "2px solid rgba(0,0,0,0.12)"
+                              : "2px solid rgba(255,255,255,0.18)",
                           }}
                         />
                         <span className="max-w-[68px] text-center text-[10px] leading-tight text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]">

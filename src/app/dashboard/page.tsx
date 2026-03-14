@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Send, ArrowRight, Copy, Trash2, Zap, Plus } from "lucide-react";
+import { ArrowUp, ArrowRight, Copy, Trash2, Zap, Plus, X, FileText, ImagePlus, Clipboard, LayoutTemplate, Lightbulb, Upload } from "lucide-react";
 import { Button, BetaBadge, Textarea, DropdownSelect } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
@@ -13,6 +14,7 @@ import { CreditsWidget } from "@/components/credits/CreditsWidget";
 import { LowCreditBanner } from "@/components/credits/LowCreditBanner";
 import { LLM_OPTIONS, DEFAULT_LLM } from "@/lib/llm-options";
 import { useRefetchOnVisible } from "@/hooks/useRefetchOnVisible";
+import { PricingModal } from "@/components/pricing/PricingModal";
 
 const PENDING_PROMPT_KEY = "vibetree-pending-prompt";
 const PROJECT_TYPE_STORAGE_KEY = "vibetree-project-type";
@@ -111,7 +113,7 @@ function AnimatedPlaceholder({ style, visible }: { style: PlaceholderStyle; visi
           state.phraseIdx = (state.phraseIdx + 1) % PLACEHOLDER_PHRASES.length;
           t1.current = setTimeout(tick, 347);
         } else {
-          t1.current = setTimeout(tick, 29);
+          t1.current = setTimeout(tick, 35);
         }
       } else {
         const p = PLACEHOLDER_PHRASES[state.phraseIdx];
@@ -121,7 +123,7 @@ function AnimatedPlaceholder({ style, visible }: { style: PlaceholderStyle; visi
           state.deleting = true;
           t1.current = setTimeout(tick, 2310);
         } else {
-          t1.current = setTimeout(tick, 52);
+          t1.current = setTimeout(tick, 62);
         }
       }
     }
@@ -271,10 +273,21 @@ export default function DashboardPage() {
   const [projectsFetchError, setProjectsFetchError] = useState<"session_expired" | "network" | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [limitError, setLimitError] = useState<{ limit: number; planName: string } | null>(null);
+  const [pricingModalOpen, setPricingModalOpen] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
-  const [attachedImage, setAttachedImage] = useState<File | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<Array<{ file: File; previewUrl: string | null }>>([]);
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [comingSoonLabel, setComingSoonLabel] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
+  const plusButtonRef = useRef<HTMLButtonElement>(null);
+  const dropdownPortalRef = useRef<HTMLDivElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const comingSoonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Counter-based drag tracking avoids overlay flicker when entering child elements.
+  const dragCounterRef = useRef(0);
 
   useEffect(() => {
     console.log("[dashboard:trace] 2) Mount effect running, window=", typeof window);
@@ -408,9 +421,127 @@ export default function DashboardPage() {
     el.style.overflowY = el.scrollHeight > 200 ? "auto" : "hidden";
   }, [prompt]);
 
+  // Position dropdown when opened (for portaled menu)
+  useEffect(() => {
+    if (!plusMenuOpen) {
+      setDropdownPosition(null);
+      return;
+    }
+    const btn = plusButtonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    setDropdownPosition({ left: rect.left, top: rect.bottom + 8 });
+  }, [plusMenuOpen]);
+
+  // Close the plus-menu on outside click (button or portaled dropdown)
+  useEffect(() => {
+    if (!plusMenuOpen) return;
+    function handleOutsideClick(e: MouseEvent) {
+      const target = e.target as Node;
+      if (
+        plusMenuRef.current?.contains(target) ||
+        dropdownPortalRef.current?.contains(target)
+      )
+        return;
+      setPlusMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [plusMenuOpen]);
+
+  async function handlePasteScreenshot() {
+    setPlusMenuOpen(false);
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        for (const type of item.types) {
+          if (type.startsWith("image/")) {
+            const blob = await item.getType(type);
+            const ext = type.split("/")[1]?.split("+")[0] ?? "png";
+            const file = new File([blob], `screenshot.${ext}`, { type });
+            addFiles([file]);
+            return;
+          }
+        }
+      }
+    } catch {
+      // Clipboard permission denied or no image present
+    }
+  }
+
+  function showComingSoon(label: string) {
+    setPlusMenuOpen(false);
+    if (comingSoonTimerRef.current) clearTimeout(comingSoonTimerRef.current);
+    setComingSoonLabel(label);
+    comingSoonTimerRef.current = setTimeout(() => setComingSoonLabel(null), 2200);
+  }
+
+  // Shared logic for attaching files (used by file picker, clipboard paste, and drag-drop).
+  function addFiles(incoming: File[]) {
+    const MAX_SIZE = 10 * 1024 * 1024;
+    const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+    const valid = incoming.filter((f) => f.size <= MAX_SIZE);
+    const mapped = valid.map((f) => ({
+      file: f,
+      previewUrl: IMAGE_TYPES.includes(f.type) ? URL.createObjectURL(f) : null,
+    }));
+    setAttachedFiles((prev) => {
+      const combined = [...prev, ...mapped];
+      combined.slice(3).forEach((af) => { if (af.previewUrl) URL.revokeObjectURL(af.previewUrl); });
+      return combined.slice(0, 3);
+    });
+  }
+
+  function handleDragEnter(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    if (dragCounterRef.current === 1) setIsDragOver(true);
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+    }
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) addFiles(files);
+  }
+
   const doSubmitPrompt = useCallback(
-    async (trimmed: string) => {
+    async (trimmed: string, files: Array<{ file: File; previewUrl: string | null }>) => {
       localStorage.setItem(PENDING_PROMPT_KEY, trimmed);
+      // Serialize attachments to sessionStorage so the editor can pick them up.
+      if (files.length > 0) {
+        try {
+          const serialized = await Promise.all(
+            files.map(({ file }) =>
+              new Promise<{ name: string; type: string; data: string }>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve({ name: file.name, type: file.type, data: reader.result as string });
+                reader.readAsDataURL(file);
+              })
+            )
+          );
+          sessionStorage.setItem("vibetree-pending-attachments", JSON.stringify(serialized));
+        } catch {
+          sessionStorage.removeItem("vibetree-pending-attachments");
+        }
+      } else {
+        sessionStorage.removeItem("vibetree-pending-attachments");
+      }
       setCreateError(null);
       setLimitError(null);
       try {
@@ -450,9 +581,9 @@ export default function DashboardPage() {
       const trimmed = (text ?? prompt).trim();
       if (!trimmed) return;
       if (blockStartUntilPreflight) return;
-      doSubmitPrompt(trimmed);
+      doSubmitPrompt(trimmed, attachedFiles);
     },
-    [prompt, blockStartUntilPreflight, doSubmitPrompt]
+    [prompt, blockStartUntilPreflight, doSubmitPrompt, attachedFiles]
   );
 
   async function handleNewApp() {
@@ -561,7 +692,25 @@ export default function DashboardPage() {
 
   console.log("[dashboard:trace] 6) Rendering main dashboard (mounted=true)");
   return (
-    <div className="relative min-h-screen bg-[var(--background-primary)]">
+    <div
+      className="relative min-h-screen bg-[var(--background-primary)]"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag-and-drop overlay */}
+      {isDragOver && (
+        <div className="pointer-events-none fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-black/60 backdrop-blur-sm">
+          <Upload className="h-14 w-14 text-[var(--button-primary-bg)]" aria-hidden />
+          <p className="text-2xl font-medium text-[var(--text-primary)]">
+            Drop files to add to your prompt
+          </p>
+          <p className="text-base text-[var(--text-tertiary)]">
+            Images &amp; documents · max 10 MB · up to 3 files
+          </p>
+        </div>
+      )}
       {/* Gradient glow */}
       <div
         className="pointer-events-none fixed inset-0 opacity-20"
@@ -611,7 +760,7 @@ export default function DashboardPage() {
 
       <main className="relative mx-auto max-w-2xl px-5">
         {/* Hero prompt area */}
-        <div className="flex flex-col items-center pt-16 pb-12 text-center animate-fade-in">
+        <div className="flex flex-col items-center pt-16 pb-12 text-center animate-fade-in z-10">
           <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
             What do you want to build?
           </h1>
@@ -623,26 +772,95 @@ export default function DashboardPage() {
           <div className="mt-8 w-full">
             {/* Pill */}
             <div className="relative w-full rounded-[9999px] border-2 border-[var(--border-default)] bg-[var(--background-secondary)] transition-all duration-300 focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/25">
-              <div className="flex min-h-[46px] items-end gap-2 px-3 py-[6px]">
-                {/* LEFT: plus — triggers file picker */}
+              {/* Coming-soon toast floats above the pill */}
+              {comingSoonLabel && (
+                <div className="pointer-events-none absolute -top-10 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--border-default)] bg-[var(--background-tertiary)] px-3 py-1.5 text-xs text-[var(--text-secondary)] shadow-lg">
+                  {comingSoonLabel} — coming soon
+                </div>
+              )}
+              <div className="flex min-h-[46px] items-center gap-2 px-3 py-[6px]">
+                {/* LEFT: plus — opens attachment/template menu */}
                 <input
-                  ref={imageInputRef}
+                  ref={fileInputRef}
                   type="file"
-                  accept="image/png,image/jpeg,image/webp"
+                  accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.md"
+                  multiple
                   className="hidden"
-                  onChange={(e) => { setAttachedImage(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                  onChange={(e) => {
+                    addFiles(Array.from(e.target.files ?? []));
+                    e.target.value = "";
+                  }}
                 />
-                <button
-                  type="button"
-                  onClick={() => imageInputRef.current?.click()}
-                  aria-label={attachedImage ? `Image attached: ${attachedImage.name}` : "Attach an image"}
-                  title={attachedImage ? attachedImage.name : "Attach an image"}
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors ${
-                    attachedImage ? "text-[var(--button-primary-bg)]" : "text-[var(--text-tertiary)] hover:text-white"
-                  }`}
-                >
-                  <Plus className="h-[18px] w-[18px]" style={{ display: "block" }} aria-hidden />
-                </button>
+                <div className="relative shrink-0" ref={plusMenuRef}>
+                  <button
+                    ref={plusButtonRef}
+                    type="button"
+                    onClick={() => setPlusMenuOpen((o) => !o)}
+                    aria-label="Add attachments or templates"
+                    aria-expanded={plusMenuOpen}
+                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                      attachedFiles.length > 0 || plusMenuOpen
+                        ? "text-[var(--button-primary-bg)]"
+                        : "text-[var(--text-tertiary)] hover:text-white"
+                    }`}
+                  >
+                    <Plus className="h-[18px] w-[18px]" style={{ display: "block" }} aria-hidden />
+                  </button>
+                </div>
+
+                {/* Plus dropdown menu — portaled to body to escape stacking context */}
+                {typeof document !== "undefined" &&
+                  plusMenuOpen &&
+                  dropdownPosition &&
+                  createPortal(
+                    <div
+                      ref={dropdownPortalRef}
+                      className="w-56 overflow-hidden rounded-xl border border-[#333] py-1 shadow-2xl"
+                      style={{
+                        position: "fixed",
+                        left: dropdownPosition.left,
+                        top: dropdownPosition.top,
+                        zIndex: 200,
+                        backgroundColor: "#1a1a1a",
+                        opacity: 1,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => { setPlusMenuOpen(false); fileInputRef.current?.click(); }}
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[#2a2a2a]"
+                      >
+                        <ImagePlus className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden />
+                        Add photos &amp; files
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePasteScreenshot}
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[#2a2a2a]"
+                      >
+                        <Clipboard className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden />
+                        Paste app screenshot
+                      </button>
+                      <div className="my-1 border-t border-[var(--border-subtle)]" />
+                      <button
+                        type="button"
+                        onClick={() => showComingSoon("Use a template")}
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[#2a2a2a]"
+                      >
+                        <LayoutTemplate className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden />
+                        Use a template
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => showComingSoon("Example prompts")}
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors hover:bg-[#2a2a2a]"
+                      >
+                        <Lightbulb className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" aria-hidden />
+                        Example prompts
+                      </button>
+                    </div>,
+                    document.body
+                  )}
 
                 {/* CENTER: textarea */}
                 <div className="relative flex min-w-0 flex-1 items-center">
@@ -655,7 +873,7 @@ export default function DashboardPage() {
                     onFocus={() => setInputFocused(true)}
                     onBlur={() => setInputFocused(false)}
                     className="!border-0 !min-h-0 max-h-[200px] w-full resize-none bg-transparent text-[var(--input-text)] !shadow-none !ring-0 focus:!border-0 focus:!ring-0 focus:outline-none"
-                    style={{ resize: "none", paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0, fontSize: 16, lineHeight: "22px", minHeight: 22, display: "block", overflowY: "hidden" }}
+                    style={{ resize: "none", paddingTop: 3, paddingBottom: 3, paddingLeft: 0, paddingRight: 0, fontSize: 16, lineHeight: "22px", minHeight: 28, display: "block", overflowY: "hidden" }}
                     rows={1}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
@@ -676,10 +894,51 @@ export default function DashboardPage() {
                   aria-label={blockStartUntilPreflight ? "Fix iPhone setup in Settings to start building" : "Start building"}
                   title={blockStartUntilPreflight ? "Fix iPhone setup in Settings before building" : undefined}
                 >
-                  <Send className="h-[18px] w-[18px]" style={{ display: "block", transform: "translate(-0.5px, -0.5px)" }} aria-hidden />
+                  <ArrowUp className="h-[18px] w-[18px]" style={{ display: "block", color: "var(--button-primary-text)" }} aria-hidden />
                 </button>
               </div>
             </div>
+
+            {/* Attached file previews — between pill and dropdowns */}
+            {attachedFiles.length > 0 && (
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {attachedFiles.map((af, i) => (
+                  <div
+                    key={`${af.file.name}-${i}`}
+                    className="group relative flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-2 py-1.5 text-xs text-[var(--text-secondary)]"
+                  >
+                    {af.previewUrl ? (
+                      <img
+                        src={af.previewUrl}
+                        alt={af.file.name}
+                        className="h-8 w-8 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--background-secondary)]">
+                        <FileText className="h-4 w-4 text-[var(--text-tertiary)]" aria-hidden />
+                      </div>
+                    )}
+                    <span className="max-w-[100px] truncate">{af.file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (af.previewUrl) URL.revokeObjectURL(af.previewUrl);
+                        setAttachedFiles(prev => prev.filter((_, j) => j !== i));
+                      }}
+                      aria-label={`Remove ${af.file.name}`}
+                      className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 text-[var(--text-tertiary)] hover:bg-[var(--semantic-error)]/15 hover:text-[var(--semantic-error)]"
+                    >
+                      <X className="h-3 w-3" aria-hidden />
+                    </button>
+                  </div>
+                ))}
+                {attachedFiles.length < 3 && (
+                  <p className="self-center text-[11px] text-[var(--text-tertiary)]">
+                    {attachedFiles.length}/3
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Dropdowns below pill */}
             <div className="mt-3 flex items-center justify-center gap-2">
@@ -699,21 +958,6 @@ export default function DashboardPage() {
               />
             </div>
 
-            {/* Attached image indicator */}
-            {attachedImage && (
-              <div className="mt-1.5 flex items-center justify-center gap-1 text-xs text-[var(--text-tertiary)]">
-                <span className="max-w-[200px] truncate">{attachedImage.name}</span>
-                <button
-                  type="button"
-                  onClick={() => setAttachedImage(null)}
-                  aria-label="Remove image"
-                  className="text-[var(--text-tertiary)] hover:text-[var(--semantic-error)]"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-
           </div>
 
         </div>
@@ -732,9 +976,13 @@ export default function DashboardPage() {
             <p className="text-sm text-[var(--text-primary)]">
               You&apos;ve reached the {limitError.limit}-app limit on your{" "}
               <span className="font-semibold">{limitError.planName}</span> plan.{" "}
-              <Link href="/pricing" className="font-medium text-[var(--link-default)] hover:underline">
+              <button
+                type="button"
+                onClick={() => setPricingModalOpen(true)}
+                className="font-medium text-[var(--link-default)] hover:underline"
+              >
                 Upgrade to create more apps
-              </Link>
+              </button>
             </p>
             <button
               type="button"
@@ -834,6 +1082,14 @@ export default function DashboardPage() {
           <Link href="/contact" className="text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--link-default)]">Contact</Link>
         </div>
       </main>
+
+      {/* Pricing / upgrade modal */}
+      <PricingModal
+        isOpen={pricingModalOpen}
+        onClose={() => setPricingModalOpen(false)}
+        title="Upgrade your plan"
+        subtitle="Create more apps and unlock advanced features."
+      />
 
       {/* Delete confirmation modal */}
       <Modal

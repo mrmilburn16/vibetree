@@ -12,6 +12,12 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   editedFiles?: string[];
+  /** Inline file annotations during stream (e.g. "Creating ContentView.swift"); shown as subtle chips. */
+  fileAnnotations?: string[];
+  /** Legacy: build plan steps (from old stream plan events); used by BuildPlanCard for backward compat. */
+  planSteps?: string[];
+  /** Legacy: indices of completed plan steps. */
+  completedIndices?: number[];
   /** Token usage from API (real LLM only). Shown as cost after build. */
   usage?: { input_tokens: number; output_tokens: number };
   /** Estimated cost in USD for this message (real LLM only). */
@@ -62,6 +68,7 @@ function loadChatMessagesFromLocalStorage(projectId: string): ChatMessage[] | nu
         role: m.role as MessageRole,
         content: m.content ?? "",
         ...(Array.isArray(m.editedFiles) ? { editedFiles: m.editedFiles as string[] } : {}),
+        ...(Array.isArray((m as any).fileAnnotations) ? { fileAnnotations: (m as any).fileAnnotations as string[] } : {}),
         ...(m.usage &&
         typeof (m.usage as any).input_tokens === "number" &&
         typeof (m.usage as any).output_tokens === "number"
@@ -74,7 +81,7 @@ function loadChatMessagesFromLocalStorage(projectId: string): ChatMessage[] | nu
 
     // Drop stale in-flight progress and step messages on restore.
     return msgs.filter((m) => {
-      if (m.id.startsWith("stream-progress-") || m.id.startsWith("stream-phase-") || m.id.startsWith("stream-file-")) return false;
+      if (m.id.startsWith("stream-progress-") || m.id.startsWith("stream-phase-") || m.id.startsWith("stream-file-") || m.id.startsWith("stream-content-") || m.id.startsWith("stream-plan-")) return false;
       const c = (m.content ?? "").trim();
       const looksLikeLiveProgress =
         c.startsWith("Connecting…") ||
@@ -167,7 +174,7 @@ export function isUntitledName(name: string | undefined | null): boolean {
 function getStableMessagesForPersistence(messages: ChatMessage[]): ChatMessage[] {
   const out = messages.filter((m) => {
     if (m.id.startsWith("stream-phase-") || m.id.startsWith("stream-file-")) return true;
-    if (m.id.startsWith("stream-progress-")) return false;
+    if (m.id.startsWith("stream-progress-") || m.id.startsWith("stream-content-")) return false;
     const c = (m.content ?? "").trim();
     const looksLikeLiveProgress =
       c.startsWith("Connecting…") ||
@@ -290,9 +297,10 @@ export function useChat(
   const [buildStatus, setBuildStatus] = useState<"idle" | "building" | "live" | "failed">("idle");
   const [input, setInput] = useState("");
   const [canSend, setCanSend] = useState(true);
-  /** Progress message id and elapsed seconds for stream "Planning next moves…" — only this row re-renders on tick. */
-  const [streamProgressMessageId, setStreamProgressMessageId] = useState<string | null>(null);
+  /** Stream content message id (live narrative); when set, footer shows elapsed/tokens. */
+  const [streamContentMessageId, setStreamContentMessageId] = useState<string | null>(null);
   const [streamElapsedSeconds, setStreamElapsedSeconds] = useState(-1);
+  const [streamReceivedChars, setStreamReceivedChars] = useState(0);
   /** Progress message id, base text, and elapsed seconds for "Validating build on Mac…" — only this row re-renders on tick. */
   const [validateProgressMessageId, setValidateProgressMessageId] = useState<string | null>(null);
   const [validateProgressBase, setValidateProgressBase] = useState("");
@@ -610,10 +618,9 @@ export function useChat(
     setBuildStatus("building");
 
     const streamRunId = Date.now();
-    const progressMessageId = `stream-progress-${streamRunId}`;
+    const streamContentId = `stream-content-${streamRunId}`;
     const localStartedAt = Date.now();
     let sawServerProgress = false;
-    let currentPhaseLabel = "Starting request";
     let lastReceivedChars = 0;
     let lastIncreaseAt = Date.now();
     let lastElapsedMs: number | undefined;
@@ -621,58 +628,9 @@ export function useChat(
     let lastProgressElapsedMs: number | undefined;
     let discoveredFilesCount = 0;
     const discoveredFilePaths: string[] = [];
-    const emittedPhases = new Set<string>();
 
-    setStreamProgressMessageId(progressMessageId);
     setStreamElapsedSeconds(0);
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: progressMessageId,
-        role: "assistant",
-        content: "Planning next moves…",
-      },
-    ]);
-
-    const formatCost = (usd: number | undefined) => {
-      if (typeof usd !== "number") return "";
-      return ` · ~$${usd < 0.005 ? "<0.01" : usd.toFixed(2)}`;
-    };
-    const formatTokens = (receivedChars: number) => {
-      const approxTokens = Math.round(receivedChars / 4);
-      if (approxTokens < 50) return "";
-      return ` · ~${approxTokens >= 1000 ? (approxTokens / 1000).toFixed(1) + "k" : approxTokens} tokens`;
-    };
-
-    const renderProgressLine = (opts?: { receivedChars?: number; costUsd?: number }) => {
-      const receivedChars =
-        typeof opts?.receivedChars === "number" ? opts.receivedChars : lastReceivedChars;
-      const costUsd =
-        typeof opts?.costUsd === "number" ? opts.costUsd : lastCostUsd;
-
-      // Single source of truth for elapsed time to avoid jumps/backtracking:
-      // always use the local stopwatch (not server-provided elapsedMs).
-      const elapsedSec = Math.max(1, Math.floor((Date.now() - localStartedAt) / 1000));
-      const elapsedStr = ` · ${formatDurationShort(elapsedSec)}`;
-      const tokenStr = formatTokens(receivedChars);
-      const costStr = formatCost(costUsd);
-      const fileCount = discoveredFilePaths.length || discoveredFilesCount;
-      const basenames = discoveredFilePaths.map((p) => p.split("/").pop() ?? p);
-      const maxNames = 6;
-      const filesStr =
-        fileCount > 0
-          ? ` · ${basenames.length > 0 ? basenames.slice(0, maxNames).join(", ") + (basenames.length > maxNames ? ` +${basenames.length - maxNames} more` : "") : `${fileCount} file${fileCount === 1 ? "" : "s"}`}`
-          : "";
-
-      const idleSecs = Math.max(0, Math.round((Date.now() - lastIncreaseAt) / 1000));
-      const showThinking =
-        (currentPhaseLabel.startsWith("Receiving output") && idleSecs >= 7);
-      const label = showThinking
-        ? `Thinking… (no new tokens for ${idleSecs}s)`
-        : currentPhaseLabel;
-
-      return `${label}${filesStr}${tokenStr}${elapsedStr}${costStr}`;
-    };
+    setStreamReceivedChars(0);
 
     const localTick = setInterval(() => {
       if (!sawServerProgress) {
@@ -707,9 +665,10 @@ export function useChat(
     const removeStreamMessage = () => {
       clearInterval(localTick);
       clearInterval(watchdog);
-      setStreamProgressMessageId(null);
+      setStreamContentMessageId(null);
       setStreamElapsedSeconds(-1);
-      setMessages((prev) => prev.filter((m) => m.id !== progressMessageId));
+      setStreamReceivedChars(0);
+      setMessages((prev) => prev.filter((m) => m.id !== streamContentId));
     };
 
     const finish = (opts: { success?: boolean; error?: string; deferLive?: boolean }) => {
@@ -779,10 +738,8 @@ export function useChat(
               if (!trimmedLine) continue;
               let event: {
                 type: string;
+                text?: string;
                 receivedChars?: number;
-                estimatedCostUsdSoFar?: number;
-                elapsedMs?: number;
-                phase?: string;
                 path?: string;
                 count?: number;
                 existing?: boolean;
@@ -795,37 +752,21 @@ export function useChat(
               } catch {
                 continue;
               }
-              if (event.type === "phase" && typeof event.phase === "string") {
+              if (event.type === "content" && typeof event.text === "string") {
                 sawServerProgress = true;
-                const phaseMap: Record<string, string> = {
-                  starting_request: "Thinking…",
-                  waiting_for_first_tokens: "Thinking…",
-                  receiving_output: "Receiving output…",
-                  validating_structured_output: "Finalizing",
-                  saving_files: "Finalizing",
-                  done_preview_updating: "Done",
-                  retrying_request: "Retrying request…",
-                  overload_retry: "Anthropic servers are busy, retrying in 10 seconds…",
-                };
-                currentPhaseLabel = phaseMap[event.phase] ?? "Working";
-                const emitKey = (event.phase === "starting_request" || event.phase === "waiting_for_first_tokens") ? "thinking" : event.phase;
-                if (!emittedPhases.has(emitKey)) {
-                  emittedPhases.add(emitKey);
-                  if (event.phase === "receiving_output") continue;
-                  if (event.phase === "saving_files") continue;
-                  const label = phaseMap[event.phase] ?? event.phase;
-                  const phaseMsg: ChatMessage = {
-                    id: `stream-phase-${streamRunId}-${emitKey}`,
-                    role: "assistant",
-                    content: label,
-                  };
-                  setMessages((prev) => {
-                    const idx = prev.findIndex((m) => m.id === progressMessageId);
-                    const next = idx === -1 ? [...prev, phaseMsg] : (() => { const n = prev.slice(); n.splice(idx, 0, phaseMsg); return n; })();
+                setStreamContentMessageId(streamContentId);
+                setMessages((prev) => {
+                  const idx = prev.findIndex((m) => m.id === streamContentId);
+                  if (idx === -1) {
+                    const next = [...prev, { id: streamContentId, role: "assistant" as const, content: event.text!, fileAnnotations: [] }];
                     persistChatToServer(projectId, next);
                     return next;
-                  });
-                }
+                  }
+                  const next = prev.slice();
+                  next[idx] = { ...next[idx], content: event.text! };
+                  persistChatToServer(projectId, next);
+                  return next;
+                });
               }
               if (event.type === "file" && typeof event.path === "string") {
                 sawServerProgress = true;
@@ -833,17 +774,13 @@ export function useChat(
                 if (typeof event.count === "number") discoveredFilesCount = event.count;
                 const basename = event.path.split("/").pop() ?? event.path;
                 const verb = event.existing === true ? "Editing" : "Creating";
-                const fileMsg: ChatMessage = {
-                  id: `stream-file-${streamRunId}-${typeof event.count === "number" ? event.count : Date.now()}`,
-                  role: "assistant",
-                  content: `${verb} ${basename}${typeof event.count === "number" ? ` (file ${event.count})` : ""}`,
-                };
+                const label = `${verb} ${basename}`;
                 setMessages((prev) => {
-                  const idx = prev.findIndex((m) => m.id === progressMessageId);
-                  const next = idx === -1 ? [...prev, fileMsg] : (() => { const n = prev.slice(); n.splice(idx, 0, fileMsg); return n; })();
-                  const progressIdx = next.findIndex((m) => m.id === progressMessageId);
-                  if (progressIdx !== -1)
-                    next[progressIdx] = { ...next[progressIdx], content: renderProgressLine() };
+                  const idx = prev.findIndex((m) => m.id === streamContentId);
+                  if (idx === -1) return prev;
+                  const next = prev.slice();
+                  const ann = next[idx].fileAnnotations ?? [];
+                  next[idx] = { ...next[idx], fileAnnotations: [...ann, label] };
                   persistChatToServer(projectId, next);
                   return next;
                 });
@@ -853,21 +790,9 @@ export function useChat(
                 const prevChars = lastReceivedChars;
                 lastReceivedChars = event.receivedChars;
                 if (event.receivedChars > prevChars) lastIncreaseAt = Date.now();
-                lastCostUsd = event.estimatedCostUsdSoFar;
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === progressMessageId
-                      ? {
-                          ...m,
-                          content: renderProgressLine({
-                            receivedChars: event.receivedChars,
-                            costUsd: event.estimatedCostUsdSoFar,
-                          }),
-                        }
-                      : m
-                  )
-                );
-              } else if (event.type === "done" && event.assistantMessage) {
+                setStreamReceivedChars(event.receivedChars);
+              }
+              if (event.type === "done" && event.assistantMessage) {
                 doneEvent = event as DoneEvent;
                 break;
               } else if (event.type === "error" && typeof event.error === "string") {
@@ -994,8 +919,8 @@ export function useChat(
             setIsValidating(true);
             // Remove progress (spinner) only; keep stream-phase/stream-file steps, append validate line.
             setMessages((prev) => {
-              const next = [
-                ...prev.filter((m) => m.id !== progressMessageId),
+              let next = [
+                ...prev.filter((m) => m.id !== streamContentId),
                 {
                   id: validateMessageId,
                   role: "assistant" as const,
@@ -1142,7 +1067,7 @@ export function useChat(
               });
           } else {
             setMessages((prev) => {
-              const next = [...prev.filter((m) => m.id !== progressMessageId), realMessage];
+              const next = [...prev.filter((m) => m.id !== streamContentId), realMessage];
               console.log("[build complete non-Pro] messages ids:", next.map((m) => m.id));
               return next;
             });
@@ -1224,8 +1149,9 @@ export function useChat(
     setInput,
     canSend,
     maxMessageLength: MAX_MESSAGE_LENGTH,
-    streamProgressMessageId,
+    streamContentMessageId,
     streamElapsedSeconds,
+    streamReceivedChars,
     validateProgressMessageId,
     validateProgressBase,
     validateElapsedSeconds,

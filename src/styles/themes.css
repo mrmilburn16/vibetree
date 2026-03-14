@@ -127,6 +127,17 @@
   --semantic-info: #84CC16;
 }
 
+/* White — pure white accent on dark background */
+:root[data-theme="white"] {
+  --accent-rgb: 255, 255, 255;
+  --button-primary-bg: #FFFFFF;
+  --button-primary-hover: #E4E4E7;
+  --button-primary-text: #0A0A0B;
+  --link-default: #FFFFFF;
+  --link-hover: #D4D4D8;
+  --semantic-info: #FFFFFF;
+}
+
 /* ─── Light themes (same accents as above) ─── */
 
 :root[data-theme="violet-light"] {
@@ -217,4 +228,14 @@
   --link-default: #65A30D;
   --link-hover: #4D7C0F;
   --semantic-info: #84CC16;
+}
+
+/* White — near-black accent for a neutral high-contrast light theme */
+:root[data-theme="white-light"] {
+  --accent-rgb: 24, 24, 27;
+  --button-primary-bg: #18181B;
+  --button-primary-hover: #3F3F46;
+  --link-default: #18181B;
+  --link-hover: #3F3F46;
+  --semantic-info: #18181B;
 }

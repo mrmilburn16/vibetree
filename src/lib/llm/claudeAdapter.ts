@@ -38,7 +38,8 @@ const CACHE_CONTROL: { type: "ephemeral"; ttl?: "1h" } | undefined =
 const SYSTEM_PROMPT_STANDARD = `You are an expert React Native / Expo developer. You build and modify Expo apps that run in Expo Go. Reply message-by-message: if the user sends a follow-up (e.g. "change the button color to blue"), you will receive the current project files and their request; apply the change and output the full updated JSON. If there are no current files, create a new app from scratch.
 
 Output format: Respond with a single JSON object only. No other text before or after.
-Shape: { "summary": "1-2 sentence description of what you built or changed", "files": [ { "path": "App.js", "content": "full JavaScript/JSX source..." }, ... ] }
+Shape: { "summary": "narrative including plan and progress", "files": [ { "path": "App.js", "content": "full JavaScript/JSX source..." }, ... ] }
+Narrative (summary): Begin with a brief numbered build plan (e.g. "Here's my plan:\\n1. Set up app\\n2. Create App.js"). Note completions inline as you go. The summary is the only narrative the user sees.
 Rules:
 - Use only React Native and Expo APIs that work in Expo Go (no custom native code). Use "expo" and "react-native" imports (e.g. View, Text, StyleSheet, TouchableOpacity, SafeAreaView from "react-native"; StatusBar from "expo-status-bar").
 - The main entry file must be "App.js" at the project root, exporting a default React component.
@@ -51,7 +52,8 @@ Produce the full set of files (new or updated) in one reply. No explanations out
 const SYSTEM_PROMPT_SWIFT = `You are an expert Swift and SwiftUI developer. You build native iOS apps that run on iPhone and iPad. Reply message-by-message: if the user sends a follow-up, you will receive the current project files and their request; apply the change and output the full updated JSON. If there are no current files, create a new app from scratch.
 
 Output format: Respond with a single JSON object only. No other text before or after.
-Shape: { "summary": "1-2 sentence description of what you built or changed", "files": [ { "path": "App.swift", "content": "full Swift source..." }, { "path": "ContentView.swift", "content": "..." }, ... ] }
+Shape: { "summary": "narrative including plan and progress", "files": [ { "path": "App.swift", "content": "full Swift source..." }, ... ] }
+Narrative (summary): Begin every response in the summary with a brief numbered build plan the user will see live (e.g. "Here's my plan:\\n1. Set up app structure\\n2. Create main views\\n3. Add navigation"). Then as you complete each step during code generation, note the completion inline (e.g. "Done with 1. Set up app structure."). The summary is the only narrative the user sees—make it clear and conversational. No hardcoded status labels; the summary is your live stream of thinking and progress.
 
 Integrations: Before generating any app that uses an integration, check INTEGRATIONS.md for the correct setup pattern, common errors, and agent behavior instructions for that integration. Always follow the Swift code pattern documented there.
 
@@ -549,6 +551,8 @@ async function getClaudeResponseStream(
   callbacks: {
     onProgress: (data: { receivedChars: number }) => void;
     onDiscoveredFilePath?: (path: string) => void;
+    /** Called as the "summary" field is streamed so the client can show live narrative. */
+    onSummaryChunk?: (summarySoFar: string) => void;
   }
 ): Promise<LLMResponse> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -608,6 +612,39 @@ async function getClaudeResponseStream(
   const throttleChars = 80;
   let lastScannedLen = 0;
   const seenPaths = new Set<string>();
+  let lastEmittedSummaryLen = 0;
+
+  /** Extract "summary":"..." value from streamed JSON and call onSummaryChunk as it grows. */
+  const maybeEmitSummaryChunk = (textSnapshot: string) => {
+    if (!callbacks.onSummaryChunk) return;
+    const key = '"summary"';
+    const idx = textSnapshot.indexOf(key);
+    if (idx === -1) return;
+    const afterKey = textSnapshot.slice(idx + key.length);
+    const colonQuote = /^\s*:\s*"/.exec(afterKey);
+    if (!colonQuote) return;
+    let i = colonQuote[0].length;
+    let result = "";
+    while (i < afterKey.length) {
+      const c = afterKey[i];
+      if (c === "\\") {
+        i += 1;
+        if (i < afterKey.length) {
+          const next = afterKey[i];
+          result += next === "n" ? "\n" : next === "t" ? "\t" : next === '"' ? '"' : next === "\\" ? "\\" : next;
+          i += 1;
+        }
+        continue;
+      }
+      if (c === '"') break;
+      result += c;
+      i += 1;
+    }
+    if (result.length > lastEmittedSummaryLen) {
+      lastEmittedSummaryLen = result.length;
+      callbacks.onSummaryChunk(result);
+    }
+  };
 
   const maybeScanForPaths = (textSnapshot: string) => {
     if (!callbacks.onDiscoveredFilePath) return;
@@ -644,6 +681,7 @@ async function getClaudeResponseStream(
     })
     .on("text", (_delta: string, textSnapshot: string) => {
       const len = textSnapshot.length;
+      maybeEmitSummaryChunk(textSnapshot);
       // File discovery (best-effort) for live UI updates.
       if (len - lastScannedLen >= 200) {
         maybeScanForPaths(textSnapshot);

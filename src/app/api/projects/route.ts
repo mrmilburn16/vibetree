@@ -14,6 +14,7 @@ import {
 } from "@/lib/projectsFirestore";
 import { hasActiveSubscription, getSubscription } from "@/lib/subscriptionFirestore";
 import { getProjectLimitForPlanId, PLANS } from "@/lib/pricing";
+import { isProxyOwner } from "@/lib/proxyOwnerBypass";
 
 function toRecord(doc: ProjectDoc): { id: string; name: string; bundleId: string; projectType: "standard" | "pro"; createdAt: number; updatedAt: number; appetizePublicKey?: string | null } {
   return {
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
   const sub = await getSubscription(user.uid);
   const planId = sub?.planId ?? "free";
   const limit = getProjectLimitForPlanId(planId);
-  if (limit !== null) {
+  if (limit !== null && !isProxyOwner(user.uid)) {
     const activeCount = await countActiveProjectsFromFirestore(user.uid);
     if (activeCount >= limit) {
       const planName = PLANS.find((p) => p.id === planId)?.name ?? "your current";
