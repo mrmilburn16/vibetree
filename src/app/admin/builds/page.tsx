@@ -1321,7 +1321,11 @@ export default function BuildsPage() {
     resultsRef.current = results;
   }, [results]);
 
-  const since = sinceParam(dateRange);
+  // useMemo is critical here: sinceParam calls new Date() so a bare const would
+  // return a different millisecond-precise ISO string every render. That makes
+  // useCallback deps (load, pollBuildResults) see a new reference every render,
+  // causing their useEffects to re-fire on every setState → infinite poll loop.
+  const since = useMemo(() => sinceParam(dateRange), [dateRange]);
 
   const load = useCallback(async () => {
     const sinceQ = since ? `&since=${encodeURIComponent(since)}` : "";
