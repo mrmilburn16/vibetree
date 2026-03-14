@@ -13,7 +13,7 @@ import { PreviewPane } from "./PreviewPane";
 import { ProjectSettingsModal } from "./ProjectSettingsModal";
 import { RunOnDeviceModal } from "./RunOnDeviceModal";
 import { ShareModal } from "./ShareModal";
-import { OutOfCreditsModal } from "./OutOfCreditsModal";
+import { PricingModal } from "@/components/pricing/PricingModal";
 import { useSimulatorWallet } from "@/hooks/useSimulatorWallet";
 import {
   SimulatorTopUpModal,
@@ -558,6 +558,16 @@ export function EditorLayout({
             onIsTypingChange={setIsAgentTyping}
             onOutOfCredits={() => setOutOfCreditsOpen(true)}
             onError={(message) => {
+              // Credit exhaustion — show the pricing modal instead of a text error
+              const isCreditsError =
+                message === "insufficient_credits" ||
+                message.toLowerCase().includes("insufficient credits") ||
+                message.toLowerCase().includes("out of credits");
+              if (isCreditsError) {
+                setOutOfCreditsOpen(true);
+                setBuildFailureReason("Out of credits");
+                return;
+              }
               setToast({ message, variant: "error" });
               setBuildFailureReason(message);
             }}
@@ -615,13 +625,17 @@ export function EditorLayout({
         backgroundInstallJobIdRef={backgroundInstallJobIdRef}
         onConsumedBackgroundJob={clearBackgroundInstallJobId}
         planId={planId}
+        onUpgradeRequired={() => {
+          setRunOnDeviceOpen(false);
+          setOutOfCreditsOpen(true);
+        }}
       />
       <ShareModal
         isOpen={shareOpen}
         onClose={() => setShareOpen(false)}
         projectId={project.id}
       />
-      <OutOfCreditsModal
+      <PricingModal
         isOpen={outOfCreditsOpen}
         onClose={() => setOutOfCreditsOpen(false)}
       />

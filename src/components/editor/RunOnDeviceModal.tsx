@@ -86,6 +86,7 @@ export function RunOnDeviceModal({
   backgroundInstallJobIdRef,
   onConsumedBackgroundJob,
   planId: planIdProp,
+  onUpgradeRequired,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -103,6 +104,8 @@ export function RunOnDeviceModal({
   onConsumedBackgroundJob?: () => void;
   /** User's current plan ID — used to gate Xcode export for free users. */
   planId?: PlanId;
+  /** Called when the export API returns 403 upgrade_required — parent opens PricingModal. */
+  onUpgradeRequired?: () => void;
 }) {
   const [expoUrlLocal, setExpoUrlLocal] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -590,7 +593,11 @@ export function RunOnDeviceModal({
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         if (res.status === 403 && data?.error === "upgrade_required") {
-          setExportUpgradeRequired(true);
+          if (onUpgradeRequired) {
+            onUpgradeRequired();
+          } else {
+            setExportUpgradeRequired(true);
+          }
           return;
         }
         throw new Error(data?.error ?? "Export failed");
