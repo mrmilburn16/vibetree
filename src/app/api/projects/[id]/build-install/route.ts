@@ -60,12 +60,6 @@ export async function POST(
     "final_developmentTeam": developmentTeam || "(empty)",
   });
 
-  const clientFiles = Array.isArray(body?.files)
-    ? (body.files as { path: string; content: string }[]).filter(
-        (f) => typeof f.path === "string" && typeof f.content === "string"
-      )
-    : [];
-
   const project = getProject(projectId)!;
 
   const candidateBundleId = (
@@ -76,6 +70,41 @@ export async function POST(
   const bundleId = isValidBundleId(candidateBundleId)
     ? candidateBundleId
     : "com.vibetree.app";
+
+  if (!isRunnerOnline()) {
+    return Response.json(
+      {
+        error: "mac_runner_offline",
+        message: "The build server is currently offline. Please try again in a moment.",
+      },
+      { status: 503 }
+    );
+  }
+
+  // useCache=true: install from the runner's local .app cache — no xcodebuild, no files needed.
+  // This is used for re-installs after the first successful device build for the current code version.
+  const useCache = body?.useCache === true;
+  if (useCache) {
+    console.log(`[build-install] useCache=true for project ${projectId} — creating install-from-cache job`);
+    const job = createBuildJob({
+      projectId,
+      projectName: project.name || providedName || "Untitled app",
+      bundleId,
+      developmentTeam,
+      autoFix: false,
+      attempt: 1,
+      maxAttempts: 0,
+      outputType: "install-from-cache",
+    });
+    return Response.json({ job });
+  }
+
+  // Full compile path (first install for this code version).
+  const clientFiles = Array.isArray(body?.files)
+    ? (body.files as { path: string; content: string }[]).filter(
+        (f) => typeof f.path === "string" && typeof f.content === "string"
+      )
+    : [];
 
   let files = clientFiles;
   if (files.length === 0) {
@@ -96,35 +125,23 @@ export async function POST(
     return Response.json(
       {
         error:
-          "No files to build. Use the Xcode button to download the project, open it in Xcode, select your iPhone, and run (⌘R). Or re-run this app once in the test suite so files are saved, then try Run on iPhone again.",
+          "No compiled build found. Build the app from chat first, then tap Install on iPhone.",
       },
       { status: 400 }
     );
   }
 
-  if (!isRunnerOnline()) {
-    return Response.json(
-      {
-        error: "mac_runner_offline",
-        message: "The build server is currently offline. Please try again in a moment.",
-      },
-      { status: 503 }
-    );
-  }
-
-  const autoFix = body?.autoFix !== false;
-  const maxAttemptsRaw = typeof body?.maxAttempts === "number" ? body.maxAttempts : 8;
-  const maxAttempts = Math.max(0, Math.min(8, Math.floor(maxAttemptsRaw)));
-  const effectiveAutoFix = autoFix && maxAttempts > 0;
-
+  // Install jobs NEVER auto-fix. Auto-fix belongs in the agent conversation only.
+  // The code is already verified by the simulator build; this job just compiles for
+  // device signing and installs via devicectl. One attempt, no retries.
   const job = createBuildJob({
     projectId,
     projectName: project.name || providedName || "Untitled app",
     bundleId,
     developmentTeam,
-    autoFix: effectiveAutoFix,
+    autoFix: false,
     attempt: 1,
-    maxAttempts,
+    maxAttempts: 0,
     outputType: "device",
     files,
   });

@@ -45,6 +45,8 @@ export type BuildResult = {
   compilerErrors: string[];
   /** Full history of compiler errors per attempt (when available). */
   errorHistory?: Array<{ attempt: number; errors: string[] }>;
+  /** Per-attempt auto-fix details: errors, LLM explanation, and files changed. */
+  autoFixLog?: Array<{ attempt: number; errors: string[]; explanation: string; filesFixed: string[] }>;
   /** Human-readable reason the build failed (e.g. "Max attempts (8) reached", "Auto-fix cancelled by user"). */
   errorMessage?: string | null;
   fileCount: number;
@@ -102,6 +104,7 @@ function toFirestorePayload(result: BuildResult): Record<string, unknown> {
     autoFixUsed: result.autoFixUsed,
     compilerErrors: result.compilerErrors,
     ...(Array.isArray(result.errorHistory) && result.errorHistory.length > 0 && { errorHistory: result.errorHistory }),
+    ...(Array.isArray(result.autoFixLog) && result.autoFixLog.length > 0 && { autoFixLog: result.autoFixLog }),
     ...(result.errorMessage != null && result.errorMessage !== "" && { errorMessage: result.errorMessage }),
     fileCount: result.fileCount,
     fileNames: result.fileNames,
@@ -137,6 +140,15 @@ function fromFirestoreData(id: string, data: Record<string, unknown>): BuildResu
       ? (data.errorHistory as Array<{ attempt: number; errors: string[] }>).filter(
           (e): e is { attempt: number; errors: string[] } =>
             typeof e?.attempt === "number" && Array.isArray(e?.errors)
+        )
+      : undefined,
+    autoFixLog: Array.isArray(data.autoFixLog)
+      ? (data.autoFixLog as Array<{ attempt: number; errors: string[]; explanation: string; filesFixed: string[] }>).filter(
+          (e): e is { attempt: number; errors: string[]; explanation: string; filesFixed: string[] } =>
+            typeof e?.attempt === "number" &&
+            Array.isArray(e?.errors) &&
+            typeof e?.explanation === "string" &&
+            Array.isArray(e?.filesFixed)
         )
       : undefined,
     errorMessage: typeof data.errorMessage === "string" ? data.errorMessage : undefined,

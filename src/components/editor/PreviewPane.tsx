@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
-import { Maximize2, ChevronLeft, ChevronRight, Play } from "lucide-react";
+import { Maximize2, ChevronLeft, ChevronRight, Play, Smartphone } from "lucide-react";
 import { QRCode } from "@/components/ui";
 import { ReadyIndicator } from "./ReadyIndicator";
 import { FailedIndicator } from "./FailedIndicator";
@@ -392,8 +392,16 @@ function CSSDeviceFrame({
   const showAppetize = isPro && appetizePublicKey;
   const frameWidth = DEVICE_WIDTH + 20;
   const [appetizeSessionStarted, setAppetizeSessionStarted] = useState(false);
+  const [appetizeOrientation, setAppetizeOrientation] = useState<"portrait" | "landscape">("portrait");
 
   const appetizeIframeId = "preview-appetize-iframe";
+  const isLandscape = appetizeOrientation === "landscape";
+  const appetizeWidth = isLandscape ? DEVICE_HEIGHT : DEVICE_WIDTH;
+  const appetizeHeight = isLandscape ? DEVICE_WIDTH : DEVICE_HEIGHT;
+  const appetizeEmbedUrl =
+    appetizePublicKey != null
+      ? `https://appetize.io/embed/${appetizePublicKey}?scale=auto&centered=both&screenOnly=true&grantPermissions=true&orientation=${appetizeOrientation}`
+      : "";
 
   const loadAppetizeScript = useCallback((): Promise<void> => {
     const win = window as unknown as { appetize?: { getClient: (s: string) => Promise<unknown> } };
@@ -450,29 +458,54 @@ function CSSDeviceFrame({
     <div className="flex flex-col items-center">
       {showAppetize ? (
         /* No autoplay: session starts only when user taps overlay to preserve Appetize minutes */
-        <div className="relative animate-fade-in flex items-center justify-center">
-          <iframe
-            id={appetizeIframeId}
-            title="Interactive simulator"
-            src={`https://appetize.io/embed/${appetizePublicKey}?scale=auto&centered=both&screenOnly=true&grantPermissions=true`}
-            width={DEVICE_WIDTH}
-            height={DEVICE_HEIGHT}
-            className="border-0 rounded-[2rem] overflow-hidden"
-            style={{ maxWidth: "100%", maxHeight: "100%" }}
-          />
-          {!appetizeSessionStarted && (
+        <div className="relative animate-fade-in flex flex-col items-center gap-2">
+          <div className="flex w-full items-center justify-end" style={{ maxWidth: appetizeWidth }}>
             <button
               type="button"
-              onClick={handleStartAppetizeSession}
-              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-[2rem] border-0 bg-[var(--background-primary)]/90 backdrop-blur-sm cursor-pointer transition-opacity hover:opacity-95 focus:outline focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
-              aria-label="Tap to start simulator"
+              onClick={() => setAppetizeOrientation((o) => (o === "portrait" ? "landscape" : "portrait"))}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--background-secondary)] text-[var(--text-secondary)] shadow-sm transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)] focus:outline focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+              aria-label={isLandscape ? "Switch to portrait" : "Switch to landscape"}
+              title={isLandscape ? "Portrait" : "Landscape"}
             >
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--background-secondary)] border border-[var(--border-default)] shadow-lg">
-                <Play className="h-7 w-7 text-[var(--text-primary)] fill-[var(--text-primary)]" strokeWidth={1.5} />
-              </span>
-              <span className="text-sm font-medium text-[var(--text-secondary)]">Tap to start simulator</span>
+              <Smartphone
+                className="h-5 w-5 transition-transform duration-300"
+                style={{ transform: isLandscape ? "rotate(-90deg)" : "rotate(0deg)" }}
+                strokeWidth={1.5}
+              />
             </button>
-          )}
+          </div>
+          <div
+            className="relative flex items-center justify-center"
+            style={{
+              width: appetizeWidth,
+              height: appetizeHeight,
+              transition: "width 0.3s ease, height 0.3s ease",
+            }}
+          >
+            <iframe
+              key={appetizeOrientation}
+              id={appetizeIframeId}
+              title="Interactive simulator"
+              src={appetizeEmbedUrl}
+              width={appetizeWidth}
+              height={appetizeHeight}
+              className="border-0 rounded-[2rem] overflow-hidden"
+              style={{ maxWidth: "100%", maxHeight: "100%" }}
+            />
+            {!appetizeSessionStarted && (
+              <button
+                type="button"
+                onClick={handleStartAppetizeSession}
+                className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-[2rem] border-0 bg-[var(--background-primary)]/90 backdrop-blur-sm cursor-pointer transition-opacity hover:opacity-95 focus:outline focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                aria-label="Tap to start simulator"
+              >
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--background-secondary)] border border-[var(--border-default)] shadow-lg">
+                  <Play className="h-7 w-7 text-[var(--text-primary)] fill-[var(--text-primary)]" strokeWidth={1.5} />
+                </span>
+                <span className="text-sm font-medium text-[var(--text-secondary)]">Tap to start simulator</span>
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div

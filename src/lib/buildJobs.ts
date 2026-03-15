@@ -1,5 +1,13 @@
 export type BuildJobStatus = "queued" | "running" | "succeeded" | "failed";
 
+/** One auto-fix attempt: errors that triggered it, what the LLM changed, and which files it touched. */
+export type AutoFixLogEntry = {
+  attempt: number;
+  errors: string[];
+  explanation: string;
+  filesFixed: string[];
+};
+
 export type BuildJobCreateRequest = {
   projectId: string;
   projectName: string;
@@ -11,8 +19,15 @@ export type BuildJobCreateRequest = {
   maxAttempts?: number;
   parentJobId?: string;
   userPrompt?: string;
-  /** "build" = simulator only (default); "ipa" = archive + export signed IPA; "device" = build + install via devicectl; "launch" = launch-only (devicectl device process launch, no build) */
-  outputType?: "build" | "ipa" | "device" | "launch";
+  /**
+   * "build"              — simulator compile only (default)
+   * "ipa"                — archive + export signed IPA
+   * "device"             — compile for device + code-sign + install via devicectl
+   * "launch"             — launch-only (devicectl device process launch, no build)
+   * "install-from-cache" — install-only using the runner's cached .app for this project;
+   *                        never runs xcodebuild; fails if no cached .app exists
+   */
+  outputType?: "build" | "ipa" | "device" | "launch" | "install-from-cache";
 };
 
 export type BuildJobRecord = {
@@ -39,6 +54,8 @@ export type BuildJobRecord = {
   lastActivityAt?: number;
   /** Set when user cancels; prevents auto-fix from being triggered when runner POSTs failure. */
   cancelled?: boolean;
+  /** Per-attempt auto-fix log: errors seen + what the LLM fixed. Accumulated across retry chain. */
+  autoFixLog?: AutoFixLogEntry[];
 };
 
 const MAX_LOG_LINES = 1500;
@@ -139,6 +156,22 @@ export function setBuildJobAutoFixInProgress(id: string, inProgress: boolean): v
   const rec = jobs.get(id);
   if (!rec) return;
   rec.autoFixInProgress = inProgress;
+  jobs.set(id, rec);
+}
+
+/** Append one auto-fix attempt entry to the job's log. */
+export function appendBuildJobAutoFixLog(id: string, entry: AutoFixLogEntry): void {
+  const rec = jobs.get(id);
+  if (!rec) return;
+  rec.autoFixLog = [...(rec.autoFixLog ?? []), entry];
+  jobs.set(id, rec);
+}
+
+/** Set the full auto-fix log (e.g. when creating a retry job, copy from parent). */
+export function setBuildJobAutoFixLog(id: string, log: AutoFixLogEntry[]): void {
+  const rec = jobs.get(id);
+  if (!rec) return;
+  rec.autoFixLog = log;
   jobs.set(id, rec);
 }
 

@@ -6,6 +6,8 @@ import {
   setBuildJobErrorHistory,
   appendBuildJobLogs,
   setBuildJobAutoFixInProgress,
+  appendBuildJobAutoFixLog,
+  setBuildJobAutoFixLog,
 } from "@/lib/buildJobs";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
 import { getProjectFromFirestore } from "@/lib/projectsFirestore";
@@ -211,6 +213,9 @@ Rules:
    - AVAudioEngine node connection errors ("node is not attached", "required condition is false" at engine.connect, or similar AVAudioEngine assertion failures): Ensure all nodes are attached with engine.attach(node) BEFORE any engine.connect() calls. The mandatory order is: (1) engine.attach(playerNode), engine.attach(mixerNode), etc. for every node, then (2) engine.connect(playerNode, to: mixerNode, format: nil), etc. If you see connect before attach, reorder to fix.
    - "value of type 'AVAudioPlayerNode' has no member 'nodeTime'" or "cannot convert value of type 'UInt64' to expected argument type 'AVAudioTime?'" on a scheduleBuffer/scheduleFile call: The 'at:' parameter of schedule(buffer:at:options:) and schedule(file:at:options:) takes AVAudioTime?, not a UInt64. Fix by: (1) passing nil to play immediately, or (2) passing AVAudioTime(hostTime: mach_absolute_time()) to schedule at current time. Never call playerNode.nodeTime(forHostTime:) — that method does not exist.
    - "value of type 'GraphicsContext' has no member 'foregroundStyle'" or "cannot call value of non-function type" referencing .foregroundStyle inside a Canvas closure or Shape path(in:) body: .foregroundStyle is a SwiftUI view modifier and cannot be used inside a Canvas drawing closure or a Shape's path(in:) method. Fix by replacing any context.foregroundStyle(color) with context.fill(path, with: .color(color)) or context.stroke(path, with: .color(color), lineWidth: w). For Shape structs, remove .foregroundStyle from inside path(in:) and apply it as a modifier on the Shape's call site instead.
+   - "cannot find 'AVAudioFramePosition' in scope" or "cannot find 'AVAudioFrameCount' in scope" or "cannot find 'AVAudioTime' in scope": Add "import AVFoundation" at the top of the file that contains the error. These types are in AVFoundation and are NOT automatically imported by SwiftUI.
+   - "the compiler is unable to type-check this expression in reasonable time" in a View body: The view body is too complex. Extract sections into @ViewBuilder computed properties (e.g. private var headerSection: some View { ... }) or child view structs. Split the body into smaller pieces of no more than 20-25 lines each. Never put more than 3-4 chained modifiers inline in a complex view body.
+   - "value of type 'AVAudioPlayerNode' has no member 'rate'": AVAudioPlayerNode does not expose a .rate property in all configurations. Replace with AVAudioUnitTimePitch: (1) Add let timePitch = AVAudioUnitTimePitch() as a property, (2) call engine.attach(timePitch) before connecting, (3) connect playerNode → timePitch → mixer instead of playerNode → mixer directly, (4) set timePitch.rate = value instead of playerNode.rate = value. Attach must happen before connect.
    - For any error not listed above: read the message carefully and apply the minimal fix (correct API name, add import, fix type conformance, or remove invalid syntax). Prefer the smallest change that resolves the error.
    - "Type 'X' does not conform to protocol 'Y'": Implement required protocol methods/properties. For NavigationLink(value:) and .navigationDestination(for:), the type MUST conform to Hashable. Add ": Hashable" to the struct/class declaration.
    - "Cannot convert value of type 'X' to expected type 'Y'": Use proper type conversion.
@@ -372,7 +377,10 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
   }
 
   try {
-    const client = new Anthropic({ apiKey });
+    const client = new Anthropic({
+      apiKey,
+      defaultHeaders: { "anthropic-beta": "prompt-caching-2024-07-31" },
+    });
 
     async function callLLMStreaming(userPrompt: string): Promise<{ fixedFiles: SwiftFile[]; explanation: string; raw: string; stopReason: string }> {
       const stream = client.messages.stream({
@@ -383,6 +391,12 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
         messages: [{ role: "user", content: userPrompt }],
       });
       const finalMessage = await stream.finalMessage();
+      const usage = (finalMessage as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }).usage;
+      if (usage) {
+        console.log(
+          `Tokens - input: ${usage.input_tokens ?? 0}, cache_read: ${usage.cache_read_input_tokens ?? 0}, cache_creation: ${usage.cache_creation_input_tokens ?? 0}`,
+        );
+      }
       const parsedOutput = (finalMessage as unknown as { parsed_output?: unknown }).parsed_output;
       let fixedFiles: SwiftFile[] = [];
       let explanation = "";
@@ -461,6 +475,15 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       `LLM explanation: ${explanation}`,
       `LLM returned ${fixedFiles.length} fixed file(s): ${fixedFiles.map((f) => f.path).join(", ")}`,
     ]);
+
+    // Record this fix attempt in the job's auto-fix log so admin builds page can show what changed.
+    appendBuildJobAutoFixLog(failedJobId, {
+      attempt: currentAttempt,
+      errors: errors.slice(0, 50), // cap to keep document size reasonable
+      explanation,
+      filesFixed: fixedFiles.map((f) => f.path),
+    });
+
     if (wasCancelled()) {
       setBuildJobAutoFixInProgress(failedJobId, false);
       return Response.json({ cancelled: true, reason: "Auto-fix was cancelled by user" });
@@ -537,6 +560,13 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
       { attempt: failedAttempt, errors: failedJob.compilerErrors ?? [] },
     ];
     setBuildJobErrorHistory(retryJob.id, fullHistory);
+
+    // Copy accumulated auto-fix log (including the entry just appended) to the retry job,
+    // so the final successful job carries the complete history for build-results reporting.
+    const updatedFailedJob = getBuildJob(failedJobId);
+    if (updatedFailedJob?.autoFixLog?.length) {
+      setBuildJobAutoFixLog(retryJob.id, updatedFailedJob.autoFixLog);
+    }
 
     setBuildJobNextJob(failedJobId, retryJob.id);
     appendBuildJobLogs(failedJobId, [`Created retry job ${retryJob.id} (attempt ${attempt}/${maxAttempts})`]);

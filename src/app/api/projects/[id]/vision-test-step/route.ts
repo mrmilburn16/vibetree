@@ -63,6 +63,8 @@ const TAP_INSTRUCTION_COORDINATES = `For tap actions, return "x" and "y" at the 
 const TAP_JSON_ELEMENTS = `"target": { "elementText": "exact visible text" } or { "elementLabel": "accessibility label" } (required for tap),`;
 const TAP_JSON_COORDINATES = `"x": number 0-375, "y": number 0-812 (for tap),`;
 
+const CACHE_CONTROL_1H = { type: "ephemeral" as const, ttl: "1h" as const };
+
 function buildSystemPrompt(tapMode: "coordinates" | "elements"): string {
   const tapInstruction = tapMode === "elements" ? TAP_INSTRUCTION_ELEMENTS : TAP_INSTRUCTION_COORDINATES;
   const tapJson = tapMode === "elements" ? TAP_JSON_ELEMENTS : TAP_JSON_COORDINATES;
@@ -167,12 +169,34 @@ export async function POST(
   const tapMode = rawTapMode === "coordinates" ? "coordinates" : "elements";
 
   try {
-    const client = new Anthropic({ apiKey });
+    const client = new Anthropic({
+      apiKey,
+      defaultHeaders: { "anthropic-beta": "prompt-caching-2024-07-31" },
+    });
+    const systemBlocks = [
+      { type: "text" as const, text: buildSystemPrompt(tapMode), cache_control: CACHE_CONTROL_1H },
+    ];
+    const secondToLastIndex = messages.length >= 2 ? messages.length - 2 : -1;
+    const anthropicMessages: Anthropic.MessageParam[] = messages.map((m, i) => {
+      const role = m.role as "user" | "assistant";
+      if (i !== secondToLastIndex) {
+        return { role, content: m.content };
+      }
+      const content = m.content;
+      if (typeof content === "string") {
+        return { role, content: [{ type: "text" as const, text: content, cache_control: CACHE_CONTROL_1H }] };
+      }
+      const blocks: Anthropic.MessageParam["content"] = Array.isArray(content) ? [...content] : [];
+      if (blocks.length === 0) return { role, content: m.content };
+      const last = blocks[blocks.length - 1] as unknown as Record<string, unknown>;
+      (blocks as unknown[])[blocks.length - 1] = { ...last, cache_control: CACHE_CONTROL_1H };
+      return { role, content: blocks };
+    });
     const response = await client.messages.create({
       model: VISION_MODEL,
       max_tokens: VISION_MAX_TOKENS,
-      system: buildSystemPrompt(tapMode),
-      messages: messages as Anthropic.MessageParam[],
+      system: systemBlocks,
+      messages: anthropicMessages,
     });
 
     const rawText =
@@ -217,9 +241,12 @@ export async function POST(
         })
       : [];
 
-    const usage = (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
+    const usage = (response as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }).usage;
     const input_tokens = typeof usage?.input_tokens === "number" ? usage.input_tokens : 0;
     const output_tokens = typeof usage?.output_tokens === "number" ? usage.output_tokens : 0;
+    console.log(
+      `Tokens - input: ${input_tokens}, cache_read: ${usage?.cache_read_input_tokens ?? 0}, cache_creation: ${usage?.cache_creation_input_tokens ?? 0}`,
+    );
 
     return NextResponse.json({
       ...parsed,

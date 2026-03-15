@@ -43,8 +43,8 @@
   ],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 69,
-    "firstAttemptCompile": 39,
+    "totalBuilds": 72,
+    "firstAttemptCompile": 41,
     "compileRate": 57,
     "functionalSuccesses": 0,
     "functionalRate": 0,

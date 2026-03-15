@@ -287,6 +287,9 @@ export async function POST(
         const estimatedCostUsd = usage
           ? estimateCostUsd(model, usage)
           : undefined;
+        console.log(
+          `Tokens - input: ${usage?.input_tokens ?? 0}, cache_read: ${usage?.cache_read_input_tokens ?? 0}, cache_creation: ${usage?.cache_creation_input_tokens ?? 0}`,
+        );
 
         let editedFiles: string[];
         enqueuePhase("saving_files");

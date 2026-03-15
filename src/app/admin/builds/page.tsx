@@ -59,6 +59,8 @@ type BuildResult = {
   compilerErrors: string[];
   /** Full history of errors per attempt (when available). */
   errorHistory?: Array<{ attempt: number; errors: string[] }>;
+  /** Per-attempt auto-fix details: errors seen, LLM explanation, and files changed. */
+  autoFixLog?: Array<{ attempt: number; errors: string[]; explanation: string; filesFixed: string[] }>;
   /** Human-readable reason the build failed (e.g. "Max attempts (8) reached"). */
   errorMessage?: string | null;
   fileCount: number;
@@ -322,6 +324,112 @@ function ErrorHistoryBlock({
                 {errors.map((e) => `• ${e}`).join("\n\n")}
               </pre>
             </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One entry in the auto-fix log panel. */
+function AutoFixAttemptDetail({
+  entry,
+}: {
+  entry: { attempt: number; errors: string[]; explanation: string; filesFixed: string[] };
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded border border-[var(--border-default)] bg-[var(--background-default)]">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left"
+      >
+        <span className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-[var(--text-primary)]">
+            Attempt {entry.attempt}
+          </span>
+          <span className="text-xs text-[var(--text-tertiary)]">
+            {entry.errors.length} error{entry.errors.length !== 1 ? "s" : ""} &rarr;{" "}
+            {entry.filesFixed.length} file{entry.filesFixed.length !== 1 ? "s" : ""} fixed
+          </span>
+        </span>
+        {open ? <ChevronUp className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" />}
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-[var(--border-default)] px-3 py-3">
+          {entry.errors.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+                Compiler errors
+              </p>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-[var(--badge-error)]/10 p-2 font-mono text-[11px] text-[var(--text-secondary)]">
+                {entry.errors.map((e) => `• ${e}`).join("\n\n")}
+              </pre>
+            </div>
+          )}
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+              LLM fix explanation
+            </p>
+            <p className="whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
+              {entry.explanation || <span className="italic text-[var(--text-tertiary)]">No explanation provided</span>}
+            </p>
+          </div>
+          {entry.filesFixed.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+                Files modified
+              </p>
+              <ul className="space-y-0.5">
+                {entry.filesFixed.map((f) => (
+                  <li key={f} className="font-mono text-[11px] text-[var(--link-default)]">
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AutoFixLogBlock({
+  autoFixLog,
+  compiled,
+  className = "",
+}: {
+  autoFixLog: Array<{ attempt: number; errors: string[]; explanation: string; filesFixed: string[] }>;
+  compiled: boolean;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  if (autoFixLog.length === 0) return null;
+  const heading = `Auto-fix log (${autoFixLog.length} attempt${autoFixLog.length !== 1 ? "s" : ""})`;
+  return (
+    <div className={className}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between text-left text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+      >
+        <span className="flex items-center gap-1.5">
+          <Wrench className="h-3.5 w-3.5 shrink-0" />
+          {heading}
+          {compiled && (
+            <span className="ml-1 rounded bg-green-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-green-400">
+              Fixed ✓
+            </span>
+          )}
+        </span>
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {autoFixLog.map((entry) => (
+            <AutoFixAttemptDetail key={entry.attempt} entry={entry} />
           ))}
         </div>
       )}
@@ -623,6 +731,16 @@ Based on this, should we fix the system prompt, a skill file, or both? If so, gi
       ) : (
         <CompilerErrorsBlock errors={result.compilerErrors} className="mt-3 border-t border-[var(--border-default)] pt-3" />
       )}
+
+      {/* Auto-fix log: expandable per-attempt view of what the LLM fixed */}
+      {(result.autoFixLog?.length ?? 0) > 0 && (
+        <AutoFixLogBlock
+          autoFixLog={result.autoFixLog!}
+          compiled={result.compiled}
+          className="mt-3 border-t border-[var(--border-default)] pt-3"
+        />
+      )}
+
       {result.sourceFiles &&
         Object.keys(result.sourceFiles).length > 0 &&
         (result.compilerErrors.length > 0 || (result.errorHistory?.length ?? 0) > 0) && (

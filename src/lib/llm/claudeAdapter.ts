@@ -28,6 +28,10 @@ const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 // 32K handles complex multi-file apps (13+ files) without truncation.
 const MAX_TOKENS = 64000;
 
+/** Prompt caching beta header for all Claude API requests. */
+const ANTHROPIC_BETA_HEADERS = { "anthropic-beta": "prompt-caching-2024-07-31" } as const;
+
+/** Prompt cache TTL. Default "1h" for 30–60 min agent sessions; set CACHE_TTL=5m or CACHE_TTL=off to override. */
 const CACHE_CONTROL: { type: "ephemeral"; ttl?: "1h" } | undefined =
   process.env.CACHE_TTL === "off"
     ? undefined
@@ -115,6 +119,7 @@ SELF-CHECK BEFORE EMITTING ANY CALL SITE:
 - All file paths must end with ".swift". No placeholders; produce complete, compilable Swift code.
 - Any file using Binding, @State, @Binding, @StateObject, @ObservedObject, @Observable, @Bindable, or any SwiftUI View type must have import SwiftUI.
 - Any file using @Published must import Combine.
+- Every Swift file that references ANY AVFoundation type (AVAudioEngine, AVAudioPlayerNode, AVAudioMixerNode, AVAudioPCMBuffer, AVAudioFile, AVAudioFramePosition, AVAudioFrameCount, AVAudioUnitTimePitch, AVAudioUnitEQ, AVAudioTime, AVMetadataItem, AVAsset, AVPlayer, AVAudioSession, etc.) MUST have "import AVFoundation" at the top of that specific file. SwiftUI does NOT implicitly import AVFoundation. This applies equally to View files — if a View references AVAudioFramePosition for waveform display or AVAudioTime for playback position, it needs its own "import AVFoundation". Check every file individually; do not assume an import in one file covers another.
 - Never use force unwrap (!) in SwiftUI view bodies. Use optional binding (if let) or nil-coalescing (??) instead.
 - Do not add trailing closures unless the API accepts one. BarMark, LineMark, AreaMark, PointMark initializers do NOT take trailing closures.
 - String interpolation in Text() must be valid Swift. Write .currency(code: "USD"), not .currency(code: \\"USD\\").
@@ -161,6 +166,12 @@ SELF-CHECK BEFORE EMITTING ANY CALL SITE:
 - Timer.publish: store subscription in @StateObject and cancel in onDisappear.
 - UIViewRepresentable: implement updateUIView to apply SwiftUI state changes; empty updateUIView means the UIKit view won't update.
 - SwiftUI Canvas: Use \`Canvas { context, size in ... }\` for custom 2D drawing (waveforms, charts, generative art). The \`context\` parameter is a \`GraphicsContext\`. Draw with \`context.stroke(path, with: .color(.blue), lineWidth: 2)\` or \`context.fill(path, with: .color(.green))\`. The \`with:\` parameter takes \`GraphicsContext.Shading\` — use \`.color()\`, \`.linearGradient()\`, etc. NEVER pass a raw \`Color\` value directly to \`with:\` — always wrap it: \`.color(Color.blue)\` not \`Color.blue\`. Canvas redraws automatically when any value it reads changes. Use Canvas instead of Shape or UIViewRepresentable for data-driven visualizations like audio waveforms. CRITICAL: Do NOT use \`.foregroundStyle()\` inside a Canvas or Shape body — it is a SwiftUI view modifier and does not exist on GraphicsContext or Path. Inside Canvas, set color via \`context.fill(path, with: .color(.green))\` or \`context.stroke(path, with: .color(.blue), lineWidth: 2)\`. For Shape structs, apply color via the \`.fill()\` modifier on the Shape (e.g. \`MyShape().fill(.blue)\`) or via \`.foregroundStyle()\` as a modifier on the containing View, never inside the \`path(in:)\` body.\n- AVAudioPlayerNode scheduling: Use \`schedule(buffer:at:options:)\` or \`schedule(file:at:options:)\` — the \`at:\` parameter is \`AVAudioTime?\`, not a \`UInt64\`. Pass \`nil\` to play immediately. To schedule at current host time: \`AVAudioTime(hostTime: mach_absolute_time())\`. Do NOT call \`playerNode.nodeTime(forHostTime:)\` — this method does not exist and will cause a compile error.
+- Audio session (required for playback): Always call AVAudioSession.sharedInstance().setCategory(.playback, mode: .default) and setActive(true) BEFORE engine.start(). Without this, iOS silently blocks audio output — the engine runs and the player node plays but no sound comes out. This is the most common cause of "audio engine works but nothing plays" bugs.
+- Tempo and pitch control: Use AVAudioUnitTimePitch for real-time playback speed changes. Insert it in the audio chain: playerNode → timePitch → mixer → mainMixerNode. Set timePitch.rate for speed (1.0 = normal, 1.05 = 5% faster). Do NOT use AVAudioPlayerNode.rate directly — it only works with specific non-nil formats and fails silently in most configurations.
+- Interactive buttons in audio/DJ UIs: Always use SwiftUI Button(action:) for tap targets. Do NOT use Circle().onTapGesture or other shapes with gesture modifiers — parent DragGesture recognizers and ZStack layers can intercept touches and silently swallow taps. Button has built-in touch priority that SwiftUI always respects. Never wrap multiple buttons in a shared DragGesture to detect sliding — it breaks all child tap events.
+- Numeric displays: Always add .lineLimit(1) and .minimumScaleFactor(0.7) to numeric text like BPM, percentages, and timers to prevent wrapping on smaller screens in landscape.
+- Landscape layout: When building landscape-only apps (DJ, audio production, games), use GeometryReader with proportional heights (fractions of available space) instead of fixed pixel values. Wrap content in safe area insets. Never use fixed device-specific sizes. Add the comment // REQUIRES: landscape-only at the top of App.swift.
+- File picker security: After UIDocumentPickerViewController returns a URL, always call url.startAccessingSecurityScopedResource() before reading the file and url.stopAccessingSecurityScopedResource() after loading is complete. Without startAccessingSecurityScopedResource() the file cannot be read from the app sandbox.
 - SwiftUI frame and geometry: Never pass a standalone 'height:' argument to a view initializer — this is not valid in SwiftUI. To set a height, use the .frame() modifier: e.g. SomeView().frame(height: 200). The only exception is GeometryReader which uses a proxy. This error commonly appears in custom calendar grids and word cloud layouts where a height parameter is incorrectly passed to a child view's initializer instead of applied as a .frame() modifier.
 - Tag lists, chip groups, and selection indicators in forms: Never use ZStack or absolute positioning (.offset, .position) for displaying tag lists, chip groups, or selection indicators within form views. Always use LazyVGrid or a wrapping FlowLayout using nested HStack inside VStack for tag/chip collections so they flow naturally and never overlap other UI elements. Selection state chips and goal tags must always be contained within their parent card or section, never floating outside it.
 - VIEW BODY COMPLEXITY: Keep every SwiftUI view's \`body\` computed property under 50 lines of code. The Swift compiler will fail with "unable to type-check this expression in reasonable time" on complex view bodies. To avoid this: extract sections into separate computed properties (e.g. \`private var headerSection: some View { ... }\`), extract reusable pieces into separate child View structs, use Group { } or @ViewBuilder helper methods to break up long conditional chains, and never nest more than 3 levels of if/else or switch inside a single body.
@@ -462,7 +473,7 @@ export async function getClaudeResponse(
       ? MODEL_MAP[modelOption]
       : DEFAULT_MODEL;
 
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, defaultHeaders: ANTHROPIC_BETA_HEADERS });
 
   let userContent: string;
   if (options?.currentFiles && options.currentFiles.length > 0) {
@@ -540,9 +551,7 @@ export async function getClaudeResponse(
           }
         : undefined;
     console.log(
-      `[PromptCache] creation: ${usage?.cache_creation_input_tokens ?? 0}, ` +
-      `cache_read: ${usage?.cache_read_input_tokens ?? 0}, ` +
-      `input: ${usage?.input_tokens ?? 0}`,
+      `Tokens - input: ${usage?.input_tokens ?? 0}, cache_read: ${usage?.cache_read_input_tokens ?? 0}, cache_creation: ${usage?.cache_creation_input_tokens ?? 0}`,
     );
     return {
       content: parsed.summary,
@@ -580,7 +589,7 @@ async function getClaudeResponseStream(
       ? MODEL_MAP[modelOption]
       : DEFAULT_MODEL;
 
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, defaultHeaders: ANTHROPIC_BETA_HEADERS });
 
   let userContent: string;
   if (options?.currentFiles && options.currentFiles.length > 0) {
@@ -737,9 +746,7 @@ async function getClaudeResponseStream(
           }
         : undefined;
     console.log(
-      `[PromptCache] creation: ${usage?.cache_creation_input_tokens ?? 0}, ` +
-      `cache_read: ${usage?.cache_read_input_tokens ?? 0}, ` +
-      `input: ${usage?.input_tokens ?? 0}`,
+      `Tokens - input: ${usage?.input_tokens ?? 0}, cache_read: ${usage?.cache_read_input_tokens ?? 0}, cache_creation: ${usage?.cache_creation_input_tokens ?? 0}`,
     );
     return {
       content: parsed.summary,

@@ -293,6 +293,7 @@ export function useChat(
       attempts?: number;
       compilerErrors?: string[];
       errorHistory?: Array<{ attempt: number; errors: string[] }>;
+      autoFixLog?: Array<{ attempt: number; errors: string[]; explanation: string; filesFixed: string[] }>;
       fileNames?: string[];
       sourceFiles?: Array<{ path: string; content: string }>;
     }>;
@@ -1043,6 +1044,7 @@ export function useChat(
                     skillsUsed: doneEvent?.skillIds ?? [],
                     ...(typeof estimatedCostUsd === "number" && estimatedCostUsd >= 0 && { generationCostUsd: estimatedCostUsd }),
                     ...(Array.isArray(result.errorHistory) && result.errorHistory.length > 0 && { errorHistory: result.errorHistory }),
+                    ...(Array.isArray(result.autoFixLog) && result.autoFixLog.length > 0 && { autoFixLog: result.autoFixLog }),
                     ...(result.status === "failed" && result.error && { errorMessage: result.error }),
                     ...(Array.isArray(result.sourceFiles) &&
                       result.sourceFiles.length > 0 &&

@@ -184,7 +184,7 @@ const FRAMEWORK_RULES: FrameworkRule[] = [
     framework: "StoreKit",
   },
   {
-    patterns: [/\bimport AVFoundation\b/, /\bAVPlayer\b/, /\bAVAudioPlayer\b/, /\bAVAudioSession\b/, /\bAVCaptureSession\b/, /\bAVAudioEngine\b/, /\bAVAudioPlayerNode\b/, /\bAVAudioMixerNode\b/, /\bAVAudioUnitEQ\b/, /\bAVAudioPCMBuffer\b/],
+    patterns: [/\bimport AVFoundation\b/, /\bAVPlayer\b/, /\bAVAudioPlayer\b/, /\bAVAudioSession\b/, /\bAVCaptureSession\b/, /\bAVAudioEngine\b/, /\bAVAudioPlayerNode\b/, /\bAVAudioMixerNode\b/, /\bAVAudioUnitEQ\b/, /\bAVAudioPCMBuffer\b/, /\bAVAudioFramePosition\b/, /\bAVAudioFrameCount\b/, /\bAVAudioUnitTimePitch\b/, /\bAVAudioTime\b/, /\bAVMetadataItem\b/],
     framework: "AVFoundation",
   },
   {

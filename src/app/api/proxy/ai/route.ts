@@ -37,8 +37,8 @@ const MODEL = "claude-sonnet-4-6";
 const INPUT_PRICE_PER_TOKEN = 3 / 1_000_000;
 const OUTPUT_PRICE_PER_TOKEN = 15 / 1_000_000;
 
-/** 5-minute prompt cache (ephemeral, no ttl). */
-const CACHE_CONTROL_5M = { type: "ephemeral" as const };
+/** 1-hour prompt cache (ephemeral, 1h TTL) for all Claude API calls. */
+const CACHE_CONTROL_1H = { type: "ephemeral" as const, ttl: "1h" as const };
 
 type MessageParam = { role: string; content: string };
 
@@ -168,7 +168,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const client = new Anthropic({ apiKey });
     const userIndices = messages
       .map((m, i) => (m.role === "user" ? i : -1))
       .filter((i) => i >= 0);
@@ -182,15 +181,19 @@ export async function POST(request: Request) {
         role === "user" && moreThanTwoExchanges && i === secondToLastUserIndex;
       const content =
         useCacheControl
-          ? [{ type: "text" as const, text: m.content, cache_control: CACHE_CONTROL_5M }]
+          ? [{ type: "text" as const, text: m.content, cache_control: CACHE_CONTROL_1H }]
           : m.content;
       return { role, content };
     });
 
     const systemWithCache = [
-      { type: "text" as const, text: systemPrompt, cache_control: CACHE_CONTROL_5M },
+      { type: "text" as const, text: systemPrompt, cache_control: CACHE_CONTROL_1H },
     ];
 
+    const client = new Anthropic({
+      apiKey,
+      defaultHeaders: { "anthropic-beta": "prompt-caching-2024-07-31" },
+    });
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: maxTokens,
@@ -209,6 +212,11 @@ export async function POST(request: Request) {
 
     const inputTokens = (response.usage as { input_tokens?: number })?.input_tokens ?? 0;
     const outputTokens = (response.usage as { output_tokens?: number })?.output_tokens ?? 0;
+    const cacheRead = (response.usage as { cache_read_input_tokens?: number })?.cache_read_input_tokens ?? 0;
+    const cacheCreation = (response.usage as { cache_creation_input_tokens?: number })?.cache_creation_input_tokens ?? 0;
+    console.log(
+      `Tokens - input: ${inputTokens}, cache_read: ${cacheRead}, cache_creation: ${cacheCreation}`,
+    );
     const actualCostUsd =
       inputTokens * INPUT_PRICE_PER_TOKEN + outputTokens * OUTPUT_PRICE_PER_TOKEN;
 

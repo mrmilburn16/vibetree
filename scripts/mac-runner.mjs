@@ -1,6 +1,6 @@
 import { spawn, execSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir, homedir, networkInterfaces } from "node:os";
 import { join, resolve } from "node:path";
@@ -749,6 +749,99 @@ async function validateJob(job) {
         const isLocked = /locked|passcode|user unlock|BSErrorCodeDescription = Locked/i.test(output);
         const errorMsg = isLocked ? "Unlock your iPhone first, then try again." : "Launch failed. Unlock your iPhone and try again.";
         await updateJob(job.id, { status: "failed", error: errorMsg, logs: [...logs, `[launch] ❌ ${errorMsg}`] });
+      }
+      return;
+    }
+
+    // install-from-cache: install the most-recently-built .app for this project without
+    // running xcodebuild. Fails if no cached .app exists (user must build from chat first).
+    if (job.request.outputType === "install-from-cache") {
+      const logs = [];
+      const flush = async (force = false) => {
+        if (!logs.length) return;
+        await updateJob(job.id, { logs: logs.splice(0, logs.length) });
+      };
+      const projectId = job.request.projectId;
+      const cacheDir = join(DEVICE_APP_CACHE_DIR, projectId);
+      let cachedAppPath = null;
+      try {
+        if (existsSync(cacheDir)) {
+          const entries = readdirSync(cacheDir)
+            .filter((f) => f.endsWith(".app"))
+            .map((f) => {
+              const full = join(cacheDir, f);
+              try {
+                const { mtimeMs } = statSync(full);
+                return { full, mtimeMs };
+              } catch {
+                return { full, mtimeMs: 0 };
+              }
+            })
+            .sort((a, b) => b.mtimeMs - a.mtimeMs);
+          if (entries.length > 0) cachedAppPath = entries[0].full;
+        }
+      } catch (e) {
+        console.warn("[install-from-cache] Error scanning cache dir:", e?.message || e);
+      }
+      if (!cachedAppPath || !existsSync(cachedAppPath)) {
+        await updateJob(job.id, {
+          status: "failed",
+          error: "No compiled build found on this runner. Build the app from chat first, then tap Install on iPhone.",
+          logs: ["[install-from-cache] ❌ No cached .app found for this project."],
+        });
+        return;
+      }
+      logs.push(`[install-from-cache] Found cached build: ${cachedAppPath}`);
+      await flush(true);
+      const device = findConnectedDevice();
+      if (!device) {
+        await updateJob(job.id, {
+          status: "failed",
+          error: "No connected iOS device found. Connect your iPhone via USB and try again.",
+          logs: [...logs, "[install-from-cache] ❌ No connected device."],
+        });
+        return;
+      }
+      logs.push(`[install-from-cache] Installing on ${device.name} (${device.identifier})…`);
+      logSigningIdentity(cachedAppPath, logs, flush);
+      await flush(true);
+      const bundleId = job.request.bundleId || "com.vibetree.app";
+      const INSTALL_TIMEOUT_MS = 60 * 1000;
+      let installed;
+      try {
+        installed = await Promise.race([
+          installAppOnDevice(cachedAppPath, device.identifier, bundleId, logs, flush),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("INSTALL_TIMEOUT")), INSTALL_TIMEOUT_MS)
+          ),
+        ]);
+      } catch (e) {
+        if (e?.message === "INSTALL_TIMEOUT") {
+          await updateJob(job.id, {
+            status: "failed",
+            error: "Install timed out — make sure your iPhone is unlocked and connected via USB.",
+            logs: [],
+          });
+          return;
+        }
+        throw e;
+      }
+      const installSucceeded = installed && (installed === true || installed.ok === true);
+      const installOutput = installed && installed.ok === false ? installed.output : "";
+      const installSystemError = getKnownSystemErrorMessage(installOutput);
+      if (installSucceeded) {
+        await updateJob(job.id, {
+          status: "succeeded",
+          exitCode: 0,
+          installedOnDevice: true,
+          logs: [`✅ Installed on ${device.name}`],
+        });
+      } else {
+        await updateJob(job.id, {
+          status: "failed",
+          error: installSystemError || "Install failed. Unplug and replug your iPhone, keep it unlocked, and tap Install again.",
+          logs: [installSystemError || `⚠️ Install failed on ${device.name}`],
+        });
       }
       return;
     }

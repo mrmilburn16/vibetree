@@ -53,13 +53,22 @@ Steps:
 ${stepsText || "No steps."}`;
 
   try {
-    const client = new Anthropic({ apiKey });
+    const client = new Anthropic({
+      apiKey,
+      defaultHeaders: { "anthropic-beta": "prompt-caching-2024-07-31" },
+    });
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
       messages: [{ role: "user", content: userMessage }],
     });
 
+    const usage = (response as { usage?: { input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }).usage;
+    if (usage) {
+      console.log(
+        `Tokens - input: ${usage.input_tokens ?? 0}, cache_read: ${usage.cache_read_input_tokens ?? 0}, cache_creation: ${usage.cache_creation_input_tokens ?? 0}`,
+      );
+    }
     const text =
       (response.content as Array<{ type: string; text?: string }>)?.find((b) => b.type === "text")?.text ?? "";
     const summary = text.trim();

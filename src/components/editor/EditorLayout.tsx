@@ -103,6 +103,10 @@ export function EditorLayout({
   const simulatorDeductIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const backgroundInstallJobIdRef = useRef<string | null>(null);
   const [backgroundInstallStatus, setBackgroundInstallStatus] = useState<"idle" | "building" | "ready" | "failed">("idle");
+  // Job ID of the most recently successful device build for the current code version.
+  // Set when the background device build succeeds. Cleared when new code is generated.
+  // Used by RunOnDeviceModal to install-from-cache without recompiling.
+  const [lastSuccessfulDeviceBuildJobId, setLastSuccessfulDeviceBuildJobId] = useState<string | null>(null);
   // True only after a real xcodebuild compile (simulator or device) has succeeded for the current code.
   // Resets to false whenever new code generation starts (buildStatus → "building").
   const [simulatorBuildPassed, setSimulatorBuildPassed] = useState(false);
@@ -237,6 +241,7 @@ export function EditorLayout({
       attempts?: number;
       compilerErrors?: string[];
       errorHistory?: Array<{ attempt: number; errors: string[] }>;
+      autoFixLog?: Array<{ attempt: number; errors: string[]; explanation: string; filesFixed: string[] }>;
       fileNames?: string[];
       sourceFiles?: Array<{ path: string; content: string }>;
     }> => {
@@ -301,6 +306,8 @@ export function EditorLayout({
         const buildLogText = Array.isArray(job?.logs) ? job.logs.join("\n") : "";
         const logShowsBuildFailed = buildLogText.includes("** BUILD FAILED **");
         if (status === "succeeded" && !logShowsBuildFailed) {
+          // Code compiles — mark simulator build passed immediately so user-triggered device builds skip auto-fix
+          setSimulatorBuildPassed(true);
           // Fire-and-forget: kick off background device build so it is ready when user clicks Install on iPhone
           (() => {
             fetch(`/api/projects/${projectId}/build-install`, {
@@ -328,10 +335,11 @@ export function EditorLayout({
           const fNames = Array.isArray(job?.request?.files)
             ? job.request.files.map((f: { path: string }) => f.path)
             : [];
+          const autoFixLog = Array.isArray(job?.autoFixLog) ? job.autoFixLog : undefined;
           if (attempt > 1 && Array.isArray(job?.request?.files) && job.request.files.length > 0) {
-            return { status: "succeeded", fixedFiles: job.request.files, attempts: attempt, fileNames: fNames };
+            return { status: "succeeded", fixedFiles: job.request.files, attempts: attempt, fileNames: fNames, ...(autoFixLog?.length && { autoFixLog }) };
           }
-          return { status: "succeeded", attempts: attempt, fileNames: fNames };
+          return { status: "succeeded", attempts: attempt, fileNames: fNames, ...(autoFixLog?.length && { autoFixLog }) };
         }
         if (status === "succeeded" && logShowsBuildFailed) {
           const attempt = job?.request?.attempt ?? 1;
@@ -409,6 +417,8 @@ export function EditorLayout({
         if (status === "succeeded" && !logShowsBuildFailed) {
           setBackgroundInstallStatus("ready");
           setSimulatorBuildPassed(true);
+          // Remember this job ID so the modal can install-from-cache without recompiling
+          setLastSuccessfulDeviceBuildJobId(jobId);
           return;
         }
         if (status === "failed" || (status === "succeeded" && logShowsBuildFailed)) {
@@ -558,8 +568,13 @@ export function EditorLayout({
             onBuildStatusChange={(status) => {
               setBuildStatus(status);
               if (status !== "failed") setBuildFailureReason(null);
-              // New generation started — the current compiled state is no longer valid
-              if (status === "building") setSimulatorBuildPassed(false);
+              // New generation started — compiled state and device build cache are stale
+              if (status === "building") {
+                setSimulatorBuildPassed(false);
+                setLastSuccessfulDeviceBuildJobId(null);
+                backgroundInstallJobIdRef.current = null;
+                setBackgroundInstallStatus("idle");
+              }
             }}
             onIsTypingChange={setIsAgentTyping}
             onOutOfCredits={() => setOutOfCreditsOpen(true)}
@@ -626,7 +641,8 @@ export function EditorLayout({
         projectId={project.id}
         buildStatus={buildStatus}
         isAgentTyping={isAgentTyping}
-        simulatorBuildPassed={simulatorBuildPassed}
+        backgroundInstallStatus={backgroundInstallStatus}
+        lastSuccessfulDeviceBuildJobId={lastSuccessfulDeviceBuildJobId}
         expoUrl={expoUrl}
         onExpoUrl={setExpoUrl}
         backgroundInstallJobIdRef={backgroundInstallJobIdRef}

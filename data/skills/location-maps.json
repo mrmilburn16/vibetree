@@ -72,9 +72,9 @@
   "antiPatterns": [],
   "requiredPermissions": [],
   "stats": {
-    "totalBuilds": 81,
-    "firstAttemptCompile": 41,
-    "compileRate": 51,
+    "totalBuilds": 87,
+    "firstAttemptCompile": 46,
+    "compileRate": 53,
     "functionalSuccesses": 0,
     "functionalRate": 0,
     "commonErrors": [

@@ -80,7 +80,8 @@ export function RunOnDeviceModal({
   projectId,
   buildStatus,
   isAgentTyping = false,
-  simulatorBuildPassed = false,
+  backgroundInstallStatus = "idle",
+  lastSuccessfulDeviceBuildJobId = null,
   expoUrl: expoUrlProp,
   onExpoUrl,
   projectType: projectTypeProp,
@@ -97,11 +98,19 @@ export function RunOnDeviceModal({
   /** When true, agent is generating; disable Install so user installs the updated version when ready. */
   isAgentTyping?: boolean;
   /**
-   * True only when a real xcodebuild compile (simulator or device) has succeeded for the
-   * current version of the generated code. When true, auto-fix is skipped for device builds
-   * because the code is known to compile. Resets to false when new code is generated.
+   * Status of the background device build kicked off after simulator validation succeeds.
+   * "idle"     — no code compiled yet
+   * "building" — device build in progress; Install shows "Preparing install…"
+   * "ready"    — device build succeeded; app was installed in background
+   * "failed"   — device build failed
    */
-  simulatorBuildPassed?: boolean;
+  backgroundInstallStatus?: "idle" | "building" | "ready" | "failed";
+  /**
+   * Job ID of the last successful device build for the current code version.
+   * Set by EditorLayout when the background build succeeds; cleared when new code is generated.
+   * When set, "Install on iPhone" uses install-from-cache instead of recompiling.
+   */
+  lastSuccessfulDeviceBuildJobId?: string | null;
   expoUrl?: string | null;
   onExpoUrl?: (url: string) => void;
   projectType?: "standard" | "pro";
@@ -243,36 +252,26 @@ export function RunOnDeviceModal({
     })();
   }, [isOpen, projectId, projectType, expoUrlProp, onExpoUrl]);
 
-  // Poll install job status
+  // Poll install job status — no auto-fix, no retry chains; just compile+sign+install once
   useEffect(() => {
     if (!isOpen || !installJobId) return;
     let cancelled = false;
-    let currentJobId = installJobId;
 
     const poll = async () => {
       try {
-        const res = await fetch(`/api/build-jobs/${currentJobId}`);
+        const res = await fetch(`/api/build-jobs/${installJobId}`);
         if (!res.ok || cancelled) return;
         const data = await res.json().catch(() => ({}));
         const job = data?.job;
         if (!job || cancelled) return;
 
         const status = typeof job.status === "string" ? job.status : null;
-        const nextJobId =
-          typeof job.nextJobId === "string" ? job.nextJobId : null;
         const logs = Array.isArray(job.logs)
           ? job.logs.filter((x: unknown) => typeof x === "string")
           : [];
         setInstallLogTail(logs.slice(-10));
-
-        if (status === "failed" && nextJobId) {
-          currentJobId = nextJobId;
-          setInstallJobId(nextJobId);
-          setTimeout(poll, 2000);
-          return;
-        }
-
         setInstallStatus(status);
+
         if (status === "succeeded" || status === "failed") {
           const jobError = typeof job.error === "string" ? job.error : null;
           const isAuthError = jobError != null && (/unauthorized|401/i.test(jobError) || jobError === "Unauthorized");
@@ -352,6 +351,7 @@ export function RunOnDeviceModal({
         return;
       }
 
+      // ── Case 1: Background build job still in-flight or just finished ──
       const backgroundJobId = backgroundInstallJobIdRef?.current ?? null;
       if (backgroundJobId) {
         const jobRes = await fetch(`/api/build-jobs/${backgroundJobId}`);
@@ -360,6 +360,7 @@ export function RunOnDeviceModal({
           const job = jobData?.job;
           const status = typeof job?.status === "string" ? job.status : null;
           if (status === "succeeded") {
+            // App is already installed from the background job — nothing to do
             setInstallJobId(backgroundJobId);
             setInstallStatus("succeeded");
             setInstallStartedAt(Date.now());
@@ -369,45 +370,19 @@ export function RunOnDeviceModal({
             setInstallLoading(false);
             return;
           }
-          if (status === "failed") {
-            onConsumedBackgroundJob?.();
-            // Fall through to existing POST flow
-          } else {
+          if (status === "queued" || status === "running") {
+            // Watch the in-progress background job
             setInstallJobId(backgroundJobId);
-            setInstallStatus(status === "running" ? "running" : "queued");
+            setInstallStatus(status);
             setInstallLoading(false);
             return;
           }
+          // background job failed — clear ref and fall through to install-from-cache
+          onConsumedBackgroundJob?.();
         }
       }
 
-      let files: { path: string; content: string }[] = [];
-      if (typeof window !== "undefined") {
-        try {
-          const raw = localStorage.getItem(
-            `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`
-          );
-          const parsed = raw ? JSON.parse(raw) : null;
-          if (Array.isArray(parsed?.files) && parsed.files.length > 0) {
-            try {
-              localStorage.setItem(
-                `${PROJECT_FILES_STORAGE_PREFIX}${projectId}`,
-                JSON.stringify({ updatedAt: Date.now() })
-              );
-            } catch {}
-          }
-        } catch {}
-      }
-      try {
-        const filesRes = await fetch(`/api/projects/${projectId}/files`);
-        if (filesRes.ok) {
-          const data = (await filesRes.json()) as { files?: { path: string; content: string }[] };
-          if (Array.isArray(data.files) && data.files.length > 0) {
-            files = data.files;
-          }
-        }
-      } catch {}
-
+      // Resolve team ID and bundle ID from localStorage / Firestore
       let projectName = "Untitled app";
       let bundleId = "";
       if (typeof window !== "undefined") {
@@ -421,7 +396,6 @@ export function RunOnDeviceModal({
           if (p?.bundleId) bundleId = String(p.bundleId);
         } catch {}
       }
-
       const finalBundleId = bundleIdOverride.trim() || bundleId;
       const finalTeamId = teamId.trim();
       setTeamIdValidationError(null);
@@ -443,43 +417,44 @@ export function RunOnDeviceModal({
         }
       }
 
-      if (files.length > 0) {
-        try {
-          await fetch(`/api/projects/${projectId}/files`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ files }),
-          });
-        } catch {}
-      }
-
-      const res = await fetch(`/api/projects/${projectId}/build-install`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          files: files.length > 0 ? files : undefined,
-          projectName,
-          bundleId: finalBundleId,
-          developmentTeam: finalTeamId || undefined,
-          autoFix: !simulatorBuildPassed,
-        }),
-      });
-      if (res.status === 401) {
-        setError(SESSION_EXPIRED_MESSAGE);
-        setInstallStatus("failed");
+      // ── Case 2: We have a lastSuccessfulDeviceBuildJobId (prior successful build for this code) ──
+      // Use install-from-cache: runner finds the cached .app and installs it without recompiling.
+      if (lastSuccessfulDeviceBuildJobId) {
+        const res = await fetch(`/api/projects/${projectId}/build-install`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectName,
+            bundleId: finalBundleId,
+            developmentTeam: finalTeamId || undefined,
+            useCache: true,
+          }),
+        });
+        if (res.status === 401) {
+          setError(SESSION_EXPIRED_MESSAGE);
+          setInstallStatus("failed");
+          setInstallLoading(false);
+          return;
+        }
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const msg = data?.error === "mac_runner_offline"
+            ? (data?.message ?? "Build server is offline.")
+            : (data?.error ?? "Install request failed");
+          throw new Error(msg);
+        }
+        const data = await res.json().catch(() => ({}));
+        const jobId = typeof data?.job?.id === "string" ? data.job.id : null;
+        if (!jobId) throw new Error("No job id returned");
+        setInstallJobId(jobId);
+        setInstallStatus("queued");
         setInstallLoading(false);
         return;
       }
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        const msg = data?.error === "mac_runner_offline" ? (data?.message ?? "Build server is offline. Builds are paused until the server comes back online.") : (data?.error ?? "Install request failed");
-        throw new Error(msg);
-      }
-      const data = await res.json().catch(() => ({}));
-      const jobId = typeof data?.job?.id === "string" ? data.job.id : null;
-      if (!jobId) throw new Error("No job id returned");
-      setInstallJobId(jobId);
-      setInstallStatus("queued");
+
+      // ── Case 3: No cached build — this should not normally happen since the button is
+      // disabled when no successful build exists, but handle it gracefully.
+      throw new Error("No compiled build available. Build the app from chat first, then tap Install on iPhone.");
     } catch (e) {
       const raw = e instanceof Error ? e.message : "Install failed. Try again.";
       const isAuthError = /unauthorized|401/i.test(raw) || raw === "Unauthorized";
@@ -882,20 +857,30 @@ export function RunOnDeviceModal({
           )}
 
           {/* ── Install button ── */}
+          {/* Disabled until a successful device build exists for the current code version */}
           <Button
             type="button"
             onClick={handleInstallOnDevice}
             disabled={
-              !allPassed || installLoading || isBuilding || isAgentTyping
+              !allPassed ||
+              installLoading ||
+              isBuilding ||
+              isAgentTyping ||
+              backgroundInstallStatus === "building" ||
+              (!lastSuccessfulDeviceBuildJobId && !backgroundInstallJobIdRef?.current)
             }
             className="w-full"
           >
             {installLoading
               ? "Starting\u2026"
               : isAgentTyping
-                ? "Wait for agent to finish…"
+                ? "Wait for agent to finish\u2026"
+                : backgroundInstallStatus === "building"
+                ? "Preparing install\u2026"
                 : isBuilding
-                ? `Building & installing\u2026 (${installElapsed}s)`
+                ? `Installing\u2026 (${installElapsed}s)`
+                : !lastSuccessfulDeviceBuildJobId && !installSucceededOnlyWhenInstalled
+                ? "Build app in chat first"
                 : installSucceededOnlyWhenInstalled
                   ? "Re-install on iPhone"
                   : "Install on iPhone"}
@@ -985,9 +970,9 @@ export function RunOnDeviceModal({
                         }
                       >
                         {installStatus === "queued" &&
-                          "Waiting for Mac runner to start build\u2026"}
+                          "Waiting for Mac runner\u2026"}
                         {installStatus === "running" &&
-                          "Building for device & installing\u2026"}
+                          "Building & installing on device\u2026"}
                         {installSucceededOnlyWhenInstalled &&
                           (error && /locked/i.test(error)
                             ? "Unlock your iPhone and tap Install again."

@@ -73,6 +73,17 @@ export async function POST(request: Request) {
     )
     ? (body.errorHistory as Array<{ attempt: number; errors: string[] }>)
     : undefined;
+  const autoFixLog = Array.isArray(body.autoFixLog) &&
+    body.autoFixLog.every(
+      (e: unknown) =>
+        typeof e === "object" && e !== null &&
+        typeof (e as { attempt: unknown }).attempt === "number" &&
+        Array.isArray((e as { errors: unknown }).errors) &&
+        typeof (e as { explanation: unknown }).explanation === "string" &&
+        Array.isArray((e as { filesFixed: unknown }).filesFixed)
+    )
+    ? (body.autoFixLog as Array<{ attempt: number; errors: string[]; explanation: string; filesFixed: string[] }>)
+    : undefined;
   const wanted = errorFileNames(compilerErrors, errorHistory);
   let sourceFiles: Record<string, string> | undefined;
   if (Array.isArray(body.sourceFiles) && body.sourceFiles.length > 0) {
@@ -114,6 +125,7 @@ export async function POST(request: Request) {
     skillsUsed: Array.isArray(body.skillsUsed) ? body.skillsUsed : [],
     ...(typeof body.generationCostUsd === "number" && body.generationCostUsd >= 0 && { generationCostUsd: body.generationCostUsd }),
     ...(errorHistory && errorHistory.length > 0 && { errorHistory }),
+    ...(autoFixLog && autoFixLog.length > 0 && { autoFixLog }),
     ...(typeof body.errorMessage === "string" && body.errorMessage.trim() !== "" && { errorMessage: body.errorMessage.trim() }),
     ...(sourceFiles && Object.keys(sourceFiles).length > 0 && { sourceFiles }),
   });

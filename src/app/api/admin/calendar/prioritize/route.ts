@@ -36,15 +36,26 @@ export async function POST(req: NextRequest) {
     currentEstimate: t.estimatedMinutes,
   }));
 
-  const client = new Anthropic({ apiKey });
-
+  const client = new Anthropic({
+    apiKey,
+    defaultHeaders: { "anthropic-beta": "prompt-caching-2024-07-31" },
+  });
+  const systemBlocks = [
+    { type: "text" as const, text: SYSTEM, cache_control: { type: "ephemeral" as const, ttl: "1h" as const } },
+  ];
   const response = await client.messages.create({
     model: "claude-sonnet-4-5-20250929",
     max_tokens: 2000,
-    system: SYSTEM,
+    system: systemBlocks,
     messages: [{ role: "user", content: JSON.stringify(taskList) }],
   });
 
+  const usage = (response as { usage?: { input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }).usage;
+  if (usage) {
+    console.log(
+      `Tokens - input: ${usage.input_tokens ?? 0}, cache_read: ${usage.cache_read_input_tokens ?? 0}, cache_creation: ${usage.cache_creation_input_tokens ?? 0}`,
+    );
+  }
   const text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
