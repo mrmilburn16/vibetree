@@ -138,8 +138,7 @@ export function BuildProgressStream({
         {/* Initial spinner before any content arrives */}
         {showInitialSpinner && (
           <div className="stream-row-active inline-block">
-            <span className="text-xs text-[var(--text-secondary)]">Generating app</span>
-            <span className="chat-step-dots inline-block ml-0.5" aria-hidden />
+            <span className="text-xs status-step-shimmer">Generating app</span>
           </div>
         )}
 
@@ -156,8 +155,9 @@ export function BuildProgressStream({
                 className={isActive ? "stream-row-active" : ""}
                 style={needsGroupGap ? { marginTop: "8px" } : undefined}
               >
-                <span className="text-xs text-[var(--text-secondary)]">{entry.text}</span>
-                {isActive && <span className="chat-step-dots inline-block ml-0.5" aria-hidden />}
+                <span className={`text-xs ${isActive ? "status-step-shimmer" : "text-white"}`}>
+                  {entry.text}
+                </span>
               </div>
             );
           }
@@ -193,10 +193,9 @@ export function BuildProgressStream({
                   {entry.existing ? "Editing" : "Creating"}
                 </span>
               )}
-              <span className="font-mono text-[11px] text-[var(--text-secondary)]">
+              <span className={`font-mono text-[11px] ${isActive ? "status-step-shimmer" : "text-[var(--text-secondary)]"}`}>
                 {entry.basename}
               </span>
-              {isActive && <span className="chat-step-dots inline-block ml-0.5" aria-hidden />}
             </div>
           );
         })}
@@ -207,10 +206,9 @@ export function BuildProgressStream({
             className="stream-row-active"
             style={timeline.length > 0 ? { marginTop: "8px" } : undefined}
           >
-            <span className="text-xs text-[var(--text-secondary)]">
+            <span className="text-xs status-step-shimmer">
               {streamPendingStatus!.trim()}
             </span>
-            <span className="chat-step-dots inline-block ml-0.5" aria-hidden />
           </div>
         )}
       </div>
@@ -256,15 +254,14 @@ export function CompileStatusRow({
     <div className="max-w-[88%] py-0.5 animate-chat-step-in">
       <div className="stream-row-active inline-flex items-center gap-0">
         <span
-          className="text-xs"
-          style={{ color: isAutoFix ? "#BA7517" : "var(--text-secondary)" }}
+          className={`text-xs ${isAutoFix ? "" : "status-step-shimmer"}`}
+          style={isAutoFix ? { color: "#BA7517" } : undefined}
         >
           {label}
         </span>
         {elapsed && (
           <span className="ml-1.5 text-xs text-[var(--text-tertiary)]">({elapsed})</span>
         )}
-        <span className="chat-step-dots inline-block ml-0.5" aria-hidden />
       </div>
     </div>
   );

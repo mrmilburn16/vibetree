@@ -48,6 +48,12 @@ export interface BuildPbxprojOptions {
    * and GENERATE_INFOPLIST_FILE = NO. Used for exported apps that need a URL scheme for "Open app" in Companion.
    */
   appInfoPlistPath?: string;
+  /**
+   * When true, the iPhone Info.plist orientation key is set to landscape-only
+   * (UIInterfaceOrientationLandscapeLeft + UIInterfaceOrientationLandscapeRight),
+   * omitting UIInterfaceOrientationPortrait. Detected automatically from Swift source content.
+   */
+  landscapeOnly?: boolean;
 }
 
 interface PrivacyRule {
@@ -178,7 +184,7 @@ const FRAMEWORK_RULES: FrameworkRule[] = [
     framework: "StoreKit",
   },
   {
-    patterns: [/\bimport AVFoundation\b/, /\bAVPlayer\b/, /\bAVAudioPlayer\b/, /\bAVAudioSession\b/, /\bAVCaptureSession\b/],
+    patterns: [/\bimport AVFoundation\b/, /\bAVPlayer\b/, /\bAVAudioPlayer\b/, /\bAVAudioSession\b/, /\bAVCaptureSession\b/, /\bAVAudioEngine\b/, /\bAVAudioPlayerNode\b/, /\bAVAudioMixerNode\b/, /\bAVAudioUnitEQ\b/, /\bAVAudioPCMBuffer\b/],
     framework: "AVFoundation",
   },
   {
@@ -254,6 +260,22 @@ export function detectRequiredFrameworks(files: SwiftFile[]): string[] {
   }
 
   return Array.from(frameworks).sort();
+}
+
+/**
+ * Detect whether the generated app should be locked to landscape-only orientation.
+ * Looks for explicit landscape hints in Swift source content (comments from skill instructions,
+ * AppDelegate overrides, or landscape-heavy context keywords in code).
+ */
+export function detectLandscapeOnly(files: SwiftFile[]): boolean {
+  const combined = files.map((f) => f.content).join("\n");
+  // Explicit opt-in comment inserted by the AVAudioEngine skill (and any future skill/prompt guidance)
+  if (/\/\/\s*REQUIRES:\s*landscape-only/i.test(combined)) return true;
+  // AppDelegate returning .landscape from supportedInterfaceOrientationsFor
+  if (/supportedInterfaceOrientationsFor[\s\S]{0,200}\.landscape\b/.test(combined)) return true;
+  // Direct UIInterfaceOrientationMask.landscape usage (without .portrait)
+  if (/UIInterfaceOrientationMask\.landscape\b/.test(combined) && !/UIInterfaceOrientationMask\.portrait\b/.test(combined)) return true;
+  return false;
 }
 
 interface EntitlementRule {
@@ -411,6 +433,11 @@ export function buildPbxproj(
   const entitlementsLine = options?.entitlementsPath
     ? `\t\t\t\tCODE_SIGN_ENTITLEMENTS = ${JSON.stringify(projectName + "/" + options.entitlementsPath)};\n`
     : "";
+
+  // Orientation: landscape-only apps (DJ, audio production) strip portrait from the iPhone key.
+  const iPhoneOrientations = options?.landscapeOnly
+    ? "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+    : "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 
   const fileTypeForPath = (p: string): string => {
     if (p.endsWith(".swift")) return "sourcecode.swift";
@@ -815,7 +842,7 @@ ${entitlementsLine}${developmentTeamLine}\t\t\t\tCURRENT_PROJECT_VERSION = 1;
 ${appInfoPlistLine}${appPlistGenBlock}\t\t\t\tINFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 \t\t\t\tINFOPLIST_KEY_UILaunchScreen_Generation = YES;
 \t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-\t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+\t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "${iPhoneOrientations}";
 \t\t\t\tLD_RUNPATH_SEARCH_PATHS = (
 \t\t\t\t\t"$(inherited)",
 \t\t\t\t\t"@executable_path/Frameworks",
@@ -842,7 +869,7 @@ ${entitlementsLine}${developmentTeamLine}\t\t\t\tCURRENT_PROJECT_VERSION = 1;
 ${appInfoPlistLine}${appPlistGenBlock}\t\t\t\tINFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 \t\t\t\tINFOPLIST_KEY_UILaunchScreen_Generation = YES;
 \t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-\t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+\t\t\t\tINFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "${iPhoneOrientations}";
 \t\t\t\tLD_RUNPATH_SEARCH_PATHS = (
 \t\t\t\t\t"$(inherited)",
 \t\t\t\t\t"@executable_path/Frameworks",

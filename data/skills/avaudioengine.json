@@ -1,0 +1,62 @@
+{
+  "id": "avaudioengine",
+  "name": "AVAudioEngine Audio Playback",
+  "frameworks": [
+    "AVFoundation"
+  ],
+  "version": 1,
+  "detection": {
+    "keywords": [
+      "audio",
+      "music",
+      "sound",
+      "DJ",
+      "mixer",
+      "playback",
+      "beat",
+      "BPM",
+      "waveform",
+      "equalizer",
+      "podcast player",
+      "audio player",
+      "song",
+      "track",
+      "deck",
+      "crossfade",
+      "loop",
+      "sample",
+      "synthesizer",
+      "metronome",
+      "recorder",
+      "voice memo"
+    ],
+    "excludeKeywords": [
+      "speech recognition",
+      "transcribe",
+      "speech to text",
+      "dictation",
+      "sound classification"
+    ]
+  },
+  "promptInjection": "=== AVAudioEngine RULES (MANDATORY) ===\n\nENGINE LIFECYCLE:\n- Create ONE shared AVAudioEngine instance for the entire app\n- Call engine.attach(playerNode) BEFORE engine.connect(playerNode, to:, format:)\n- Call try engine.start() AFTER all nodes are attached and connected\n- Always check engine.isRunning before scheduling buffers — if not running, call try engine.start()\n- To stop: call playerNode.stop() first, then engine.stop() — never stop the engine while a node is mid-playback without stopping the node first\n\nMULTIPLE AUDIO SOURCES (DJ apps, multi-track, etc.):\n- Create a SEPARATE AVAudioPlayerNode for EACH audio source/deck/track\n- Each player node must be independently attached and connected: engine.attach(playerNodeA), engine.attach(playerNodeB), engine.connect(playerNodeA, to: engine.mainMixerNode, format: format), engine.connect(playerNodeB, to: engine.mainMixerNode, format: format)\n- Do NOT reuse a single player node for multiple audio files — each deck/track gets its own node\n- Store player nodes in an array or dictionary keyed by deck/track ID if the number of sources is dynamic\n\nLOADING AND PLAYING AUDIO FILES:\n- Use AVAudioFile(forReading: url) to open audio files\n- Read into a buffer: let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)); try file.read(into: buffer)\n- Schedule the buffer: playerNode.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)\n- CRITICAL: Call playerNode.play() AFTER scheduleBuffer, not before — scheduling without play() will load the buffer but produce no sound\n- The correct sequence is ALWAYS: attach → connect → engine.start() → scheduleBuffer → playerNode.play()\n- To restart/replay: call playerNode.stop(), then scheduleBuffer again, then playerNode.play()\n\nAUDIO TIME AND SCHEDULING:\n- Use AVAudioTime(hostTime: mach_absolute_time()) to get current host time\n- Do NOT use playerNode.nodeTime(forHostTime:) with a UInt64 — it expects AVAudioTime\n- The correct conversion: let hostTime = AVAudioTime(hostTime: mach_absolute_time()); let nodeTime = playerNode.nodeTime(forNodeTime: hostTime)\n- For delayed playback: let future = AVAudioTime(hostTime: mach_absolute_time() + UInt64(delaySeconds * Double(NSEC_PER_SEC))); playerNode.scheduleBuffer(buffer, at: future, options: [])\n- To get current playback position: use playerNode.lastRenderTime and convert with playerNode.playerTime(forNodeTime:)\n\nVOLUME AND CROSSFADING:\n- Set volume per node: playerNodeA.volume = 0.8\n- For crossfader: playerNodeA.volume = 1.0 - crossfadeValue; playerNodeB.volume = crossfadeValue (where crossfadeValue is 0.0 to 1.0)\n- Master volume: engine.mainMixerNode.outputVolume = masterValue\n\nWAVEFORM VISUALIZATION:\n- Extract samples from AVAudioPCMBuffer using buffer.floatChannelData?[0] (for mono/left channel)\n- Downsample for display: stride through buffer.frameLength and take max absolute value per chunk\n- Store downsampled values as [Float] and render as a SwiftUI Path or Canvas drawing\n- Do NOT use .foregroundStyle inside a Canvas body — use context.fill() or context.stroke() with a Color or GraphicsContext.Shading instead\n- For playback position indicator: calculate progress as currentFrame / totalFrames and overlay a vertical line or highlight region on the waveform\n\nFILE PICKER FOR AUDIO:\n- Use .fileImporter(isPresented:allowedContentTypes:) with [.audio] content type\n- Import UTType from UniformTypeIdentifiers\n- In the completion handler, call url.startAccessingSecurityScopedResource() before reading the file and url.stopAccessingSecurityScopedResource() after loading the buffer\n- If the app has multiple decks, use separate @State booleans for each file picker (showFilePickerA, showFilePickerB) — do NOT reuse one picker for both\n\nCOMMON ANTI-PATTERNS (NEVER DO THESE):\n- NEVER call scheduleBuffer without calling play() afterward — the buffer loads but no sound plays\n- NEVER use forHostTime: where forNodeTime: is expected — wrong argument label causes compile error\n- NEVER pass UInt64 where AVAudioTime is expected — wrap with AVAudioTime(hostTime:) first\n- NEVER share one AVAudioPlayerNode across multiple audio sources — each source needs its own node\n- NEVER call engine.connect before engine.attach — attach must come first\n- NEVER use .foregroundStyle inside a Canvas or Shape draw closure — use fill() or GraphicsContext methods\n- NEVER forget url.startAccessingSecurityScopedResource() when loading files from the file picker — the read will fail silently",
+  "canonicalCode": {},
+  "antiPatterns": [
+    "Calling scheduleBuffer without calling play() afterward — buffer loads but no sound plays",
+    "Using forHostTime: where forNodeTime: is expected — wrong argument label causes compile error",
+    "Passing UInt64 where AVAudioTime is expected — wrap with AVAudioTime(hostTime:) first",
+    "Sharing one AVAudioPlayerNode across multiple audio sources — each source needs its own node",
+    "Calling engine.connect before engine.attach — attach must come first",
+    "Using .foregroundStyle inside a Canvas or Shape draw closure — use fill() or GraphicsContext methods",
+    "Forgetting url.startAccessingSecurityScopedResource() when loading files from the file picker"
+  ],
+  "requiredPermissions": [],
+  "stats": {
+    "totalBuilds": 0,
+    "firstAttemptCompile": 0,
+    "compileRate": 0,
+    "functionalSuccesses": 0,
+    "functionalRate": 0,
+    "commonErrors": [],
+    "goldenExamples": []
+  }
+}

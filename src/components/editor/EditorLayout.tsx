@@ -103,6 +103,9 @@ export function EditorLayout({
   const simulatorDeductIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const backgroundInstallJobIdRef = useRef<string | null>(null);
   const [backgroundInstallStatus, setBackgroundInstallStatus] = useState<"idle" | "building" | "ready" | "failed">("idle");
+  // True only after a real xcodebuild compile (simulator or device) has succeeded for the current code.
+  // Resets to false whenever new code generation starts (buildStatus → "building").
+  const [simulatorBuildPassed, setSimulatorBuildPassed] = useState(false);
 
   useEffect(() => {
     setChatWidth(getStoredChatWidth());
@@ -405,6 +408,7 @@ export function EditorLayout({
         const logShowsBuildFailed = logText.includes("** BUILD FAILED **");
         if (status === "succeeded" && !logShowsBuildFailed) {
           setBackgroundInstallStatus("ready");
+          setSimulatorBuildPassed(true);
           return;
         }
         if (status === "failed" || (status === "succeeded" && logShowsBuildFailed)) {
@@ -554,6 +558,8 @@ export function EditorLayout({
             onBuildStatusChange={(status) => {
               setBuildStatus(status);
               if (status !== "failed") setBuildFailureReason(null);
+              // New generation started — the current compiled state is no longer valid
+              if (status === "building") setSimulatorBuildPassed(false);
             }}
             onIsTypingChange={setIsAgentTyping}
             onOutOfCredits={() => setOutOfCreditsOpen(true)}
@@ -620,6 +626,7 @@ export function EditorLayout({
         projectId={project.id}
         buildStatus={buildStatus}
         isAgentTyping={isAgentTyping}
+        simulatorBuildPassed={simulatorBuildPassed}
         expoUrl={expoUrl}
         onExpoUrl={setExpoUrl}
         backgroundInstallJobIdRef={backgroundInstallJobIdRef}

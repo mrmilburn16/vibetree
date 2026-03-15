@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { getProjectFiles, getProjectFilePaths } from "@/lib/projectFileStore";
-import { buildPbxproj, detectPrivacyPermissions, detectRequiredFrameworks, detectEntitlements, generateEntitlementsPlist } from "@/lib/xcodeProject";
+import { buildPbxproj, detectPrivacyPermissions, detectRequiredFrameworks, detectEntitlements, detectLandscapeOnly, generateEntitlementsPlist } from "@/lib/xcodeProject";
 import { getProject, setProject, type ProjectRecord } from "@/lib/projectStore";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { requireProjectAuth } from "@/lib/apiProjectAuth";
@@ -347,6 +347,7 @@ struct AppLiveActivityWidget: Widget {
   const privacyPermissions = detectPrivacyPermissions(allSwiftFiles);
   const frameworks = detectRequiredFrameworks(allSwiftFiles);
   const entitlements = detectEntitlements(allSwiftFiles);
+  const landscapeOnly = detectLandscapeOnly(allSwiftFiles);
   const entitlementsPath = entitlements ? "App.entitlements" : undefined;
 
   const appInfoPlistPath = "Info.plist";
@@ -366,6 +367,7 @@ struct AppLiveActivityWidget: Widget {
     entitlementsPath,
     appSwiftPaths,
     appInfoPlistPath,
+    landscapeOnly,
     widget:
       widgetInfoPlistPath && widgetSources.length > 0
         ? {

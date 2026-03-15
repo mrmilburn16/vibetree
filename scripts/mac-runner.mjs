@@ -16,8 +16,8 @@ const DERIVED_DATA_CACHE_DIR = join(homedir(), ".vibetree", "derived-data-cache"
 /** Cache for built device .app bundles keyed by projectId + content hash (skip rebuild when source unchanged). */
 const DEVICE_APP_CACHE_DIR = join(homedir(), ".vibetree", "device-app-cache");
 
-function contentHash(zipBuffer) {
-  return createHash("sha256").update(zipBuffer).digest("hex").slice(0, 16);
+function contentHash(zipBuffer, salt = "") {
+  return createHash("sha256").update(zipBuffer).update(salt).digest("hex").slice(0, 16);
 }
 
 function getCachedDeviceAppPath(projectId, hash) {
@@ -757,7 +757,7 @@ async function validateJob(job) {
     const wantDevice = job.request.outputType === "device";
 
     if (wantDevice) {
-      const hash = contentHash(zip);
+      const hash = contentHash(zip, INJECT_BASE_URL || "");
       const cachedAppPath = getCachedDeviceAppPath(job.request.projectId, hash);
       if (cachedAppPath) {
         const logs = [];
@@ -948,7 +948,7 @@ async function validateJob(job) {
           });
           try {
             const zipBuf = await readFile(zipPath);
-            const hash = contentHash(zipBuf);
+            const hash = contentHash(zipBuf, INJECT_BASE_URL || "");
             saveDeviceAppToCache(job.request.projectId, hash, appPath);
           } catch (e) {
             console.warn("[device-cache] Failed to cache .app:", e?.message || e);
@@ -1003,7 +1003,7 @@ async function validateJob(job) {
           }
           try {
             const zipBuf = await readFile(zipPath);
-            const hash = contentHash(zipBuf);
+            const hash = contentHash(zipBuf, INJECT_BASE_URL || "");
             saveDeviceAppToCache(job.request.projectId, hash, appPath);
           } catch (e) {
             console.warn("[device-cache] Failed to cache .app:", e?.message || e);

@@ -80,6 +80,7 @@ export function RunOnDeviceModal({
   projectId,
   buildStatus,
   isAgentTyping = false,
+  simulatorBuildPassed = false,
   expoUrl: expoUrlProp,
   onExpoUrl,
   projectType: projectTypeProp,
@@ -95,6 +96,12 @@ export function RunOnDeviceModal({
   buildStatus?: "idle" | "building" | "live" | "failed";
   /** When true, agent is generating; disable Install so user installs the updated version when ready. */
   isAgentTyping?: boolean;
+  /**
+   * True only when a real xcodebuild compile (simulator or device) has succeeded for the
+   * current version of the generated code. When true, auto-fix is skipped for device builds
+   * because the code is known to compile. Resets to false when new code is generated.
+   */
+  simulatorBuildPassed?: boolean;
   expoUrl?: string | null;
   onExpoUrl?: (url: string) => void;
   projectType?: "standard" | "pro";
@@ -454,7 +461,7 @@ export function RunOnDeviceModal({
           projectName,
           bundleId: finalBundleId,
           developmentTeam: finalTeamId || undefined,
-          autoFix: buildStatus !== "live",
+          autoFix: !simulatorBuildPassed,
         }),
       });
       if (res.status === 401) {
