@@ -119,6 +119,7 @@ SELF-CHECK BEFORE EMITTING ANY CALL SITE:
 - All file paths must end with ".swift". No placeholders; produce complete, compilable Swift code.
 - Any file using Binding, @State, @Binding, @StateObject, @ObservedObject, @Observable, @Bindable, or any SwiftUI View type must have import SwiftUI.
 - Any file using @Published must import Combine.
+- When editing an existing file that references custom types defined in other project files (e.g. DeckModel, TrackInfo, DeckState, PlayerState, or any non-framework type), NEVER remove or regenerate those other files. If DJMixerViewModel.swift references DeckModel and you are asked to fix or update DJMixerViewModel, keep the DeckModel references intact and return only the files you actually changed. Regenerating a ViewModel from scratch and silently dropping the types it depends on causes "cannot find type 'X' in scope" errors on every subsequent build.
 - Every Swift file that references ANY AVFoundation type (AVAudioEngine, AVAudioPlayerNode, AVAudioMixerNode, AVAudioPCMBuffer, AVAudioFile, AVAudioFramePosition, AVAudioFrameCount, AVAudioUnitTimePitch, AVAudioUnitEQ, AVAudioTime, AVMetadataItem, AVAsset, AVPlayer, AVAudioSession, etc.) MUST have "import AVFoundation" at the top of that specific file. SwiftUI does NOT implicitly import AVFoundation. This applies equally to View files — if a View references AVAudioFramePosition for waveform display or AVAudioTime for playback position, it needs its own "import AVFoundation". Check every file individually; do not assume an import in one file covers another.
 - Never use force unwrap (!) in SwiftUI view bodies. Use optional binding (if let) or nil-coalescing (??) instead.
 - Do not add trailing closures unless the API accepts one. BarMark, LineMark, AreaMark, PointMark initializers do NOT take trailing closures.
@@ -452,6 +453,9 @@ export interface GetClaudeResponseOptions {
   skillPromptBlock?: string;
   /** When set with currentFiles, instructs the model to preserve this app name (do not rename unless user asks). */
   projectName?: string;
+  /** Base64-encoded image to include as a vision input (no data-URL prefix, just raw base64). */
+  imageBase64?: string;
+  imageMediaType?: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 }
 
 /**
@@ -475,7 +479,7 @@ export async function getClaudeResponse(
 
   const client = new Anthropic({ apiKey, defaultHeaders: ANTHROPIC_BETA_HEADERS });
 
-  let userContent: string;
+  let userTextContent: string;
   if (options?.currentFiles && options.currentFiles.length > 0) {
     const preserveName =
       options.projectType === "pro" &&
@@ -483,10 +487,20 @@ export async function getClaudeResponse(
       options.projectName.trim().length > 0
         ? `The app is already named "${options.projectName.trim()}". Do not change the app name, window title, or navigation title unless the user explicitly asks to rename the app.\n\n`
         : "";
-    userContent = `${preserveName}Current project files (apply the user's request to these and output the full updated JSON):\n${JSON.stringify(options.currentFiles)}\n\nUser request: ${message}\n\nInstructions: Apply only what the user asked for. Return the complete updated file(s) with that change applied—full content for each file. Do not return the same content unchanged; the user must see their requested change in the app.`;
+    userTextContent = `${preserveName}Current project files (apply the user's request to these and output the full updated JSON):\n${JSON.stringify(options.currentFiles)}\n\nUser request: ${message}\n\nInstructions: Apply only what the user asked for. Return the complete updated file(s) with that change applied—full content for each file. Do not return the same content unchanged; the user must see their requested change in the app.`;
   } else {
-    userContent = message;
+    userTextContent = message;
   }
+
+  // When an image is attached, build a multi-part content array; otherwise keep a plain string.
+  type UserContentBlock = { type: "text"; text: string } | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+  const userContent: string | UserContentBlock[] =
+    options?.imageBase64 && options?.imageMediaType
+      ? [
+          { type: "image", source: { type: "base64", media_type: options.imageMediaType, data: options.imageBase64 } },
+          { type: "text", text: userTextContent },
+        ]
+      : userTextContent;
 
   const basePrompt =
     options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
@@ -523,7 +537,7 @@ export async function getClaudeResponse(
     max_tokens: MAX_TOKENS,
     system: systemBlocks as Parameters<typeof client.messages.create>[0]["system"],
     output_config: { format: jsonSchemaOutputFormat(STRUCTURED_OUTPUT_SCHEMA) },
-    messages: [{ role: "user", content: userContent }],
+    messages: [{ role: "user", content: userContent as Parameters<typeof client.messages.create>[0]["messages"][0]["content"] }],
   });
 
   const stopReason = (response as any)?.stop_reason ?? null;
@@ -591,7 +605,7 @@ async function getClaudeResponseStream(
 
   const client = new Anthropic({ apiKey, defaultHeaders: ANTHROPIC_BETA_HEADERS });
 
-  let userContent: string;
+  let userTextContent: string;
   if (options?.currentFiles && options.currentFiles.length > 0) {
     const preserveName =
       options.projectType === "pro" &&
@@ -599,10 +613,20 @@ async function getClaudeResponseStream(
       options.projectName.trim().length > 0
         ? `The app is already named "${options.projectName.trim()}". Do not change the app name, window title, or navigation title unless the user explicitly asks to rename the app.\n\n`
         : "";
-    userContent = `${preserveName}Current project files (apply the user's request to these and output the full updated JSON):\n${JSON.stringify(options.currentFiles)}\n\nUser request: ${message}\n\nInstructions: Apply only what the user asked for. Return the complete updated file(s) with that change applied—full content for each file. Do not return the same content unchanged; the user must see their requested change in the app.`;
+    userTextContent = `${preserveName}Current project files (apply the user's request to these and output the full updated JSON):\n${JSON.stringify(options.currentFiles)}\n\nUser request: ${message}\n\nInstructions: Apply only what the user asked for. Return the complete updated file(s) with that change applied—full content for each file. Do not return the same content unchanged; the user must see their requested change in the app.`;
   } else {
-    userContent = message;
+    userTextContent = message;
   }
+
+  // When an image is attached, build a multi-part content array; otherwise keep a plain string.
+  type StreamUserContentBlock = { type: "text"; text: string } | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+  const userContent: string | StreamUserContentBlock[] =
+    options?.imageBase64 && options?.imageMediaType
+      ? [
+          { type: "image", source: { type: "base64", media_type: options.imageMediaType, data: options.imageBase64 } },
+          { type: "text", text: userTextContent },
+        ]
+      : userTextContent;
 
   const basePrompt =
     options?.projectType === "pro" ? SYSTEM_PROMPT_SWIFT : SYSTEM_PROMPT_STANDARD;
@@ -703,7 +727,7 @@ async function getClaudeResponseStream(
       max_tokens: MAX_TOKENS,
       system: systemBlocks as Parameters<typeof client.messages.stream>[0]["system"],
       output_config: { format: jsonSchemaOutputFormat(STRUCTURED_OUTPUT_SCHEMA) },
-      messages: [{ role: "user", content: userContent }],
+      messages: [{ role: "user", content: userContent as Parameters<typeof client.messages.stream>[0]["messages"][0]["content"] }],
     })
     .on("text", (_delta: string, textSnapshot: string) => {
       const len = textSnapshot.length;

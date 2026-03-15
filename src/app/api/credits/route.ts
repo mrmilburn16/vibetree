@@ -23,6 +23,7 @@ export async function GET(request: Request) {
       balance: OWNER_DISPLAY_BALANCE,
       monthlyAllowance: DEFAULT_CREDITS,
       resetDate: null,
+      isOwner: true,
     });
   }
   const balance = await getCreditBalance(uid);
@@ -30,5 +31,6 @@ export async function GET(request: Request) {
     balance,
     monthlyAllowance: DEFAULT_CREDITS,
     resetDate: null,
+    isOwner: false,
   });
 }

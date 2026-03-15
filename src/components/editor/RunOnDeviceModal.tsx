@@ -87,6 +87,8 @@ export function RunOnDeviceModal({
   projectType: projectTypeProp,
   backgroundInstallJobIdRef,
   onConsumedBackgroundJob,
+  simulatorBuildPassed = false,
+  onDeviceBuildSucceeded,
   planId: planIdProp,
   onUpgradeRequired,
 }: {
@@ -118,6 +120,17 @@ export function RunOnDeviceModal({
   backgroundInstallJobIdRef?: React.MutableRefObject<string | null>;
   /** Called when install flow completes (success or failure) so parent can clear the background job ref. */
   onConsumedBackgroundJob?: () => void;
+  /**
+   * True once the simulator (validate-xcode) build has succeeded for the current code version.
+   * Enables the Install button so the user can trigger a device compile even if the background
+   * device build hasn't finished yet or failed (e.g. phone wasn't connected at build time).
+   */
+  simulatorBuildPassed?: boolean;
+  /**
+   * Called with the install job ID when a user-triggered device build+install succeeds.
+   * Parent uses this to update lastSuccessfulDeviceBuildJobId so future taps use install-from-cache.
+   */
+  onDeviceBuildSucceeded?: (jobId: string) => void;
   /** User's current plan ID — used to gate Xcode export for free users. */
   planId?: PlanId;
   /** Called when the export API returns 403 upgrade_required — parent opens PricingModal. */
@@ -276,6 +289,10 @@ export function RunOnDeviceModal({
           const jobError = typeof job.error === "string" ? job.error : null;
           const isAuthError = jobError != null && (/unauthorized|401/i.test(jobError) || jobError === "Unauthorized");
           setError(jobError != null ? (isAuthError ? SESSION_EXPIRED_MESSAGE : jobError) : null);
+          if (status === "succeeded") {
+            // Notify parent so future installs can use install-from-cache instead of recompiling.
+            onDeviceBuildSucceeded?.(installJobId);
+          }
           onConsumedBackgroundJob?.();
           return;
         }
@@ -309,7 +326,7 @@ export function RunOnDeviceModal({
         }
         if (status === "failed") {
           setLaunchStatus("failed");
-          setLaunchMessage(typeof job.error === "string" ? job.error : "Unlock your iPhone first, then try again.");
+          setLaunchMessage(typeof job.error === "string" ? job.error : "Launch failed. Check logs for details.");
           return;
         }
         setTimeout(poll, 2000);
@@ -352,7 +369,11 @@ export function RunOnDeviceModal({
       }
 
       // ── Case 1: Background build job still in-flight or just finished ──
-      const backgroundJobId = backgroundInstallJobIdRef?.current ?? null;
+      // Skip this on a re-install (previous install already succeeded) — the user may have
+      // deleted the app from their phone, so we must do a fresh install-from-cache rather
+      // than just replaying the old succeeded job.
+      const isReInstall = installStatus === "succeeded";
+      const backgroundJobId = isReInstall ? null : (backgroundInstallJobIdRef?.current ?? null);
       if (backgroundJobId) {
         const jobRes = await fetch(`/api/build-jobs/${backgroundJobId}`);
         if (jobRes.ok) {
@@ -452,9 +473,38 @@ export function RunOnDeviceModal({
         return;
       }
 
-      // ── Case 3: No cached build — this should not normally happen since the button is
-      // disabled when no successful build exists, but handle it gracefully.
-      throw new Error("No compiled build available. Build the app from chat first, then tap Install on iPhone.");
+      // ── Case 3: Simulator build passed but no cached device build yet (background build may have
+      // failed or phone wasn't connected at build time). Trigger a fresh device compile + install.
+      const res = await fetch(`/api/projects/${projectId}/build-install`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName,
+          bundleId: finalBundleId,
+          developmentTeam: finalTeamId || undefined,
+          // No useCache — this is a full device compile
+        }),
+      });
+      if (res.status === 401) {
+        setError(SESSION_EXPIRED_MESSAGE);
+        setInstallStatus("failed");
+        setInstallLoading(false);
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg = data?.error === "mac_runner_offline"
+          ? (data?.message ?? "Build server is offline.")
+          : (data?.error ?? "Install request failed");
+        throw new Error(msg);
+      }
+      const data = await res.json().catch(() => ({}));
+      const jobId = typeof data?.job?.id === "string" ? data.job.id : null;
+      if (!jobId) throw new Error("No job id returned");
+      setInstallJobId(jobId);
+      setInstallStatus("queued");
+      setInstallLoading(false);
+      return;
     } catch (e) {
       const raw = e instanceof Error ? e.message : "Install failed. Try again.";
       const isAuthError = /unauthorized|401/i.test(raw) || raw === "Unauthorized";
@@ -857,7 +907,9 @@ export function RunOnDeviceModal({
           )}
 
           {/* ── Install button ── */}
-          {/* Disabled until a successful device build exists for the current code version */}
+          {/* Enabled as soon as the simulator build passes (simulatorBuildPassed) OR a cached
+              device build is available (lastSuccessfulDeviceBuildJobId / backgroundInstallJobIdRef).
+              If no cached .app exists yet, clicking triggers a fresh device compile. */}
           <Button
             type="button"
             onClick={handleInstallOnDevice}
@@ -867,7 +919,7 @@ export function RunOnDeviceModal({
               isBuilding ||
               isAgentTyping ||
               backgroundInstallStatus === "building" ||
-              (!lastSuccessfulDeviceBuildJobId && !backgroundInstallJobIdRef?.current)
+              (!simulatorBuildPassed && !lastSuccessfulDeviceBuildJobId && !backgroundInstallJobIdRef?.current)
             }
             className="w-full"
           >
@@ -879,7 +931,7 @@ export function RunOnDeviceModal({
                 ? "Preparing install\u2026"
                 : isBuilding
                 ? `Installing\u2026 (${installElapsed}s)`
-                : !lastSuccessfulDeviceBuildJobId && !installSucceededOnlyWhenInstalled
+                : !simulatorBuildPassed && !lastSuccessfulDeviceBuildJobId && !installSucceededOnlyWhenInstalled
                 ? "Build app in chat first"
                 : installSucceededOnlyWhenInstalled
                   ? "Re-install on iPhone"
@@ -908,43 +960,52 @@ export function RunOnDeviceModal({
                   </>
                 ) : installSucceededOnlyWhenInstalled &&
                   installLogTail.some((l) =>
-                    /installed but could not auto-launch|installed but auto-launch failed|BSErrorCodeDescription = Locked/i.test(l)
+                    /installed but could not auto-launch|installed but auto-launch failed/i.test(l)
                   ) ? (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <span className="text-green-400">&#10003;</span>
-                      <span className="text-sm font-medium text-[var(--text-default)]">
-                        App installed successfully!
-                      </span>
-                    </div>
-                    <div className="mt-2 rounded border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-                      Couldn&apos;t auto-launch — your iPhone was locked.
-                    </div>
-                    <div className="mt-3 flex flex-col gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={handleLaunchApp}
-                        disabled={launchStatus === "launching"}
-                        className="w-full"
-                      >
-                        {launchStatus === "launching" ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                            Launching…
-                          </>
-                        ) : (
-                          "Launch App"
-                        )}
-                      </Button>
-                      {launchStatus === "succeeded" && (
-                        <p className="text-sm text-green-400">App launched! Check your iPhone.</p>
-                      )}
-                      {launchStatus === "failed" && launchMessage && (
-                        <p className="text-sm text-amber-200">{launchMessage}</p>
-                      )}
-                    </div>
-                  </>
+                  (() => {
+                    const isLockedFailure = installLogTail.some((l) =>
+                      /auto-launch failed \(iPhone locked\)|BSErrorCodeDescription\s*=\s*Locked/i.test(l)
+                    );
+                    return (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <span className="text-green-400">&#10003;</span>
+                          <span className="text-sm font-medium text-[var(--text-default)]">
+                            App installed successfully!
+                          </span>
+                        </div>
+                        <div className="mt-2 rounded border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                          {isLockedFailure
+                            ? "Couldn\u2019t auto-launch \u2014 your iPhone was locked."
+                            : "App installed but couldn\u2019t auto-launch. Tap Launch App below."}
+                        </div>
+                        <div className="mt-3 flex flex-col gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={handleLaunchApp}
+                            disabled={launchStatus === "launching"}
+                            className="w-full"
+                          >
+                            {launchStatus === "launching" ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                                Launching…
+                              </>
+                            ) : (
+                              "Launch App"
+                            )}
+                          </Button>
+                          {launchStatus === "succeeded" && (
+                            <p className="text-sm text-green-400">App launched! Check your iPhone.</p>
+                          )}
+                          {launchStatus === "failed" && launchMessage && (
+                            <p className="text-sm text-amber-200">{launchMessage}</p>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()
                 ) : (
                   <>
                     <div className="flex items-center gap-2">

@@ -22,6 +22,7 @@ interface CreditsContextValue {
   balance: number;
   isLow: boolean;
   hasCreditsForMessage: boolean;
+  isOwner: boolean;
   deduct: (amount: number) => boolean;
   add: (amount: number) => void;
   setBalance: (amount: number) => void;
@@ -34,6 +35,7 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [balance, setBalanceState] = useState<number | null>(null);
   const [serverMode, setServerMode] = useState<boolean | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
 
   const fetchServerBalance = useCallback(async (): Promise<number | null> => {
     try {
@@ -43,6 +45,7 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
         const b = typeof data.balance === "number" ? data.balance : 0;
         setBalanceState(b);
         setServerMode(true);
+        if (typeof data.isOwner === "boolean") setIsOwner(data.isOwner);
         return b;
       }
     } catch {
@@ -123,6 +126,7 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
     balance: currentBalance,
     isLow: balance !== null && currentBalance < LOW_CREDIT_THRESHOLD,
     hasCreditsForMessage: currentBalance >= 1,
+    isOwner,
     deduct,
     add,
     setBalance,
@@ -139,6 +143,7 @@ export function useCredits(): CreditsContextValue {
       balance: 0,
       isLow: true,
       hasCreditsForMessage: false,
+      isOwner: false,
       deduct: () => false,
       add: () => {},
       setBalance: () => {},

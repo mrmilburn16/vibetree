@@ -35,6 +35,9 @@ export interface ChatMessage {
   streamTimeline?: StreamTimelineEntry[];
   /** The current incomplete status line being typed (text after the last \\n in content). Not persisted. */
   streamPendingStatus?: string;
+  /** Base64-encoded image attached to this user message (no data-URL prefix). Shown as thumbnail in chat. */
+  imageBase64?: string;
+  imageMediaType?: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 }
 
 const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
@@ -268,6 +271,8 @@ interface QueuedMessage {
   text: string;
   model?: string;
   projectType: "standard" | "pro";
+  imageBase64?: string;
+  imageMediaType?: string;
 }
 
 export function useChat(
@@ -609,7 +614,7 @@ export function useChat(
       return;
     }
     const item = queueRef.current.shift()!;
-    const { text: trimmed, model: modelOption, projectType } = item;
+    const { text: trimmed, model: modelOption, projectType, imageBase64: itemImageBase64, imageMediaType: itemImageMediaType } = item;
 
     const ac = new AbortController();
     abortControllerRef.current = ac;
@@ -714,6 +719,9 @@ export function useChat(
             model: modelOption ?? undefined,
             projectType,
             projectName: projectName ?? "Untitled app",
+            ...(itemImageBase64 && itemImageMediaType
+              ? { imageBase64: itemImageBase64, imageMediaType: itemImageMediaType }
+              : {}),
           }),
           signal: ac.signal,
         })
@@ -1143,9 +1151,9 @@ export function useChat(
   }, [projectId, projectName, onProjectRenamed, onError, onMessageSuccess, onAppBuilt, onProBuildComplete]);
 
   const sendMessage = useCallback(
-    (text: string, model?: string, projectType: "standard" | "pro" = "standard") => {
+    (text: string, model?: string, projectType: "standard" | "pro" = "standard", imageBase64?: string, imageMediaType?: string) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      if (!trimmed && !imageBase64) return;
       if (trimmed.length > MAX_MESSAGE_LENGTH) return;
 
       const userMsg: ChatMessage = {
@@ -1153,6 +1161,7 @@ export function useChat(
         role: "user",
         content: trimmed.slice(0, MAX_MESSAGE_LENGTH),
         createdAt: Date.now(),
+        ...(imageBase64 && imageMediaType ? { imageBase64, imageMediaType: imageMediaType as ChatMessage["imageMediaType"] } : {}),
       };
       setMessages((prev) => {
         const next = [...prev, userMsg];
@@ -1163,7 +1172,7 @@ export function useChat(
       persistChatToServer(projectId, messagesRef.current);
 
       if (featureFlags.useRealLLM) {
-        queueRef.current.push({ text: trimmed, model, projectType });
+        queueRef.current.push({ text: trimmed, model, projectType, imageBase64, imageMediaType });
         if (processingRef.current) return;
         processingRef.current = true;
         isTypingRef.current = true;

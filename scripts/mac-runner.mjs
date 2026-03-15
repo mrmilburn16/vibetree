@@ -666,14 +666,35 @@ async function installAppOnDevice(appPath, deviceId, bundleId, logs, flush) {
   logs.push("[install] If the app doesn't appear: enable Settings → Privacy & Security → Developer Mode (iOS 16+), then go to Settings → General → VPN & Device Management and tap your developer certificate to Trust.");
   await flush(true);
 
-  // Auto-launch the app so the user sees it immediately
-  if (bundleId) {
-    logs.push(`[install] Launching ${bundleId}…`);
+  // Auto-launch the app so the user sees it immediately.
+  // Read the actual bundle ID from the .app's Info.plist — it is always authoritative and
+  // prevents mismatches between the job's bundleId field and what xcodebuild compiled.
+  let launchBundleId = bundleId;
+  try {
+    const plistPath = `${appPath}/Info.plist`;
+    const fromPlist = execSync(
+      `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "${plistPath}" 2>/dev/null`,
+      { encoding: "utf8" }
+    ).trim();
+    if (fromPlist) {
+      if (fromPlist !== bundleId) {
+        logs.push(`[install] Bundle ID from Info.plist: ${fromPlist} (job had: ${bundleId}) — using plist value`);
+      }
+      launchBundleId = fromPlist;
+    }
+  } catch (_) {
+    logs.push(`[install] Could not read Info.plist — using bundle ID from job: ${bundleId}`);
+  }
+
+  if (launchBundleId) {
+    const launchCmd = `"${devicectl}" device process launch --device "${deviceId}" "${launchBundleId}"`;
+    logs.push(`[install] Launching ${launchBundleId}…`);
+    logs.push(`[install] Running: devicectl device process launch --device ${deviceId} ${launchBundleId}`);
     await flush(true);
     try {
       const launchResult = await run(
         "/bin/sh",
-        ["-c", `exec "${devicectl}" device process launch --device "${deviceId}" "${bundleId}"`],
+        ["-c", `exec ${launchCmd}`],
         {
           cwd: "/tmp",
           onLine: (line) => {
@@ -682,10 +703,20 @@ async function installAppOnDevice(appPath, deviceId, bundleId, logs, flush) {
           },
         }
       );
+      // Log any output captured after the stream ends
+      if (launchResult.out?.trim()) logs.push(`[install] devicectl stdout: ${launchResult.out.trim()}`);
+      if (launchResult.err?.trim()) logs.push(`[install] devicectl stderr: ${launchResult.err.trim()}`);
       if (launchResult.code === 0) {
         logs.push("[install] ✅ App launched on device");
       } else {
-        logs.push("[install] ⚠️ App installed but could not auto-launch — open it from your home screen");
+        logs.push(`[install] devicectl exit code: ${launchResult.code}`);
+        const launchOutput = (launchResult.out || "") + "\n" + (launchResult.err || "");
+        const isLocked = /locked|passcode|user unlock|BSErrorCodeDescription\s*=\s*Locked/i.test(launchOutput);
+        logs.push(
+          isLocked
+            ? "[install] ⚠️ App installed but auto-launch failed (iPhone locked) — unlock your iPhone and open the app from your home screen"
+            : "[install] ⚠️ App installed but could not auto-launch — open it from your home screen"
+        );
       }
       await flush(true);
     } catch (_) {
@@ -731,23 +762,56 @@ async function validateJob(job) {
         });
         return;
       }
-      const bundleId = job.request.bundleId || "com.vibetree.app";
+      let bundleId = job.request.bundleId || "com.vibetree.app";
       const devicectl = getXcodeToolPath("devicectl");
+
+      // Try to find the most recently cached .app for this project and read its actual bundle ID —
+      // the job's bundleId field can be stale if the project was rebuilt with a different ID.
+      try {
+        const cacheDir = join(DEVICE_APP_CACHE_DIR, job.request.projectId);
+        if (existsSync(cacheDir)) {
+          const apps = readdirSync(cacheDir)
+            .filter((f) => f.endsWith(".app"))
+            .map((f) => ({ f, mtime: statSync(join(cacheDir, f)).mtimeMs }))
+            .sort((a, b) => b.mtime - a.mtime);
+          if (apps.length > 0) {
+            const plistPath = join(cacheDir, apps[0].f, "Info.plist");
+            if (existsSync(plistPath)) {
+              const fromPlist = execSync(
+                `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "${plistPath}" 2>/dev/null`,
+                { encoding: "utf8" }
+              ).trim();
+              if (fromPlist && fromPlist !== bundleId) {
+                logs.push(`[launch] Bundle ID from cached .app: ${fromPlist} (job had: ${bundleId}) — using plist value`);
+                bundleId = fromPlist;
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
       logs.push(`[launch] Launching ${bundleId} on ${device.name}…`);
+      logs.push(`[launch] Running: devicectl device process launch --device ${device.identifier} ${bundleId}`);
       await flush(true);
       const launchResult = await run(
         "/bin/sh",
         ["-c", `exec "${devicectl}" device process launch --device "${device.identifier}" "${bundleId}"`],
         { cwd: "/tmp", onLine: (line) => { logs.push(line); flush(false).catch(() => {}); } }
       );
+      if (launchResult.out?.trim()) logs.push(`[launch] devicectl stdout: ${launchResult.out.trim()}`);
+      if (launchResult.err?.trim()) logs.push(`[launch] devicectl stderr: ${launchResult.err.trim()}`);
       if (launchResult.code === 0) {
         logs.push("[launch] ✅ App launched on device");
         await flush(true);
         await updateJob(job.id, { status: "succeeded", exitCode: 0, logs: ["✅ App launched! Check your iPhone."] });
       } else {
+        logs.push(`[launch] devicectl exit code: ${launchResult.code}`);
+        await flush(true);
         const output = (launchResult.out || "") + "\n" + (launchResult.err || "");
-        const isLocked = /locked|passcode|user unlock|BSErrorCodeDescription = Locked/i.test(output);
-        const errorMsg = isLocked ? "Unlock your iPhone first, then try again." : "Launch failed. Unlock your iPhone and try again.";
+        const isLocked = /locked|passcode|user unlock|BSErrorCodeDescription\s*=\s*Locked/i.test(output);
+        const errorMsg = isLocked
+          ? "Unlock your iPhone first, then try again."
+          : `Launch failed (exit ${launchResult.code}). Check the logs for details.`;
         await updateJob(job.id, { status: "failed", error: errorMsg, logs: [...logs, `[launch] ❌ ${errorMsg}`] });
       }
       return;

@@ -67,9 +67,18 @@ export function setProjectFiles(
       next[filePath] = content;
     }
   }
+  console.log('[setProjectFiles] Saving', files.length, 'files for project', projectId, '| paths:', files.map(f => f.path).join(', '));
   store.set(projectId, next);
   persistToDisk(projectId, next);
-  setProjectFilesInFirestore(projectId, next).catch(() => {});
+  setProjectFilesInFirestore(projectId, next).then((ok) => {
+    if (!ok) {
+      console.warn('[setProjectFiles] Firestore write returned false for project', projectId, '(doc may exceed 1MB or Firebase is unavailable)');
+    } else {
+      console.log('[setProjectFiles] Firestore write OK for project', projectId);
+    }
+  }).catch((err) => {
+    console.error('[setProjectFiles] Firestore write THREW for project', projectId, ':', err instanceof Error ? err.message : String(err));
+  });
 }
 
 /** Pending Firestore hydrations so we don't duplicate in-flight requests. */
@@ -94,6 +103,34 @@ export function getProjectFiles(projectId: string): ProjectFiles | undefined {
     }).catch(() => { firestoreHydrating.delete(projectId); });
   }
   return undefined;
+}
+
+/**
+ * Async version of setProjectFiles that awaits the Firestore write and surfaces any error.
+ * Use in API routes where you need to guarantee the write completes before returning.
+ */
+export async function setProjectFilesAsync(
+  projectId: string,
+  files: Array<{ path: string; content: string }>
+): Promise<void> {
+  const next: ProjectFiles = {};
+  for (const { path: filePath, content } of files) {
+    if (filePath && typeof content === "string") {
+      next[filePath] = content;
+    }
+  }
+  console.log('[setProjectFilesAsync] Saving', files.length, 'files for project', projectId, '| paths:', files.map(f => f.path).join(', '));
+  store.set(projectId, next);
+  persistToDisk(projectId, next);
+  const ok = await setProjectFilesInFirestore(projectId, next).catch((err) => {
+    console.error('[setProjectFilesAsync] Firestore write THREW for project', projectId, ':', err instanceof Error ? err.message : String(err));
+    return false;
+  });
+  if (!ok) {
+    console.warn('[setProjectFilesAsync] Firestore write returned false for project', projectId);
+  } else {
+    console.log('[setProjectFilesAsync] Firestore write OK for project', projectId);
+  }
 }
 
 /** Async version that waits for Firestore if needed. Use when caller can await (e.g. API routes). */

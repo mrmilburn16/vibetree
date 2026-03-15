@@ -643,6 +643,8 @@ export function EditorLayout({
         isAgentTyping={isAgentTyping}
         backgroundInstallStatus={backgroundInstallStatus}
         lastSuccessfulDeviceBuildJobId={lastSuccessfulDeviceBuildJobId}
+        simulatorBuildPassed={simulatorBuildPassed}
+        onDeviceBuildSucceeded={(jobId) => setLastSuccessfulDeviceBuildJobId(jobId)}
         expoUrl={expoUrl}
         onExpoUrl={setExpoUrl}
         backgroundInstallJobIdRef={backgroundInstallJobIdRef}

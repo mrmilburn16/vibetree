@@ -13,6 +13,7 @@ import { requireProjectAuth } from "@/lib/apiProjectAuth";
 import { getProjectFromFirestore } from "@/lib/projectsFirestore";
 import { fixSwiftCommonIssues } from "@/lib/llm/fixSwift";
 import { preBuildLint } from "@/lib/preBuildLint";
+import { setProjectFiles } from "@/lib/projectFileStore";
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
 
@@ -216,6 +217,7 @@ Rules:
    - "cannot find 'AVAudioFramePosition' in scope" or "cannot find 'AVAudioFrameCount' in scope" or "cannot find 'AVAudioTime' in scope": Add "import AVFoundation" at the top of the file that contains the error. These types are in AVFoundation and are NOT automatically imported by SwiftUI.
    - "the compiler is unable to type-check this expression in reasonable time" in a View body: The view body is too complex. Extract sections into @ViewBuilder computed properties (e.g. private var headerSection: some View { ... }) or child view structs. Split the body into smaller pieces of no more than 20-25 lines each. Never put more than 3-4 chained modifiers inline in a complex view body.
    - "value of type 'AVAudioPlayerNode' has no member 'rate'": AVAudioPlayerNode does not expose a .rate property in all configurations. Replace with AVAudioUnitTimePitch: (1) Add let timePitch = AVAudioUnitTimePitch() as a property, (2) call engine.attach(timePitch) before connecting, (3) connect playerNode → timePitch → mixer instead of playerNode → mixer directly, (4) set timePitch.rate = value instead of playerNode.rate = value. Attach must happen before connect.
+   - "cannot find type 'X' in scope" where X is NOT a system framework type (not UIKit, SwiftUI, Foundation, AVFoundation, CoreData, WidgetKit, etc.): This means a custom model/struct/class file is missing from the project. Do NOT just add an import — instead, CREATE the missing file with a complete definition. Read every error carefully to determine what properties and methods the missing type needs (e.g. if DJMixerViewModel references deck.isPlaying, deck.trackTitle, and deck.bpm, then DeckModel needs those properties). Generate a complete, compilable struct or class definition in a new file named after the type (e.g. "Models/DeckModel.swift"). Common examples of custom types that need their own file: DeckModel, TrackInfo, DeckState, PlayerState, SongInfo, MixSession. Return the newly created file alongside any other fixed files.
    - For any error not listed above: read the message carefully and apply the minimal fix (correct API name, add import, fix type conformance, or remove invalid syntax). Prefer the smallest change that resolves the error.
    - "Type 'X' does not conform to protocol 'Y'": Implement required protocol methods/properties. For NavigationLink(value:) and .navigationDestination(for:), the type MUST conform to Hashable. Add ": Hashable" to the struct/class declaration.
    - "Cannot convert value of type 'X' to expected type 'Y'": Use proper type conversion.
@@ -535,6 +537,12 @@ Fix ALL the compilation errors listed above. Return the corrected files with the
     appendBuildJobLogs(failedJobId, [
       `Merged: ${corrected.length} total files (${fixedPathSet.size} modified by LLM).`,
     ]);
+
+    // Write the complete merged+fixed file set back to the project store so future
+    // builds start from the correct full state (not the incomplete set that caused
+    // the original failure). This is fire-and-forget — a write failure is non-fatal.
+    setProjectFiles(failedJob.request.projectId, lintResult.files);
+
     if (wasCancelled()) {
       setBuildJobAutoFixInProgress(failedJobId, false);
       return Response.json({ cancelled: true, reason: "Auto-fix was cancelled by user" });

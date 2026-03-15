@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
 import type { StreamTimelineEntry } from "./useChat";
+import { useCredits } from "@/contexts/CreditsContext";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -294,6 +295,7 @@ export function FinalBuildMessage({
   projectId?: string;
   isLast: boolean;
 }) {
+  const { isOwner } = useCredits();
   const showFeedback = isLast && buildStatus === "live" && (editedFiles?.length ?? 0) > 0;
 
   // Strip server-added prefixes ("App name: ...\n\n", "App built. ").
@@ -319,14 +321,14 @@ export function FinalBuildMessage({
 
   const timeAgo = createdAt ? formatTimeAgo(createdAt) : null;
 
-  // Stats parts
+  // Stats parts — cost and token counts are owner-only
   const statParts: string[] = [];
   if (elapsedMs != null) statParts.push(`Generated in ${formatElapsedMs(elapsedMs)}`);
-  if (estimatedCostUsd != null)
+  if (isOwner && estimatedCostUsd != null)
     statParts.push(
       `~$${estimatedCostUsd < 0.005 ? "<0.01" : estimatedCostUsd.toFixed(2)}`
     );
-  if (usage)
+  if (isOwner && usage)
     statParts.push(
       `${(usage.input_tokens / 1000).toFixed(1)}k in / ${(usage.output_tokens / 1000).toFixed(1)}k out`
     );

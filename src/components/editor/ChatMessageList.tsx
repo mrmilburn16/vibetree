@@ -661,6 +661,14 @@ export function ChatMessageList({
               }
               style={staggerDelay > 0 || stepStagger > 0 ? { animationDelay: `${staggerDelay || stepStagger}ms` } : undefined}
             >
+              {msg.role === "user" && msg.imageBase64 && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={`data:${msg.imageMediaType ?? "image/jpeg"};base64,${msg.imageBase64}`}
+                  alt="Attached screenshot"
+                  className="mb-2 ml-auto max-h-48 max-w-full rounded-lg object-contain border border-[var(--border-default)]/50 shadow-sm"
+                />
+              )}
               {!isFilesOnly && (
                 <p
                   className={

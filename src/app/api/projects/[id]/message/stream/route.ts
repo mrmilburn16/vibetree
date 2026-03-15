@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { setProject, type ProjectRecord } from "@/lib/projectStore";
 import {
   setProjectFiles,
+  setProjectFilesAsync,
   getProjectFiles,
   getProjectFilePaths,
 } from "@/lib/projectFileStore";
@@ -84,8 +85,16 @@ export async function POST(
   const body = await request.json().catch(() => ({}));
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
+  const imageBase64 = typeof body.imageBase64 === "string" && body.imageBase64.length > 0 ? body.imageBase64 : undefined;
+  const imageMediaType =
+    typeof body.imageMediaType === "string" &&
+    ["image/jpeg", "image/png", "image/gif", "image/webp"].includes(body.imageMediaType)
+      ? (body.imageMediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp")
+      : imageBase64
+        ? "image/jpeg"
+        : undefined;
 
-  if (!message) {
+  if (!message && !imageBase64) {
     return Response.json({ error: "Message is required" }, { status: 400 });
   }
 
@@ -222,7 +231,7 @@ export async function POST(
               result = await getClaudeResponseStream(
                 enrichedMessage,
                 model,
-                { currentFiles, projectType, skillPromptBlock, projectName: currentFiles ? project.name : undefined },
+                { currentFiles, projectType, skillPromptBlock, projectName: currentFiles ? project.name : undefined, imageBase64, imageMediaType },
                 {
                   onProgress: (data) => {
                     lastReceivedChars = data.receivedChars;
@@ -294,6 +303,7 @@ export async function POST(
         let editedFiles: string[];
         enqueuePhase("saving_files");
         updateGenerationPhase(generation.id, "saving");
+        console.log(`[message/stream] saving_files: parsedFiles=${result.parsedFiles?.length ?? 0}, existingPaths=${paths.length}, projectType=${projectType}`);
         if (result.parsedFiles?.length) {
           let filesToStore = result.parsedFiles;
           if (projectType === "pro") {
@@ -303,13 +313,33 @@ export async function POST(
             const lintResult = preBuildLint(filesToStore);
             filesToStore = lintResult.files;
           }
+          console.log(`[message/stream] filesToStore after filter/fix: ${filesToStore.length} files: ${filesToStore.map(f => f.path).join(', ')}`);
           if (filesToStore.length > 0) {
-            setProjectFiles(projectId, filesToStore);
+            // Merge agent-returned files with the existing project file set so that
+            // untouched files (e.g. DeckModel.swift) are not dropped on follow-up edits.
+            // For brand-new projects the existing store is empty, so this is equivalent
+            // to a full replace. For follow-up edits only the returned files are updated.
+            const existingFiles = getProjectFiles(projectId) ?? {};
+            const existingCount = Object.keys(existingFiles).length;
+            const mergedFiles = { ...existingFiles };
+            for (const f of filesToStore) {
+              if (f.path && typeof f.content === "string") {
+                mergedFiles[f.path] = f.content;
+              }
+            }
+            const mergedCount = Object.keys(mergedFiles).length;
+            console.log(`[message/stream] merge: existingFiles=${existingCount}, filesToStore=${filesToStore.length}, mergedTotal=${mergedCount}`);
+            await setProjectFilesAsync(
+              projectId,
+              Object.entries(mergedFiles).map(([path, content]) => ({ path, content }))
+            );
             editedFiles = filesToStore.map((f) => f.path);
           } else {
+            console.warn(`[message/stream] filesToStore is empty after filter — skipping setProjectFiles for project ${projectId}`);
             editedFiles = result.editedFiles;
           }
         } else {
+          console.log(`[message/stream] parsedFiles empty — falling back to fixSwift on stored files (paths=${paths.length})`);
           editedFiles = result.editedFiles ?? [];
           // When agent returns no files on a follow-up (e.g. "code is unchanged"), still run fixSwift
           // on stored files so black→systemBackground and other safety nets apply.

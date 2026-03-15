@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button, Textarea, DropdownSelect } from "@/components/ui";
-import { ArrowUp, Sparkles, Square, X, Zap } from "lucide-react";
+import { ArrowUp, ImagePlus, Sparkles, X, Zap } from "lucide-react";
 import { getRandomAppIdeaPrompt } from "@/lib/appIdeaPrompts";
 import { AnthropicLogo, OpenAILogo } from "@/components/icons/LLMLogos";
 import { BuildingIndicator } from "./BuildingIndicator";
@@ -56,6 +56,12 @@ type PreflightResult = {
   device: { ok: boolean; name?: string; id?: string };
   teamId: { ok: boolean; value?: string };
   files: { ok: boolean; count?: number };
+};
+
+type AttachedImage = {
+  base64: string;
+  mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+  previewUrl: string;
 };
 
 async function fetchTeamIdForPreflight(): Promise<string> {
@@ -283,12 +289,105 @@ export function ChatPanel({
   }, [messages.length, sendMessage, llm, projectType, guidedMode]);
 
   const [justSent, setJustSent] = useState(false);
+  const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /** Compress a File/Blob to JPEG base64 under ~900 KB using canvas. Returns null if not an image. */
+  const compressImage = useCallback(async (file: File | Blob): Promise<AttachedImage | null> => {
+    const type = file.type;
+    if (!type.startsWith("image/")) return null;
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let { width, height } = img;
+          const MAX_DIM = 1600;
+          if (width > MAX_DIM || height > MAX_DIM) {
+            const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { resolve(null); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          const MAX_B64_BYTES = 900_000;
+          let quality = 0.85;
+          const tryEncode = () => {
+            const dataUrl = canvas.toDataURL("image/jpeg", quality);
+            const base64 = dataUrl.split(",")[1] ?? "";
+            if (base64.length * 0.75 <= MAX_B64_BYTES || quality <= 0.3) {
+              resolve({ base64, mediaType: "image/jpeg", previewUrl: dataUrl });
+            } else if (quality > 0.5) {
+              quality = Math.max(0.3, quality - 0.15);
+              tryEncode();
+            } else {
+              width = Math.round(width * 0.8);
+              height = Math.round(height * 0.8);
+              canvas.width = width;
+              canvas.height = height;
+              ctx.drawImage(img, 0, 0, width, height);
+              quality = 0.7;
+              tryEncode();
+            }
+          };
+          tryEncode();
+        };
+        img.onerror = () => resolve(null);
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  const handleImageFile = useCallback(async (file: File | Blob) => {
+    const result = await compressImage(file);
+    if (result) setAttachedImage(result);
+  }, [compressImage]);
+
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleImageFile(file);
+    e.target.value = "";
+  }, [handleImageFile]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const imageItem = Array.from(e.clipboardData.items).find((item) => item.type.startsWith("image/"));
+    if (imageItem) {
+      e.preventDefault();
+      const blob = imageItem.getAsFile();
+      if (blob) handleImageFile(blob);
+    }
+  }, [handleImageFile]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (Array.from(e.dataTransfer.items).some((i) => i.type.startsWith("image/"))) {
+      e.preventDefault();
+      setIsDraggingOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback(() => setIsDraggingOver(false), []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    setIsDraggingOver(false);
+    const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
+    if (file) {
+      e.preventDefault();
+      handleImageFile(file);
+    }
+  }, [handleImageFile]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
       const text = input.trim();
-      if (!text || !canSend) return;
+      if ((!text && !attachedImage) || !canSend) return;
       if (blockSendUntilPreflight) return;
       if (!hasCreditsForMessage) {
         onOutOfCredits?.();
@@ -299,12 +398,13 @@ export function ChatPanel({
         onOutOfCredits?.();
         return;
       }
-      sendMessage(text, llm, projectType);
+      sendMessage(text, llm, projectType, attachedImage?.base64, attachedImage?.mediaType);
       setInput("");
+      setAttachedImage(null);
       setJustSent(true);
       setTimeout(() => setJustSent(false), 80);
     },
-    [input, canSend, blockSendUntilPreflight, sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
+    [input, attachedImage, canSend, blockSendUntilPreflight, sendMessage, llm, projectType, hasCreditsForMessage, deduct, onOutOfCredits]
   );
 
   const handleGuidedComplete = useCallback(
@@ -344,6 +444,7 @@ export function ChatPanel({
   const showGuidedWizard = guidedMode && messages.length === 0 && !isTyping && !isHydrating;
 
   const canSendWithCredits = canSend && hasCreditsForMessage && !blockSendUntilPreflight;
+  const hasContent = input.trim().length > 0 || attachedImage !== null;
   const showCharCount = input.length > 0 && input.length >= 0.8 * maxMessageLength;
   const placeholderIndex = messages.length % CHAT_PLACEHOLDERS.length;
   const placeholderText =
@@ -476,23 +577,81 @@ export function ChatPanel({
         />
       )}
 
-      <form onSubmit={handleSubmit} className="shrink-0 border-t border-[var(--border-default)] p-4 pt-4" style={{ background: "var(--chat-form-bg)" }}>
+      <form
+        onSubmit={handleSubmit}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`shrink-0 border-t border-[var(--border-default)] p-4 pt-4 transition-colors duration-150 ${isDraggingOver ? "bg-[var(--button-primary-bg)]/5" : ""}`}
+        style={{ background: isDraggingOver ? undefined : "var(--chat-form-bg)" }}
+      >
+        {/* Hidden file input for image picker */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp,image/heic"
+          className="hidden"
+          onChange={handleFileInputChange}
+          aria-hidden
+        />
         <label htmlFor="chat-input" className="sr-only">
           Describe your app
         </label>
         <div className="min-w-0 flex flex-col">
+          {/* Image thumbnail preview */}
+          {attachedImage && (
+            <div className="mb-2 flex items-start gap-2">
+              <div className="relative inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={attachedImage.previewUrl}
+                  alt="Attached image"
+                  className="h-20 max-w-[160px] rounded-lg object-cover border border-[var(--border-default)] shadow-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAttachedImage(null)}
+                  className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--background-primary)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] shadow-sm transition-colors"
+                  aria-label="Remove image"
+                  title="Remove image"
+                >
+                  <X className="h-3 w-3" aria-hidden />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Drop hint */}
+          {isDraggingOver && (
+            <div className="mb-2 rounded-lg border-2 border-dashed border-[var(--button-primary-bg)]/50 bg-[var(--button-primary-bg)]/5 py-3 text-center text-sm text-[var(--button-primary-bg)]">
+              Drop image to attach
+            </div>
+          )}
+
           <div
-            className={`flex min-h-[44px] items-center rounded-[26px] border-2 py-1 pr-1 pl-4 ring-0 transition-colors duration-[var(--transition-fast)] ${
+            className={`flex min-h-[44px] items-center rounded-[26px] border-2 py-1 pr-1 pl-2 ring-0 transition-colors duration-[var(--transition-fast)] ${
               blockSendUntilPreflight
                 ? "border-[var(--border-subtle)] bg-[var(--background-tertiary)]/50 opacity-90"
                 : "border-[var(--input-border)] bg-[var(--input-bg)] focus-within:border-[var(--button-primary-bg)] focus-within:ring-2 focus-within:ring-[var(--button-primary-bg)]/30"
             }`}
           >
+            {/* Attach image button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={blockSendUntilPreflight}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-40"
+              aria-label="Attach image"
+              title="Attach image (or paste / drag & drop)"
+            >
+              <ImagePlus className="h-4.5 w-4.5 shrink-0" aria-hidden />
+            </button>
             <Textarea
               ref={textareaRef}
               id="chat-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onPaste={handlePaste}
               placeholder={blockSendUntilPreflight ? "Complete Run on iPhone setup in Account Settings to send…" : placeholderText}
               autoFocus={messages.length === 0 && !blockSendUntilPreflight}
               disabled={blockSendUntilPreflight}
@@ -522,7 +681,7 @@ export function ChatPanel({
             <Button
               type={busy ? "button" : "submit"}
               variant={busy ? "secondary" : "primary"}
-              disabled={blockSendUntilPreflight || (busy ? false : (!canSendWithCredits || !input.trim() || input.length > maxMessageLength))}
+              disabled={blockSendUntilPreflight || (busy ? false : (!canSendWithCredits || !hasContent || input.length > maxMessageLength))}
               onClick={busy ? cancelCurrent : undefined}
               className={`!flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 transition-transform duration-75 ${justSent ? "scale-95" : "scale-100"}`}
               aria-label={sendButtonTitle}
