@@ -7,6 +7,11 @@ import { updateProject } from "@/lib/projects";
 
 export type MessageRole = "user" | "assistant";
 
+/** A single entry in the live build progress timeline shown during streaming. */
+export type StreamTimelineEntry =
+  | { kind: "status"; text: string }
+  | { kind: "file"; label: string; basename: string; existing: boolean };
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -26,6 +31,10 @@ export interface ChatMessage {
   elapsedMs?: number;
   /** When this message was created (epoch ms). Used for "Built X ago" on restored messages. */
   createdAt?: number;
+  /** Ordered interleaved timeline of status narration lines and file events — only set on stream-content messages during active streaming. Not persisted. */
+  streamTimeline?: StreamTimelineEntry[];
+  /** The current incomplete status line being typed (text after the last \\n in content). Not persisted. */
+  streamPendingStatus?: string;
 }
 
 const PROJECT_FILES_STORAGE_PREFIX = "vibetree-project-files:";
@@ -629,6 +638,11 @@ export function useChat(
     let discoveredFilesCount = 0;
     const discoveredFilePaths: string[] = [];
 
+    // Timeline tracking: builds up the interleaved status/file list for BuildProgressStream.
+    const streamTimeline: StreamTimelineEntry[] = [];
+    let pendingStatusText = ""; // incomplete current status line (not yet ended with \n)
+    let lastContentLen = 0;
+
     setStreamElapsedSeconds(0);
     setStreamReceivedChars(0);
 
@@ -755,15 +769,32 @@ export function useChat(
               if (event.type === "content" && typeof event.text === "string") {
                 sawServerProgress = true;
                 setStreamContentMessageId(streamContentId);
+
+                // Parse new text into timeline status entries (split on newlines).
+                const newText = event.text.slice(lastContentLen);
+                lastContentLen = event.text.length;
+                pendingStatusText += newText;
+                const parts = pendingStatusText.split("\n");
+                const completeLines = parts.slice(0, -1).map((l) => l.trim()).filter(Boolean);
+                pendingStatusText = parts[parts.length - 1];
+                for (const line of completeLines) {
+                  streamTimeline.push({ kind: "status", text: line });
+                }
+
                 setMessages((prev) => {
                   const idx = prev.findIndex((m) => m.id === streamContentId);
+                  const updatedFields = {
+                    content: event.text!,
+                    streamTimeline: [...streamTimeline],
+                    streamPendingStatus: pendingStatusText,
+                  };
                   if (idx === -1) {
-                    const next = [...prev, { id: streamContentId, role: "assistant" as const, content: event.text!, fileAnnotations: [] }];
+                    const next = [...prev, { id: streamContentId, role: "assistant" as const, fileAnnotations: [], ...updatedFields }];
                     persistChatToServer(projectId, next);
                     return next;
                   }
                   const next = prev.slice();
-                  next[idx] = { ...next[idx], content: event.text! };
+                  next[idx] = { ...next[idx], ...updatedFields };
                   persistChatToServer(projectId, next);
                   return next;
                 });
@@ -775,12 +806,28 @@ export function useChat(
                 const basename = event.path.split("/").pop() ?? event.path;
                 const verb = event.existing === true ? "Editing" : "Creating";
                 const label = `${verb} ${basename}`;
+
+                // Flush any incomplete status line before adding the file, so the status
+                // always appears above the files that follow it in the vertical stream.
+                if (pendingStatusText.trim()) {
+                  streamTimeline.push({ kind: "status", text: pendingStatusText.trim() });
+                  pendingStatusText = "";
+                }
+
+                // Add file entry to the interleaved timeline.
+                streamTimeline.push({ kind: "file", label, basename, existing: event.existing ?? false });
+
                 setMessages((prev) => {
                   const idx = prev.findIndex((m) => m.id === streamContentId);
                   if (idx === -1) return prev;
                   const next = prev.slice();
                   const ann = next[idx].fileAnnotations ?? [];
-                  next[idx] = { ...next[idx], fileAnnotations: [...ann, label] };
+                  next[idx] = {
+                    ...next[idx],
+                    fileAnnotations: [...ann, label],
+                    streamTimeline: [...streamTimeline],
+                    streamPendingStatus: pendingStatusText,
+                  };
                   persistChatToServer(projectId, next);
                   return next;
                 });

@@ -373,6 +373,18 @@ textarea:-webkit-autofill:active {
   animation: chat-word-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+/* Chat: BuildProgressStream — active row pulsing background (2s ease-in-out, opacity 0.4→1.0) */
+@keyframes stream-row-pulse {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: var(--background-secondary); }
+}
+.stream-row-active {
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  animation: stream-row-pulse 2s ease-in-out infinite;
+}
+
 /* Chat: assistant message — full-box fog fill. Tokens: --chat-assistant-accent-color, --chat-assistant-accent-opacity. */
 .chat-accent-full-box-v2 {
   border-left: none;
@@ -600,7 +612,8 @@ textarea:-webkit-autofill:active {
   .sign-in-loading-bar,
   .sign-in-loading-glow,
   .sign-in-typewriter-letter,
-  .sign-in-cursor-blink {
+  .sign-in-cursor-blink,
+  .stream-row-active {
     animation: none !important;
   }
   .sign-in-typewriter-letter { opacity: 1; }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Footer } from "@/components/landing/Footer";
 import { Button, Card, Input } from "@/components/ui";
 import { Check, Copy, ExternalLink, Trophy, Clock, Users, ChevronDown, Crown, Medal, Star, Gift, Zap, MessageCircle, Smartphone, Wrench, Eye, Cloud, Store, Flame, Sun, CloudSun, Sunset, Paperclip, Send } from "lucide-react";
@@ -81,19 +82,31 @@ function useLaunchCountdown() {
   return { live: false, days, hours, mins, secs };
 }
 
-// ── Minimal nav (logo + Join Waitlist) ───────────────────────────────────────
-function WaitlistMinimalNav({
-  glassMode,
-  onToggleGlass,
-  showGlassToggle,
-}: {
-  glassMode: boolean;
-  onToggleGlass: () => void;
-  showGlassToggle: boolean;
-}) {
+// ── Minimal nav (logo + nav links + Join Waitlist) ─────────────────────────────
+type SessionUser = { uid: string; email: string | null } | null;
+function WaitlistMinimalNav({ glassMode }: { glassMode: boolean }) {
+  const router = useRouter();
+  const [user, setUser] = useState<SessionUser | undefined>(undefined);
+
+  useEffect(() => {
+    fetch("/api/auth/session", { credentials: "include" })
+      .then((res) => res.ok ? res.json() : {})
+      .then((data: { user?: SessionUser }) => setUser(data.user ?? null))
+      .catch(() => setUser(null));
+  }, []);
+
+  async function handleSignOut(e: React.MouseEvent) {
+    e.preventDefault();
+    await fetch("/api/auth/signout", { method: "POST", credentials: "include" });
+    setUser(null);
+    router.push("/waitlist");
+    router.refresh();
+  }
+
   function scrollToJoin() {
     document.getElementById("join")?.scrollIntoView({ behavior: "smooth" });
   }
+
   return (
     <header
       className={`sticky top-0 z-40 border-b transition-shadow ${
@@ -101,19 +114,46 @@ function WaitlistMinimalNav({
       }`}
     >
       <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-        <Link href="/" className="text-xl font-semibold text-[var(--text-primary)] transition-opacity hover:opacity-90 shrink-0">
+        <Link href="/waitlist" className="text-xl font-semibold text-[var(--text-primary)] transition-opacity hover:opacity-90 shrink-0">
           Vibetree
         </Link>
-        <div className="flex items-center gap-2 sm:gap-3">
-          {showGlassToggle && (
-            <button
-              type="button"
-              onClick={onToggleGlass}
-              className="rounded-full border border-[var(--border-default)] bg-[var(--background-secondary)]/80 px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--text-primary)]"
-              aria-pressed={glassMode}
-            >
-              {glassMode ? "Glass" : "Default"}
-            </button>
+        <div className="flex items-center gap-4 sm:gap-6">
+          <Link
+            href="/waitlist#features"
+            className="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--link-default)]"
+          >
+            Features
+          </Link>
+          <Link
+            href="/waitlist#how-it-works"
+            className="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--link-default)]"
+          >
+            How it works
+          </Link>
+          <Link
+            href="/pricing"
+            className="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--link-default)]"
+          >
+            Pricing
+          </Link>
+          {user ? (
+            <>
+              <Link href="/dashboard">
+                <Button variant="ghost">Dashboard</Button>
+              </Link>
+              <Button variant="primary" onClick={handleSignOut}>
+                Sign out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href="/sign-in">
+                <Button variant="ghost">Sign in</Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button variant="primary">Get started</Button>
+              </Link>
+            </>
           )}
           <Button variant="primary" className="shrink-0" onClick={scrollToJoin}>
             Join Waitlist
@@ -640,6 +680,7 @@ function WaitlistHowItWorks() {
   ];
   return (
     <section
+      id="how-it-works"
       ref={ref}
       className={`px-4 py-24 sm:px-6 sm:py-32 transition-all duration-700 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}
     >
@@ -674,6 +715,7 @@ function WaitlistWhy() {
   ];
   return (
     <section
+      id="features"
       ref={ref}
       className={`px-4 py-20 sm:px-6 sm:py-28 transition-all duration-700 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}
     >
@@ -959,11 +1001,7 @@ export default function WaitlistPage() {
 
   return (
     <div className={`flex h-screen flex-col bg-[var(--background-primary)] ${jetbrainsMono.variable} ${glassMode ? "waitlist-theme-glass" : ""}`}>
-      <WaitlistMinimalNav
-        glassMode={glassMode}
-        onToggleGlass={() => setGlassMode((g) => !g)}
-        showGlassToggle={!joined}
-      />
+      <WaitlistMinimalNav glassMode={glassMode} />
       <main ref={mainRef} className="waitlist-scroll-container flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         {/* Pre-signup: hero + form + scroll hint, then showcase, how it works, why, bottom CTA */}
         {!joined ? (

@@ -1,16 +1,13 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
-import { Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Sparkles } from "lucide-react";
 import type { ChatMessage } from "./useChat";
-
-function formatElapsed(ms: number): string {
-  const s = Math.max(1, Math.round(ms / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
-}
+import {
+  BuildProgressStream,
+  CompileStatusRow,
+  FinalBuildMessage,
+} from "./BuildProgressStream";
 
 /** Format seconds for progress elapsed (e.g. "45s", "1m 23s"). */
 function formatDurationShortSec(seconds: number): string {
@@ -19,17 +16,6 @@ function formatDurationShortSec(seconds: number): string {
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
-}
-
-function formatTimeAgo(epochMs: number): string | null {
-  const diff = Date.now() - epochMs;
-  if (diff < 60_000) return null;
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 const STREAM_WORD_DELAY_MS = 45;
@@ -93,57 +79,6 @@ function isStreamContentMessage(msg: ChatMessage): boolean {
   return typeof msg.id === "string" && msg.id.startsWith("stream-content-");
 }
 
-/** Live streamed narrative from the LLM: content + optional file chips + footer (elapsed, tokens). */
-function StreamContentBubble({
-  content,
-  fileAnnotations,
-  isStreaming,
-  streamElapsedSeconds,
-  streamReceivedChars,
-}: {
-  content: string;
-  fileAnnotations: string[];
-  isStreaming: boolean;
-  streamElapsedSeconds: number;
-  streamReceivedChars: number;
-}) {
-  const approxTokens = Math.round(streamReceivedChars / 4);
-  const footerParts: string[] = [];
-  if (streamElapsedSeconds >= 0) footerParts.push(formatDurationShortSec(streamElapsedSeconds));
-  if (approxTokens >= 50) footerParts.push(`~${approxTokens >= 1000 ? (approxTokens / 1000).toFixed(1) + "k" : approxTokens} tokens`);
-
-  return (
-    <div key="stream-content-bubble" className="animate-chat-message-in max-w-[88%] py-0.5 chat-accent-full-box-v2">
-      {content ? (
-        <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">
-          {content}
-          {isStreaming && <span className="chat-step-dots ml-0.5 inline-block w-4 align-middle" aria-hidden />}
-        </p>
-      ) : (
-        <p className="text-sm text-[var(--text-tertiary)]">
-          {isStreaming ? <span className="chat-step-dots inline-block w-4" aria-hidden /> : null}
-        </p>
-      )}
-      {fileAnnotations.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {fileAnnotations.map((label, i) => (
-            <span
-              key={i}
-              className="rounded bg-[var(--background-tertiary)]/80 px-2 py-0.5 text-xs text-[var(--text-tertiary)]"
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-      )}
-      {footerParts.length > 0 && (
-        <p className="mt-2 border-t border-[var(--border-subtle)]/50 pt-2 text-xs text-[var(--text-tertiary)]" aria-live="polite">
-          {footerParts.join(" · ")}
-        </p>
-      )}
-    </div>
-  );
-}
 
 type StreamBlock = { start: number; steps: ChatMessage[]; runId: string; isActive: boolean };
 
@@ -392,54 +327,6 @@ function StreamTodoCard({
   );
 }
 
-function BuildFeedback({ projectId }: { projectId?: string }) {
-  const [rating, setRating] = useState<"up" | "down" | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-
-  const handleRate = async (value: "up" | "down") => {
-    setRating(value);
-    setSubmitted(true);
-    try {
-      await fetch("/api/build-feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, rating: value }),
-      });
-    } catch {
-      // ignore
-    }
-  };
-
-  if (submitted) {
-    return (
-      <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-        Thanks for the feedback!
-      </p>
-    );
-  }
-
-  return (
-    <div className="mt-2 flex items-center justify-center gap-2">
-      <span className="text-xs text-[var(--text-tertiary)]">How did the build turn out?</span>
-      <button
-        type="button"
-        onClick={() => handleRate("up")}
-        className="cursor-pointer rounded p-1 text-[var(--text-tertiary)] hover:text-green-400 hover:bg-green-400/10 transition-colors"
-        title="Good build"
-      >
-        <ThumbsUp className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => handleRate("down")}
-        className="cursor-pointer rounded p-1 text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-400/10 transition-colors"
-        title="Build had issues"
-      >
-        <ThumbsDown className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-}
 
 export function ChatMessageList({
   messages,
@@ -666,10 +553,12 @@ export function ChatMessageList({
                 const elapsed = streamContentMessageId === msg.id ? (streamElapsedSeconds ?? -1) : -1;
                 const chars = streamContentMessageId === msg.id ? (streamReceivedChars ?? 0) : 0;
                 return (
-                  <StreamContentBubble
+                  <BuildProgressStream
                     key={msg.id}
                     content={msg.content}
                     fileAnnotations={msg.fileAnnotations ?? []}
+                    streamTimeline={msg.streamTimeline}
+                    streamPendingStatus={msg.streamPendingStatus}
                     isStreaming={isTyping && streamContentMessageId === msg.id}
                     streamElapsedSeconds={elapsed}
                     streamReceivedChars={chars}
@@ -706,87 +595,93 @@ export function ChatMessageList({
                 return null;
               }
 
+          // ── Validate phase: pulsing compile status row ──────────────────────
+          if (msg.id === validateProgressMessageId && validateElapsedSeconds >= 0) {
+            return (
+              <CompileStatusRow
+                key={msg.id}
+                validateProgressBase={validateProgressBase}
+                validateElapsedSeconds={validateElapsedSeconds}
+              />
+            );
+          }
+
           const isStreamFile = isStreamFileMessage(msg);
           const isStreamingThis = msg.role === "assistant" && msg.id === streamingMessageId;
-          let displayContent = isStreamingThis ? streamedContent : msg.content;
-          if (msg.id === validateProgressMessageId && validateElapsedSeconds >= 0) {
-            displayContent = `${validateProgressBase} (${formatDurationShortSec(validateElapsedSeconds)})`;
+          const displayContent = isStreamingThis ? streamedContent : msg.content;
+
+          // ── Final assistant message with edited files: card layout ───────────
+          // Show immediately with full content — no word-by-word reveal for completion cards.
+          if (
+            msg.role === "assistant" &&
+            (msg.editedFiles?.length ?? 0) > 0 &&
+            !isStreamFile
+          ) {
+            return (
+              <FinalBuildMessage
+                key={msg.id}
+                content={msg.content}
+                editedFiles={msg.editedFiles}
+                elapsedMs={msg.elapsedMs}
+                estimatedCostUsd={msg.estimatedCostUsd}
+                usage={msg.usage}
+                createdAt={msg.createdAt}
+                buildStatus={buildStatus}
+                projectId={projectId}
+                isLast={index === messages.length - 1}
+              />
+            );
           }
-          const streamingComplete = !isStreamingThis || streamedContent === msg.content;
+
+          // ── All other messages (user, reasoning steps, validate done text) ──
           const isFilesOnly = msg.role === "assistant" && msg.content === "" && msg.editedFiles?.length;
           const assistantIndex = messages.slice(0, index).filter((m) => m.role === "assistant").length;
-          const staggerDelay =
-            msg.role === "assistant" ? Math.min(assistantIndex * 40, 200) : 0;
+          const staggerDelay = msg.role === "assistant" ? Math.min(assistantIndex * 40, 200) : 0;
           const isReasoning = isReasoningMessage(msg, validateProgressMessageId);
-          const isAssistantSummary = msg.role === "assistant" && !isReasoning && !isStreamFile;
-          const showAccent = isAssistantSummary;
           const displayContentForMessage = isStreamFile
-            ? (msg.content.replace(/\s*\(file \d+\)\s*$/, "").trim())
+            ? msg.content.replace(/\s*\(file \d+\)\s*$/, "").trim()
             : displayContent;
-
           const isStepLine = (isReasoning || isStreamFile) && msg.role === "assistant";
           const stepStagger = isStepLine ? assistantIndex * 50 : 0;
           const assistantBoxClass = "max-w-[88%] py-0.5 chat-accent-full-box-v2";
 
           return (
-          <div
-            key={msg.id}
-            className={
-              (msg.role === "user"
-                ? "animate-fade-in "
-                : isStepLine
-                  ? "animate-chat-step-in "
-                  : "animate-chat-message-in ") +
-              (msg.role === "user"
-                ? "ml-auto w-fit max-w-[88%] rounded-2xl px-4 py-3 text-right shadow-sm " +
-                  "bg-[var(--chat-bubble-user-bg)] border border-[var(--border-default)] border-l-[var(--chat-bubble-user-border-accent)]/50"
-                : assistantBoxClass)
-            }
-            style={(staggerDelay > 0 || stepStagger > 0) ? { animationDelay: `${staggerDelay || stepStagger}ms` } : undefined}
-          >
-            {!isFilesOnly && (
-              <p
-                className={
-                  msg.role === "user"
-                    ? "text-sm font-medium text-[var(--text-primary)] leading-relaxed"
-                    : isReasoning || isStreamFile
-                      ? "text-sm text-[var(--text-primary)] leading-relaxed relative"
-                      : "text-sm text-[var(--text-primary)] leading-relaxed"
-                }
-              >
-                {isStepLine && (
-                  <span
-                    className="chat-step-dot absolute left-0 top-[0.35rem] h-2 w-2 rounded-full"
-                    style={{ marginLeft: "-0.25rem" }}
-                    aria-hidden
-                  />
-                )}
-                <span className={isStepLine ? "block pl-3" : ""}>{displayContentForMessage}</span>
-              </p>
-            )}
-            {msg.role === "assistant" && streamingComplete && (() => {
-              const timeAgo = msg.createdAt ? formatTimeAgo(msg.createdAt) : null;
-              const hasAny = msg.elapsedMs != null || msg.estimatedCostUsd != null || msg.usage || timeAgo;
-              if (!hasAny) return null;
-              const parts: React.ReactNode[] = [];
-              if (msg.elapsedMs != null) parts.push(<span key="elapsed">Generated in {formatElapsed(msg.elapsedMs)}</span>);
-              if (msg.estimatedCostUsd != null) parts.push(<span key="cost">~${msg.estimatedCostUsd < 0.005 ? "<0.01" : msg.estimatedCostUsd.toFixed(2)}</span>);
-              if (msg.usage) parts.push(<span key="tokens">{(msg.usage.input_tokens / 1000).toFixed(1)}k in / {(msg.usage.output_tokens / 1000).toFixed(1)}k out</span>);
-              if (timeAgo) parts.push(<span key="ago">Built {timeAgo}</span>);
-              return (
-                <p className="mt-2 text-xs text-[var(--text-tertiary)]" aria-live="polite">
-                  {parts.map((p, i) => (<span key={i}>{i > 0 && " · "}{p}</span>))}
+            <div
+              key={msg.id}
+              className={
+                (msg.role === "user"
+                  ? "animate-fade-in "
+                  : isStepLine
+                    ? "animate-chat-step-in "
+                    : "animate-chat-message-in ") +
+                (msg.role === "user"
+                  ? "ml-auto w-fit max-w-[88%] rounded-2xl px-4 py-3 text-right shadow-sm " +
+                    "bg-[var(--chat-bubble-user-bg)] border border-[var(--border-default)] border-l-[var(--chat-bubble-user-border-accent)]/50"
+                  : assistantBoxClass)
+              }
+              style={staggerDelay > 0 || stepStagger > 0 ? { animationDelay: `${staggerDelay || stepStagger}ms` } : undefined}
+            >
+              {!isFilesOnly && (
+                <p
+                  className={
+                    msg.role === "user"
+                      ? "text-sm font-medium text-[var(--text-primary)] leading-relaxed"
+                      : isReasoning || isStreamFile
+                        ? "text-sm text-[var(--text-primary)] leading-relaxed relative"
+                        : "text-sm text-[var(--text-primary)] leading-relaxed"
+                  }
+                >
+                  {isStepLine && (
+                    <span
+                      className="chat-step-dot absolute left-0 top-[0.35rem] h-2 w-2 rounded-full"
+                      style={{ marginLeft: "-0.25rem" }}
+                      aria-hidden
+                    />
+                  )}
+                  <span className={isStepLine ? "block pl-3" : ""}>{displayContentForMessage}</span>
                 </p>
-              );
-            })()}
-            {msg.role === "assistant" &&
-              streamingComplete &&
-              msg.editedFiles?.length &&
-              index === messages.length - 1 &&
-              buildStatus === "live" && (
-              <BuildFeedback projectId={projectId} />
-            )}
-          </div>
+              )}
+            </div>
           );
             });
           })()}

@@ -2,14 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 type SessionUser = { uid: string; email: string | null } | null;
 
 export function Nav() {
-  const pathname = usePathname();
   const router = useRouter();
-  const isWaitlist = pathname === "/waitlist";
   const [user, setUser] = useState<SessionUser | undefined>(undefined);
 
   useEffect(() => {
@@ -23,7 +21,7 @@ export function Nav() {
     e.preventDefault();
     await fetch("/api/auth/signout", { method: "POST", credentials: "include" });
     setUser(null);
-    router.push("/");
+    router.push("/waitlist");
     router.refresh();
   }
 
@@ -32,41 +30,11 @@ export function Nav() {
       <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
         <div className="flex items-center gap-4">
           <Link
-            href="/"
+            href="/waitlist"
             className="text-xl font-semibold text-[var(--text-primary)] transition-opacity hover:opacity-90"
           >
             Vibetree
           </Link>
-          <span
-            className="inline-flex rounded-full border border-[var(--border-default)] bg-[var(--background-secondary)] p-0.5 text-sm"
-            role="tablist"
-            aria-label="Landing view"
-          >
-            <Link
-              href="/"
-              role="tab"
-              aria-selected={!isWaitlist}
-              className={`rounded-full px-3 py-1.5 transition-colors ${
-                !isWaitlist
-                  ? "bg-[var(--background-tertiary)] font-medium text-[var(--link-default)]"
-                  : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-              }`}
-            >
-              Product
-            </Link>
-            <Link
-              href="/waitlist"
-              role="tab"
-              aria-selected={isWaitlist}
-              className={`rounded-full px-3 py-1.5 transition-colors ${
-                isWaitlist
-                  ? "bg-[var(--background-tertiary)] font-medium text-[var(--link-default)]"
-                  : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-              }`}
-            >
-              Waitlist
-            </Link>
-          </span>
         </div>
         <div className="flex items-center gap-4 sm:gap-6">
           <Link
@@ -86,12 +54,6 @@ export function Nav() {
             className="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--link-default)]"
           >
             Pricing
-          </Link>
-          <Link
-            href="/contact"
-            className="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--link-default)]"
-          >
-            Contact
           </Link>
           {user ? (
             <>
