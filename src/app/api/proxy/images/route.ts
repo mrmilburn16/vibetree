@@ -20,6 +20,7 @@ import { createProxyCache } from "@/lib/proxyCache";
 import { logProxyCall } from "@/lib/proxyCallLog";
 import { isProxyOwner } from "@/lib/proxyOwnerBypass";
 import { checkAndConsumeFreeTier } from "@/lib/proxyFreeTier";
+import { resolveProxyAuth } from "@/lib/proxyAuth";
 
 const UNSPLASH_SEARCH_URL = "https://api.unsplash.com/search/photos";
 const CACHE_TTL_SECONDS = 6 * 60 * 60; // 6 hours
@@ -62,19 +63,6 @@ type UnsplashSearchResponse = {
   results?: UnsplashRawPhoto[];
 };
 
-function normalizeToken(s: string | undefined): string {
-  return (s ?? "").replace(/\r\n?|\n/g, "").trim();
-}
-
-function isAppTokenValid(request: Request): boolean {
-  const appToken =
-    process.env.VIBETREE_APP_TOKEN && normalizeToken(process.env.VIBETREE_APP_TOKEN);
-  const headerToken = normalizeToken(
-    request.headers.get("x-app-token") ?? request.headers.get("X-App-Token") ?? ""
-  );
-  return Boolean(appToken && headerToken && headerToken === appToken);
-}
-
 function mapPhoto(raw: UnsplashRawPhoto): UnsplashPhoto {
   const baseUrl = raw.urls?.raw ?? raw.urls?.full ?? "";
   const thumbUrl = raw.urls?.thumb ?? (baseUrl ? `${baseUrl}&w=200` : "");
@@ -104,13 +92,16 @@ function triggerDownloadTracking(downloadLocations: string[], accessKey: string)
 }
 
 export async function GET(request: Request) {
-  if (!isAppTokenValid(request)) {
+  const auth = await resolveProxyAuth(request);
+  if (!auth.isAuthorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
   const query = (searchParams.get("query") ?? "").trim();
-  const userId = (searchParams.get("userId") ?? "").trim();
+  // userId for free-tier tracking: verified session preferred, query param as fallback.
+  const queryUserId = (searchParams.get("userId") ?? "").trim();
+  const userId = auth.verifiedUserId ?? queryUserId;
   const orientation = (searchParams.get("orientation") ?? "").trim();
 
   const countParam = searchParams.get("count");
@@ -127,7 +118,10 @@ export async function GET(request: Request) {
   }
 
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized: userId is required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "userId is required for free-tier tracking when no session is present" },
+      { status: 400 }
+    );
   }
 
   const validOrientations = ["landscape", "portrait", "squarish"];
@@ -148,8 +142,8 @@ export async function GET(request: Request) {
     return NextResponse.json(cached, { headers: { "X-Cache": "HIT" } });
   }
 
-  // Per-user daily free tier check — userId is always present (401 guard above).
-  const ownerBypass = isProxyOwner(userId);
+  // Owner bypass only for verified session users — query userId cannot claim owner status.
+  const ownerBypass = isProxyOwner(auth.verifiedUserId ?? "");
   const freeTier = await checkAndConsumeFreeTier(userId, "images", "unsplash-images", ownerBypass);
   if (!freeTier.isFree) {
     return NextResponse.json(

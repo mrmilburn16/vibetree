@@ -56,11 +56,9 @@ export async function getSubscription(userId: string): Promise<UserSubscriptionD
   }
 }
 
-/** Dev/owner user IDs that bypass subscription checks (always treated as Pro). */
-const OWNER_USER_ID_HARDCODED = "1eYArCMnOxeEsiFbS0nehKjWbuI2";
-
+/** Dev/owner user IDs that bypass subscription checks (always treated as Pro). Set OWNER_USER_IDS env var. */
 function getOwnerUserIds(): Set<string> {
-  const ids = new Set<string>([OWNER_USER_ID_HARDCODED]);
+  const ids = new Set<string>();
   const env = process.env.OWNER_USER_IDS;
   if (typeof env === "string" && env.trim()) {
     env.split(",").forEach((id) => {

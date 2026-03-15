@@ -7,10 +7,10 @@
  */
 
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { createProxyCache } from "@/lib/proxyCache";
 import { checkAndConsumeFreeTier } from "@/lib/proxyFreeTier";
 import { isProxyOwner } from "@/lib/proxyOwnerBypass";
+import { resolveProxyAuth, normalizeToken } from "@/lib/proxyAuth";
 
 const WEATHER_CACHE_TTL_SECONDS = 600; // 10 minutes
 const weatherCache = createProxyCache({ ttlSeconds: WEATHER_CACHE_TTL_SECONDS });
@@ -25,10 +25,6 @@ const OPENWEATHER_GEO_REVERSE = "http://api.openweathermap.org/geo/1.0/reverse";
 const RATE_LIMIT_MAX_APP_TOKEN = 100;
 
 const WEATHER_API_ID = "openweathermap";
-
-function normalizeToken(s: string | undefined): string {
-  return (s ?? "").replace(/\r\n?|\n/g, "").trim();
-}
 
 // In-memory: key = `${rateLimitKey}:${YYYY-MM-DD}` -> count (used only for app-token when no userId)
 const rateLimitMap = new Map<string, number>();
@@ -48,24 +44,32 @@ function incrementCountInMemory(rateLimitKey: string): void {
   rateLimitMap.set(key, (rateLimitMap.get(key) ?? 0) + 1);
 }
 
-/** Resolve auth: session user or app token. Returns { rateLimitKey, userId? } or null if unauthorized. */
-async function resolveAuth(request: Request): Promise<{ rateLimitKey: string; userId?: string } | null> {
-  const user = await getSession(request);
-  if (user) return { rateLimitKey: user.uid, userId: user.uid };
-
-  const appToken = process.env.VIBETREE_APP_TOKEN && normalizeToken(process.env.VIBETREE_APP_TOKEN);
-  const headerToken = normalizeToken(request.headers.get("x-app-token") ?? request.headers.get("X-App-Token") ?? "");
-  const match = Boolean(appToken && headerToken && headerToken === appToken);
-  if (!match && (headerToken || appToken)) {
-    console.warn(
-      "[proxy/weather] X-App-Token mismatch — header first 4:",
-      headerToken ? `"${headerToken.slice(0, 4)}"` : "(empty)",
-      "env first 4:",
-      appToken ? `"${appToken.slice(0, 4)}"` : "(empty)"
+/** Resolve auth using shared proxyAuth, returning { rateLimitKey, userId? } or null. */
+async function resolveAuth(
+  request: Request
+): Promise<{ rateLimitKey: string; userId?: string } | null> {
+  const auth = await resolveProxyAuth(request);
+  if (!auth.isAuthorized) {
+    const headerToken = normalizeToken(
+      request.headers.get("x-app-token") ?? request.headers.get("X-App-Token") ?? ""
     );
+    const envToken =
+      process.env.VIBETREE_APP_TOKEN && normalizeToken(process.env.VIBETREE_APP_TOKEN);
+    if (headerToken || envToken) {
+      console.warn(
+        "[proxy/weather] X-App-Token mismatch — header first 4:",
+        headerToken ? `"${headerToken.slice(0, 4)}"` : "(empty)",
+        "VIBETREE_APP_TOKEN env first 4:",
+        envToken ? `"${envToken.slice(0, 4)}"` : "(not set)"
+      );
+    }
+    return null;
   }
-  if (match) return { rateLimitKey: "app" };
-  return null;
+  if (auth.verifiedUserId) {
+    return { rateLimitKey: auth.verifiedUserId, userId: auth.verifiedUserId };
+  }
+  // App-token-only path: no verified userId, use shared in-memory key.
+  return { rateLimitKey: "app" };
 }
 
 export async function GET(request: Request) {

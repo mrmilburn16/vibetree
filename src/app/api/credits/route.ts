@@ -10,7 +10,7 @@ const OWNER_DISPLAY_BALANCE = 9999;
  * GET /api/credits
  * Returns the credit balance for the current user (session required).
  * New users get DEFAULT_CREDITS (10) on first access.
- * Owner bypass: if user is in OWNER_USER_IDS or matches OWNER_USER_ID_HARDCODED, returns OWNER_DISPLAY_BALANCE so UI shows unlimited.
+ * Owner bypass: if user is in OWNER_USER_IDS env var, returns OWNER_DISPLAY_BALANCE so UI shows unlimited.
  */
 export async function GET(request: Request) {
   const user = await getSession(request);

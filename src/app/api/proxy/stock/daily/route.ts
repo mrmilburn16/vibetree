@@ -12,12 +12,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createProxyCache } from "@/lib/proxyCache";
 import { consumeCall, getRemainingCalls } from "@/lib/alphaVantageRateLimit";
+import { resolveProxyAuth } from "@/lib/proxyAuth";
 
 const cache = createProxyCache({ ttlSeconds: 3600, maxSize: 50 }); // 1-hour TTL
 
 const SYMBOL_RE = /^[A-Z0-9.]{1,12}$/;
 
 export async function GET(req: NextRequest) {
+  const auth = await resolveProxyAuth(req);
+  if (!auth.isAuthorized) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const raw = req.nextUrl.searchParams.get("symbol");
   const symbol = raw?.toUpperCase().trim() ?? "";
 

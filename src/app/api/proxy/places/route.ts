@@ -14,6 +14,7 @@ import { createProxyCache } from "@/lib/proxyCache";
 import { logProxyCall } from "@/lib/proxyCallLog";
 import { isProxyOwner } from "@/lib/proxyOwnerBypass";
 import { checkAndConsumeFreeTier } from "@/lib/proxyFreeTier";
+import { resolveProxyAuth } from "@/lib/proxyAuth";
 
 const PLACES_CACHE_TTL_SECONDS = 3600; // 1 hour
 const placesCache = createProxyCache({ ttlSeconds: PLACES_CACHE_TTL_SECONDS });
@@ -124,6 +125,11 @@ interface AppleSearchResponse {
 }
 
 export async function GET(request: Request) {
+  const auth = await resolveProxyAuth(request);
+  if (!auth.isAuthorized) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const ipKey = getClientIpKey(request);
 
   if (isRateLimited(ipKey)) {
@@ -140,10 +146,14 @@ export async function GET(request: Request) {
   const searchTerm = (
     searchParams.get("query") ?? searchParams.get("category") ?? ""
   ).trim();
-  // userId is required — all generated apps must pass &userId=kUserId.
-  const userId = (searchParams.get("userId") ?? "").trim();
+  // userId for free-tier tracking: verified session preferred, query param as fallback.
+  const queryUserId = (searchParams.get("userId") ?? "").trim();
+  const userId = auth.verifiedUserId ?? queryUserId;
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized: userId is required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "userId is required for free-tier tracking when no session is present" },
+      { status: 400 }
+    );
   }
 
   const lat = latParam != null ? Number(latParam) : NaN;
@@ -175,8 +185,8 @@ export async function GET(request: Request) {
     });
   }
 
-  // Per-user free tier check — userId is always present (401 guard above).
-  const ownerBypass = isProxyOwner(userId);
+  // Owner bypass only for verified session users — query userId cannot claim owner status.
+  const ownerBypass = isProxyOwner(auth.verifiedUserId ?? "");
   const freeTier = await checkAndConsumeFreeTier(userId, "places", "apple-mapkit", ownerBypass);
   if (!freeTier.isFree) {
     // Places is free to us (Apple MapKit free tier), so we hard-cap rather than bill credits.

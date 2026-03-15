@@ -1,23 +1,30 @@
 /**
  * POST /api/proxy/ai
  * Proxies chat completion to Claude Sonnet. Used by generated apps (AI/coach/recommend features).
- * Auth: X-App-Token required. Body must include userId for credit deduction.
- * Body: { messages: [{role, content}], systemPrompt?: string, maxTokens?: number, userId: string }
- * Returns { response: string }.
- * Credits per call: read live from the API marketplace registry (proxySlug "ai") so admin
- * price changes take effect without a redeploy.  Falls back to 0.3 if the registry is
- * unreachable.
- * Owner bypass: if userId is in OWNER_USER_IDS or matches OWNER_USER_ID_HARDCODED, credit
- * check and deduction are skipped.
+ *
+ * Auth: X-App-Token header OR a valid Firebase session (cookie / Bearer token).
+ * Billing: credits are deducted from the Firebase-verified user only. If no verified session
+ * exists (app-token-only request), the body userId may be used for free-tier tracking but
+ * never for credit deduction — the endpoint returns 401 once the free tier is exhausted.
+ *
+ * Body: { messages: [{role, content}], systemPrompt?: string, maxTokens?: number, userId?: string }
+ *   userId is now optional; prefer session. Provided only as a tracking hint when no session.
+ * Returns: { response: string }
+ *
+ * Credits per call: read live from the API marketplace registry (proxySlug "ai").
+ * Falls back to 0.3 credits if the registry is unreachable.
+ *
+ * Credit safety: if Anthropic fails after credits are deducted, credits are refunded automatically.
  */
 
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getCreditBalance, deductCredits } from "@/lib/userCreditsFirestore";
+import { getCreditBalance, deductCredits, addCredits } from "@/lib/userCreditsFirestore";
 import { isProxyOwner } from "@/lib/proxyOwnerBypass";
 import { logProxyCall } from "@/lib/proxyCallLog";
 import { getProxyCreditsPerCall } from "@/lib/proxyBillingRate";
 import { checkAndConsumeFreeTier } from "@/lib/proxyFreeTier";
+import { resolveProxyAuth } from "@/lib/proxyAuth";
 
 const DEFAULT_SYSTEM_PROMPT =
   "You are a helpful assistant. Always respond with a JSON object in this format: {\"response\": \"your message here\"}. Never respond with plain text, markdown, or code blocks outside of this JSON structure.";
@@ -32,19 +39,6 @@ const OUTPUT_PRICE_PER_TOKEN = 15 / 1_000_000;
 
 /** 5-minute prompt cache (ephemeral, no ttl). */
 const CACHE_CONTROL_5M = { type: "ephemeral" as const };
-
-function normalizeToken(s: string | undefined): string {
-  return (s ?? "").replace(/\r\n?|\n/g, "").trim();
-}
-
-function isAppTokenValid(request: Request): boolean {
-  const appToken =
-    process.env.VIBETREE_APP_TOKEN && normalizeToken(process.env.VIBETREE_APP_TOKEN);
-  const headerToken = normalizeToken(
-    request.headers.get("x-app-token") ?? request.headers.get("X-App-Token") ?? ""
-  );
-  return Boolean(appToken && headerToken && headerToken === appToken);
-}
 
 type MessageParam = { role: string; content: string };
 
@@ -67,7 +61,8 @@ function extractAssistantText(content: Array<{ type?: string; text?: string }>):
 }
 
 export async function POST(request: Request) {
-  if (!isAppTokenValid(request)) {
+  const auth = await resolveProxyAuth(request);
+  if (!auth.isAuthorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -91,26 +86,43 @@ export async function POST(request: Request) {
     );
   }
 
-  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
-  if (!userId) {
+  // userId for free-tier tracking: verified session preferred, body hint as fallback.
+  const bodyUserId = typeof body.userId === "string" ? body.userId.trim() : "";
+  const trackingUserId = auth.verifiedUserId ?? bodyUserId;
+  if (!trackingUserId) {
     return NextResponse.json(
-      { error: "Body must include userId for credit deduction" },
+      { error: "userId is required for free-tier tracking when no session is present" },
       { status: 400 }
     );
   }
 
-  const ownerBypass = isProxyOwner(userId);
+  // Owner bypass only for verified session users — body userId cannot claim owner status.
+  const ownerBypass = isProxyOwner(auth.verifiedUserId ?? "");
 
   // Check free tier first — if within the daily allowance, skip credit deduction.
-  const freeTier = await checkAndConsumeFreeTier(userId, "ai", "anthropic-claude", ownerBypass);
+  const freeTier = await checkAndConsumeFreeTier(
+    trackingUserId,
+    "ai",
+    "anthropic-claude",
+    ownerBypass
+  );
 
   let creditsPerCall = 0;
+  let creditsBilled = 0; // tracks how many were actually deducted (for refund on failure)
+
   if (!freeTier.isFree) {
-    // Read live billing rate from the Firestore-backed marketplace registry.
+    // Credits are needed — require a Firebase-verified session.
+    if (!auth.verifiedUserId) {
+      return NextResponse.json(
+        { error: "Session required for credit billing" },
+        { status: 401 }
+      );
+    }
+
     creditsPerCall = (await getProxyCreditsPerCall("ai")) || CREDITS_PER_CALL_FALLBACK;
 
     if (!ownerBypass) {
-      const balance = await getCreditBalance(userId);
+      const balance = await getCreditBalance(auth.verifiedUserId);
       if (balance < creditsPerCall) {
         return NextResponse.json(
           { error: "Insufficient credits", required: creditsPerCall },
@@ -118,13 +130,14 @@ export async function POST(request: Request) {
         );
       }
 
-      const deductResult = await deductCredits(userId, creditsPerCall);
+      const deductResult = await deductCredits(auth.verifiedUserId, creditsPerCall);
       if (!deductResult.ok) {
         return NextResponse.json(
           { error: deductResult.error ?? "Could not deduct credits" },
           { status: 402 }
         );
       }
+      creditsBilled = creditsPerCall;
     }
   }
 
@@ -141,8 +154,15 @@ export async function POST(request: Request) {
 
   const apiKey = process.env.ANTHROPIC_RUNTIME_API_KEY?.trim();
   if (!apiKey) {
+    // Refund credits before returning — the call never went out.
+    if (creditsBilled > 0 && auth.verifiedUserId) {
+      await addCredits(auth.verifiedUserId, creditsBilled).catch(() => {});
+    }
     return NextResponse.json(
-      { error: "AI proxy not configured: ANTHROPIC_RUNTIME_API_KEY is not set. Add it to .env.local for /api/proxy/ai." },
+      {
+        error:
+          "AI proxy not configured: ANTHROPIC_RUNTIME_API_KEY is not set. Add it to .env.local for /api/proxy/ai.",
+      },
       { status: 503 }
     );
   }
@@ -195,19 +215,18 @@ export async function POST(request: Request) {
     if (freeTier.isFree) {
       console.log(
         `[proxy/ai] FREE (${freeTier.usedToday}/${freeTier.limitToday} used today)`,
-        { userId, inputTokens, outputTokens, actualCostUsd }
+        { userId: trackingUserId, inputTokens, outputTokens, actualCostUsd }
       );
     } else {
       console.log(
         `[proxy/ai] CHARGED ${ownerBypass ? 0 : creditsPerCall} credits (free limit exceeded: ${freeTier.usedToday}/${freeTier.limitToday} used today)`,
-        { userId, inputTokens, outputTokens, actualCostUsd, ownerBypass }
+        { userId: trackingUserId, inputTokens, outputTokens, actualCostUsd, ownerBypass }
       );
     }
 
-    // Fire-and-forget log to Firestore
     logProxyCall({
       endpoint: "ai",
-      userId,
+      userId: trackingUserId,
       actualCostUsd,
       chargedCredits: freeTier.isFree || ownerBypass ? 0 : creditsPerCall,
       meta: {
@@ -223,7 +242,17 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ response: responseText });
   } catch (err) {
-    console.error("[proxy/ai] Claude error", { userId, error: err });
+    console.error("[proxy/ai] Claude error", { userId: trackingUserId, error: err });
+    // Refund credits — the Anthropic call failed so the user got nothing.
+    if (creditsBilled > 0 && auth.verifiedUserId) {
+      await addCredits(auth.verifiedUserId, creditsBilled).catch((refundErr) => {
+        console.error("[proxy/ai] credit refund failed", {
+          userId: auth.verifiedUserId,
+          amount: creditsBilled,
+          error: refundErr,
+        });
+      });
+    }
     return NextResponse.json(
       { error: "AI request failed. Please try again." },
       { status: 502 }

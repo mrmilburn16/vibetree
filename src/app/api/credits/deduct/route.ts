@@ -9,7 +9,7 @@ const OWNER_DISPLAY_BALANCE = 9999;
 /**
  * POST /api/credits/deduct
  * Body: { amount: number }. Deducts from the user's balance. Returns new balance.
- * Owner bypass: if user is in OWNER_USER_IDS or matches OWNER_USER_ID_HARDCODED, no deduction; returns OWNER_DISPLAY_BALANCE.
+ * Owner bypass: if user is in OWNER_USER_IDS env var, no deduction; returns OWNER_DISPLAY_BALANCE.
  */
 export async function POST(request: Request) {
   const user = await getSession(request);
